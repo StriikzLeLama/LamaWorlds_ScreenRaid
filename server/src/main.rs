@@ -49,6 +49,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     if config.static_path.join("index.html").is_file() {
         info!("Web dashboard served from {}", config.static_path.display());
+    } else {
+        tracing::warn!(
+            "Web dashboard disabled: no index.html in {} (run npm run build:web or rebuild Docker)",
+            config.static_path.display()
+        );
     }
     axum::serve(listener, app).await?;
 

@@ -19,6 +19,7 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Self {
+        let static_path = resolve_static_path();
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into()),
             port: env::var("PORT")
@@ -49,13 +50,34 @@ impl Config {
             allow_self_prank: env::var("ALLOW_SELF_PRANK")
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
                 .unwrap_or(false),
-            static_path: PathBuf::from(
-                env::var("STATIC_PATH").unwrap_or_else(|_| "./web".into()),
-            ),
+            static_path,
         }
     }
 
     pub fn addr(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
+}
+
+/// Pick the first path that contains a built `index.html` (Docker vs local dev).
+fn resolve_static_path() -> PathBuf {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(from_env) = env::var("STATIC_PATH") {
+        if !from_env.trim().is_empty() {
+            candidates.push(PathBuf::from(from_env.trim()));
+        }
+    }
+    candidates.push(PathBuf::from("/app/web"));
+    candidates.push(PathBuf::from("./web"));
+
+    for path in &candidates {
+        if path.join("index.html").is_file() {
+            return path.clone();
+        }
+    }
+
+    candidates
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| PathBuf::from("./web"))
 }
