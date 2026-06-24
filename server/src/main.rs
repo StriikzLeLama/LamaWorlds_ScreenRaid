@@ -47,7 +47,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "ScreenRaid server listening on http://{}",
         listener.local_addr()?
     );
-    if config.static_path.join("index.html").is_file() {
+    if config.static_path.join("index.html").is_file()
+        || config.static_path.join("index.web.html").is_file()
+    {
         info!("Web dashboard served from {}", config.static_path.display());
     } else {
         tracing::warn!(

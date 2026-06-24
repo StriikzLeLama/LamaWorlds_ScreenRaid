@@ -1,6 +1,6 @@
 use std::env;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -71,7 +71,7 @@ fn resolve_static_path() -> PathBuf {
     candidates.push(PathBuf::from("./web"));
 
     for path in &candidates {
-        if path.join("index.html").is_file() {
+        if has_spa_index(path) {
             return path.clone();
         }
     }
@@ -80,4 +80,8 @@ fn resolve_static_path() -> PathBuf {
         .into_iter()
         .next()
         .unwrap_or_else(|| PathBuf::from("./web"))
+}
+
+fn has_spa_index(path: &Path) -> bool {
+    path.join("index.html").is_file() || path.join("index.web.html").is_file()
 }

@@ -7,7 +7,7 @@
     "dev": "vite --mode receiver",
     "dev:web": "vite --mode web",
     "build": "tsc -b && vite build --mode receiver",
-    "build:web": "tsc -b && vite build --mode web",
+    "build:web": "tsc -b && vite build --mode web && node scripts/finalize-web-dist.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
