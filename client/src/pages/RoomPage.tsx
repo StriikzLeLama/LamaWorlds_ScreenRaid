@@ -165,7 +165,16 @@ export function RoomPage() {
       setTextContent('');
       listPrankHistory(id).then(setHistory).catch(() => undefined);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Send failed');
+      const msg = e instanceof ApiError ? e.message : 'Send failed';
+      if (msg.toLowerCase().includes('cannot prank yourself')) {
+        setError(
+          'Cannot prank yourself while others are in the room. Pick another target, or set ALLOW_SELF_PRANK=true on the server.',
+        );
+      } else if (msg.toLowerCase().includes('no valid targets')) {
+        setError('No valid targets. In a solo room, use Yourself or Everyone in room.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setSending(false);
     }
@@ -179,6 +188,7 @@ export function RoomPage() {
   const isOwner = myRole === 'owner';
   const canSend = myRole !== 'guest';
   const otherMembers = room.members.filter((m) => m.user_id !== currentUserId);
+  const isSoloRoom = room.members.length === 1;
   const selectableMedia = mediaForOverlay(overlayType, mediaItems);
   const needsMedia = overlayType !== 'text';
   const isSoundOnly = overlayType === 'sound';
@@ -238,6 +248,12 @@ export function RoomPage() {
             <p className="text-sm text-raid-text-secondary">Guests cannot send pranks.</p>
           ) : (
             <div className="space-y-4">
+              {isSoloRoom && (
+                <p className="rounded-xl border border-raid-accent/30 bg-raid-accent/10 px-3 py-2 text-xs text-raid-text-secondary">
+                  Solo room: you can prank yourself (target <strong>Yourself</strong> or{' '}
+                  <strong>Everyone</strong>). Grant consent in Settings first.
+                </p>
+              )}
               <div>
                 <label className="mb-1 block text-xs text-raid-text-secondary">Target</label>
                 <select
@@ -364,9 +380,10 @@ export function RoomPage() {
                 </div>
               )}
 
-              {targetId === currentUserId && (
+              {targetId === currentUserId && !isSoloRoom && (
                 <p className="text-xs text-raid-text-secondary">
-                  Solo test requires <code className="text-raid-accent">ALLOW_SELF_PRANK=true</code> on the server.
+                  Self-target in a multi-member room requires{' '}
+                  <code className="text-raid-accent">ALLOW_SELF_PRANK=true</code> on the server.
                 </p>
               )}
 

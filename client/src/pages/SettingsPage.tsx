@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Card, Button, Input } from '../components/ui';
 import { checkServerHealth } from '../services/api';
 import { clearMediaCache } from '../services/mediaCache';
+import { getMe } from '../services/auth';
 import { clearLocalSession } from '../services/session';
 import { getServerUrl, setServerUrl } from '../services/serverConfig';
 import { useConsentStore } from '../stores/consentStore';
@@ -22,6 +23,10 @@ interface AppSettings {
 
 export function SettingsPage() {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const setIsAdmin = useAuthStore((s) => s.setIsAdmin);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { globalConsent, isPaused, grant, revoke, resume, loadFromServer } = useConsentStore();
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -38,6 +43,22 @@ export function SettingsPage() {
       .then(setSettings)
       .catch(() => setSettings(null));
   }, [loadFromServer, isAuthenticated]);
+
+  const refreshAdminStatus = async () => {
+    if (!accessToken) return;
+    setError('');
+    try {
+      const profile = await getMe(accessToken);
+      setIsAdmin(Boolean(profile.is_admin));
+      setMessage(
+        profile.is_admin
+          ? 'Admin access confirmed for this account.'
+          : `Not admin. Set ADMIN_USERNAMES=${user?.username ?? '?'} in the CT .env and rebuild Docker.`,
+      );
+    } catch {
+      setError('Could not refresh account status from server.');
+    }
+  };
 
   const save = async () => {
     if (!settings) return;
@@ -115,6 +136,30 @@ export function SettingsPage() {
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <h2 className="mb-4 text-lg font-semibold text-raid-text">Account</h2>
+          <p className="text-sm text-raid-text">
+            Logged in as <strong>@{user?.username ?? '—'}</strong>
+          </p>
+          <p className="mt-2 text-sm text-raid-text-secondary">
+            Admin panel:{' '}
+            <span className={isAdmin ? 'text-raid-success' : 'text-raid-danger'}>
+              {isAdmin ? 'enabled' : 'disabled'}
+            </span>
+          </p>
+          {!isAdmin && (
+            <p className="mt-2 text-xs text-raid-text-secondary">
+              Admin uses your <strong>username</strong> (not display name). Set{' '}
+              <code className="text-raid-accent">ADMIN_USERNAMES={user?.username ?? 'your_username'}</code>{' '}
+              in <code className="text-raid-accent">/opt/LamaWorlds_ScreenRaid/.env</code> on the CT, then{' '}
+              <code className="text-raid-accent">docker compose up -d --build</code>.
+            </p>
+          )}
+          <Button variant="secondary" className="mt-4" onClick={() => void refreshAdminStatus()}>
+            Refresh admin status
+          </Button>
+        </Card>
+
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">Consent</h2>
           <p className="mb-4 text-sm text-raid-text-secondary">

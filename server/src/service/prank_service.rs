@@ -303,8 +303,11 @@ impl PrankService {
         sender_id: Uuid,
         target_id: Option<Uuid>,
     ) -> Result<Vec<Uuid>, AppError> {
+        let solo_room = members.len() == 1;
+        let allow_self = self.allow_self_prank || solo_room;
+
         if let Some(tid) = target_id {
-            if tid == sender_id && !self.allow_self_prank {
+            if tid == sender_id && !allow_self {
                 return Err(AppError::Validation("cannot prank yourself".into()));
             }
             let is_member = members.iter().any(|m| m.user_id == tid.to_string());
@@ -319,7 +322,7 @@ impl PrankService {
             .filter_map(|m| {
                 let uid = Uuid::parse_str(&m.user_id).ok()?;
                 if uid == sender_id {
-                    if self.allow_self_prank {
+                    if allow_self {
                         Some(uid)
                     } else {
                         None

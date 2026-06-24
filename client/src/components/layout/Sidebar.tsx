@@ -81,7 +81,10 @@ export function Sidebar() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-raid-text">{user.display_name}</p>
-              <p className="truncate text-xs text-raid-text-secondary">@{user.username}</p>
+              <p className="truncate text-xs text-raid-text-secondary">
+                @{user.username}
+                {isAdmin && <span className="ml-1 text-raid-accent">· admin</span>}
+              </p>
             </div>
           </div>
         )}

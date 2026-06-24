@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, Input } from './ui';
-import { checkServerHealth } from '../services/api';
-import { getServerUrl, persistServerUrl } from '../services/serverConfig';
+import { Button, Input } from '../ui';
+import { checkServerHealth } from '../../services/api';
+import { getServerUrl, persistServerUrl } from '../../services/serverConfig';
 
 interface Props {
   /** Called after URL is saved (e.g. before login submit). */
@@ -44,7 +44,8 @@ export function ServerUrlField({ onChange }: Props) {
       <Input
         label="Server URL"
         value={url}
-        onChange={(e) => {
+        placeholder="http://192.168.1.109:8080"
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           const value = e.target.value;
           setUrl(value);
           onChange?.(value);

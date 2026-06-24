@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
 import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
 import { useAuthStore } from '../stores/authStore';
-import { login as loginApi } from '../services/auth';
+import { login as loginApi, getMe } from '../services/auth';
 import { ApiError } from '../services/api';
 import { getServerUrl } from '../services/serverConfig';
 
@@ -19,6 +19,7 @@ function authErrorMessage(err: unknown): string {
 export function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  const setIsAdmin = useAuthStore((s) => s.setIsAdmin);
   const [serverUrl, setServerUrl] = useState(getServerUrl());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -33,6 +34,8 @@ export function LoginPage() {
       await ensureServerUrl(serverUrl);
       const res = await loginApi({ username, password });
       login({ access: res.access_token, refresh: res.refresh_token }, res.user);
+      const profile = await getMe(res.access_token);
+      setIsAdmin(Boolean(profile.is_admin));
       navigate('/', { replace: true });
     } catch (err) {
       setError(authErrorMessage(err));
