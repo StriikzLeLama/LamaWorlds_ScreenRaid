@@ -40,15 +40,33 @@ pub fn run() {
             let shortcut =
                 Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Escape);
             let gs = app.global_shortcut();
-            let _ = gs.unregister(shortcut);
-            gs.on_shortcut(shortcut, move |_app, _shortcut, event| {
-                if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                    if let Some(manager) = handle.try_state::<OverlayManager>() {
-                        commands::overlay::clear_all_overlays(&handle, &manager);
+            let _ = gs.unregister_all();
+            let _ = gs.unregister(shortcut.clone());
+
+            let register_panic_hotkey = || {
+                gs.on_shortcut(shortcut.clone(), {
+                    let handle = handle.clone();
+                    move |_app, _shortcut, event| {
+                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                            if let Some(manager) = handle.try_state::<OverlayManager>() {
+                                commands::overlay::clear_all_overlays(&handle, &manager);
+                            }
+                            let _ = handle.emit("panic:triggered", ());
+                        }
                     }
-                    let _ = handle.emit("panic:triggered", ());
+                })
+            };
+
+            if let Err(err) = register_panic_hotkey() {
+                log::warn!(
+                    "panic hotkey Ctrl+Shift+Escape unavailable ({err}); \
+                     close any stale screenraid-client.exe and restart if needed"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                if let Err(retry_err) = register_panic_hotkey() {
+                    log::warn!("panic hotkey still unavailable after retry: {retry_err}");
                 }
-            })?;
+            }
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(

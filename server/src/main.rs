@@ -42,9 +42,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = create_router(state);
 
     let addr: SocketAddr = config.addr().parse()?;
-    info!("ScreenRaid server listening on http://{}", addr);
-
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    info!("ScreenRaid server listening on http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
 
     Ok(())
