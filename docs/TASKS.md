@@ -202,8 +202,8 @@
 | MVP-QA-002 | E2E: create room, join, send image prank | MVP-IMG-002 | 6 | manual | Receiver sees overlay, auto-dismiss | 🔲 |
 | MVP-QA-003 | E2E: consent revoke blocks prank | MVP-CNS-010 | 3 | manual | Prank rejected after revoke | 🔲 |
 | MVP-QA-004 | E2E: panic hotkey hides overlay | MVP-CNS-011 | 2 | manual | Ctrl+Shift+Esc clears screen | 🔲 |
-| MVP-QA-005 | CI workflow (cargo + npm build) | MVP-FND-001 | 4 | `.github/workflows/ci.yml` | PR checks pass | ✅ |
-| MVP-QA-006 | Server integration tests | MVP-AUTH-004 | 8 | `server/tests/` | Auth + room API tests in CI | ✅ |
+| MVP-QA-005 | CI workflow (cargo + npm build) | MVP-FND-001 | 4 | local `cargo test` / `npm run build` | Removed — GitHub Actions disabled | ⏸️ |
+| MVP-QA-006 | Server integration tests | MVP-AUTH-004 | 8 | `server/tests/` | Auth + room API tests (run locally) | ✅ |
 
 ---
 

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { MainLayout } from './components/layout/MainLayout';
+import { AuthLayout } from './components/layout/AuthLayout';
 import { ConsentGate } from './components/ConsentGate';
 import { useAuthStore } from './stores/authStore';
 import { useConsentStore } from './stores/consentStore';
@@ -49,8 +50,10 @@ export default function App() {
     <BrowserRouter>
       <ConsentGate open={showConsentGate} />
       <Routes>
-        <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+        </Route>
         <Route
           element={
             <ProtectedRoute>

@@ -1,13 +1,25 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
+import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
 import { useAuthStore } from '../stores/authStore';
 import { register as registerApi } from '../services/auth';
 import { ApiError } from '../services/api';
+import { getServerUrl } from '../services/serverConfig';
+
+function authErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  if (err instanceof TypeError) {
+    return `Cannot reach server at ${getServerUrl()}. Check Server URL and that the CT is online.`;
+  }
+  return 'Registration failed';
+}
 
 export function RegisterPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  const [serverUrl, setServerUrl] = useState(getServerUrl());
   const [form, setForm] = useState({
     username: '',
     email: '',
@@ -22,6 +34,7 @@ export function RegisterPage() {
     setError('');
     setLoading(true);
     try {
+      await ensureServerUrl(serverUrl);
       const res = await registerApi({
         username: form.username,
         email: form.email,
@@ -31,14 +44,14 @@ export function RegisterPage() {
       login({ access: res.access_token, refresh: res.refresh_token }, res.user);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Registration failed');
+      setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-raid-bg p-6">
+    <div className="flex min-h-full w-full items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-bold text-raid-text">Create account</h1>
@@ -47,6 +60,7 @@ export function RegisterPage() {
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <ServerUrlField onChange={setServerUrl} />
           <Input
             label="Username"
             value={form.username}

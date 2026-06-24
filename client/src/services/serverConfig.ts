@@ -17,14 +17,52 @@ export function getServerUrl(): string {
 }
 
 export function setServerUrl(url: string): void {
-  const trimmed = url.trim().replace(/\/$/, '');
-  const next = trimmed || DEFAULT_SERVER;
+  const next = normalizeServerUrl(url, { allowEmpty: true });
   const changed = serverUrl !== next;
   serverUrl = next;
-  // Reconnect WS when the target host changes while still logged in.
   if (changed) {
     urlChangeListeners.forEach((fn) => fn());
   }
+}
+
+export function normalizeServerUrl(
+  url: string,
+  options?: { allowEmpty?: boolean },
+): string {
+  const trimmed = url.trim().replace(/\/$/, '');
+  if (!trimmed) {
+    if (options?.allowEmpty) return DEFAULT_SERVER;
+    throw new Error('Server URL is required');
+  }
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    throw new Error('Server URL must start with http:// or https://');
+  }
+  return trimmed;
+}
+
+/** Save server URL to runtime + Tauri settings file. */
+export async function persistServerUrl(url: string): Promise<string> {
+  const next = normalizeServerUrl(url);
+  setServerUrl(next);
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const settings = await invoke<{
+      autostart: boolean;
+      default_duration_ms: number;
+      default_volume: number;
+      default_animation: string;
+      cache_limit_mb: number;
+      panic_hotkey: string;
+      server_url: string;
+      selected_monitor: string;
+    }>('get_settings');
+    await invoke('save_settings', {
+      settings: { ...settings, server_url: next },
+    });
+  } catch {
+    // Vite-only dev without Tauri: runtime URL still updated.
+  }
+  return next;
 }
 
 /** Apply persisted Tauri settings before the first API call. */

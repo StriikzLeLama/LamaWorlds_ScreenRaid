@@ -1,13 +1,25 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
+import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
 import { useAuthStore } from '../stores/authStore';
 import { login as loginApi } from '../services/auth';
-import { ApiError, getServerUrl } from '../services/api';
+import { ApiError } from '../services/api';
+import { getServerUrl } from '../services/serverConfig';
+
+function authErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  if (err instanceof TypeError) {
+    return `Cannot reach server at ${getServerUrl()}. Check Server URL and that the CT is online.`;
+  }
+  return 'Login failed';
+}
 
 export function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  const [serverUrl, setServerUrl] = useState(getServerUrl());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,30 +30,31 @@ export function LoginPage() {
     setError('');
     setLoading(true);
     try {
+      await ensureServerUrl(serverUrl);
       const res = await loginApi({ username, password });
       login({ access: res.access_token, refresh: res.refresh_token }, res.user);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Login failed');
+      setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-raid-bg p-6">
+    <div className="flex min-h-full w-full items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-raid-accent/15">
             <div className="h-4 w-4 rounded-full bg-raid-accent" />
           </div>
           <h1 className="text-2xl font-bold text-raid-text">Welcome to ScreenRaid</h1>
-        <p className="mt-1 text-sm text-raid-text-secondary">
-          Sign in to your prank dashboard
-        </p>
-        <p className="mt-2 text-xs text-raid-text-secondary">Server: {getServerUrl()}</p>
+          <p className="mt-1 text-sm text-raid-text-secondary">
+            Sign in to your prank dashboard
+          </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <ServerUrlField onChange={setServerUrl} />
           <Input
             label="Username"
             value={username}
