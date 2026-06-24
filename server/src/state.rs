@@ -5,11 +5,12 @@ use sqlx::SqlitePool;
 use crate::api::middleware::rate_limit::{api_limiter, login_limiter, register_limiter, RateLimiter};
 use crate::config::Config;
 use crate::repository::{
-    ConsentRepository, FriendRepository, MediaRepository, PrankRepository, RoomRepository,
-    UserRepository,
+    ConsentRepository, FriendRepository, MediaRepository, MonitorRepository, PrankRepository,
+    RoomRepository, UserRepository,
 };
 use crate::service::{
-    AuthService, ConsentService, FriendService, MediaService, PrankService, RoomService,
+    AuthService, ConsentService, FriendService, MediaService, MonitorService, PrankService,
+    RoomService,
 };
 use crate::websocket::WsHub;
 
@@ -23,6 +24,7 @@ pub struct AppState {
     pub consent: Arc<ConsentService>,
     pub media: Arc<MediaService>,
     pub pranks: Arc<PrankService>,
+    pub monitors: Arc<MonitorService>,
     pub ws_hub: Arc<WsHub>,
     pub login_limiter: Arc<RateLimiter>,
     pub register_limiter: Arc<RateLimiter>,
@@ -77,6 +79,12 @@ impl AppState {
             ws_hub.clone(),
         ));
 
+        let monitors = Arc::new(MonitorService::new(
+            MonitorRepository::new(db.clone()),
+            RoomRepository::new(db.clone()),
+            ws_hub.clone(),
+        ));
+
         Self {
             db,
             config,
@@ -86,6 +94,7 @@ impl AppState {
             consent,
             media,
             pranks,
+            monitors,
             ws_hub,
             login_limiter: Arc::new(login_limiter()),
             register_limiter: Arc::new(register_limiter()),

@@ -537,7 +537,19 @@ npm test
 | API client | Attaches Bearer header |
 | WS wrapper | Reconnect with backoff |
 
-### 8.2 E2E (future)
+### 8.2 Manual E2E checklist (MVP)
+
+Run with server + two Tauri clients (or one client + API). Mark each scenario before release.
+
+| ID | Scenario | Steps | Expected |
+|----|----------|-------|----------|
+| MVP-QA-001 | Register + befriend | Two users register → send friend request → accept | Both see each other online in Friends |
+| MVP-QA-002 | Room prank (image) | Create room → join → upload image → send prank to member | Receiver overlay shows image, auto-dismisses |
+| MVP-QA-003 | Consent revoke | Target revokes consent → sender sends prank | `prank:blocked`, no overlay |
+| MVP-QA-004 | Panic hotkey | Overlay visible → `Ctrl+Shift+Esc` | All overlays cleared immediately |
+| MVP-QA-VMP | Monitor placement | Target syncs monitors → sender drags on canvas → text prank | Overlay appears at normalized position on correct monitor |
+
+### 8.3 Automated E2E (future)
 
 | Tool | Scope |
 |------|-------|

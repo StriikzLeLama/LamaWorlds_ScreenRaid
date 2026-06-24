@@ -33,3 +33,9 @@ rand = "0.8"
 sha2 = "0.10"
 futures-util = { version = "0.3", features = ["sink"] }
 dashmap = "6"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+serde_json = { workspace = true }
+tempfile = "3"

@@ -14,11 +14,13 @@ import { RoomPage } from './pages/RoomPage';
 import { useWebSocket } from './hooks/useWebSocket';
 import { usePanicHotkey } from './hooks/usePanicHotkey';
 import { usePrankReceiver } from './hooks/usePrankReceiver';
+import { useMonitorSync } from './hooks/useMonitorSync';
 
 function WsProvider({ children }: { children: React.ReactNode }) {
   useWebSocket();
   usePanicHotkey();
   usePrankReceiver();
+  useMonitorSync();
   return <>{children}</>;
 }
 

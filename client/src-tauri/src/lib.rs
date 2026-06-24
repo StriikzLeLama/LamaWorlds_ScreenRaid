@@ -1,8 +1,8 @@
 mod commands;
 
+use commands::monitor::collect_monitors;
 use commands::overlay::{
-    clear_all_overlays, get_active_overlays, hide_overlay, panic_hide_all, show_overlay,
-    OverlayManager, OverlayState,
+    get_active_overlays, hide_overlay, panic_hide_all, show_overlay, OverlayManager, OverlayState,
 };
 use commands::settings::{get_settings, save_settings, AppSettings, SettingsStore};
 use std::sync::Mutex;
@@ -39,10 +39,12 @@ pub fn run() {
             let handle = app.handle().clone();
             let shortcut =
                 Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Escape);
-            app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+            let gs = app.global_shortcut();
+            let _ = gs.unregister(shortcut);
+            gs.on_shortcut(shortcut, move |_app, _shortcut, event| {
                 if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                     if let Some(manager) = handle.try_state::<OverlayManager>() {
-                        clear_all_overlays(&manager);
+                        commands::overlay::clear_all_overlays(&handle, &manager);
                     }
                     let _ = handle.emit("panic:triggered", ());
                 }
@@ -60,6 +62,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_settings,
             save_settings,
+            collect_monitors,
             show_overlay,
             hide_overlay,
             panic_hide_all,

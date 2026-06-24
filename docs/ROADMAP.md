@@ -18,10 +18,11 @@ Minimum viable product: consent-based pranks with images and text in private roo
 | **Consent & Security** | M | ✅ Done | Grant/revoke/pause, rate limits, WS sync, panic hotkey |
 | **WebSocket** | M | ✅ Done | Hub, presence, room/friend events, heartbeat |
 | **Media Upload** | L | ✅ Done | Server storage, validation, client library UI |
-| **Virtual Monitor Placement** | L | 🔲 Pending | Monitor topology sync, placement canvas, normalized coords |
+| **Virtual Monitor Placement** | L | ✅ Done | Monitor topology sync, placement canvas, normalized coords |
 | **Prank Pipeline** | L | ✅ Done | Send/receive, consent gate, delivery ack |
-| **Image Overlays** | L | 🔲 Pending | Transparent overlay window, image render |
-| **Text Overlays** | M | 🔲 Pending | Styled text, duration, animations (fade) |
+| **Image Overlays** | L | ✅ Done | Transparent window, image render, fade/zoom/bounce |
+| **Text Overlays** | M | ✅ Done | Styled text card, normalized position |
+| **Integration & QA** | M | 🔄 In progress | CI workflow, server integration tests; manual E2E pending |
 
 **MVP exit criteria:** Two users in a room can send a consent-checked image or text overlay that appears at a **visually placed position** on the receiver's virtual monitor layout — without screen sharing.
 
@@ -29,12 +30,12 @@ Minimum viable product: consent-based pranks with images and text in private roo
 
 | Capability | Complexity | Status |
 |------------|------------|--------|
-| Client monitor enumeration | M | 🔲 |
-| `PUT /users/me/monitors` sync | S | 🔲 |
-| `GET /users/{id}/monitors` for room members | S | 🔲 |
-| WS `monitor:update` / `monitor:changed` | M | 🔲 |
-| Visual Placement Canvas in Room | L | 🔲 |
-| Normalized coordinate prank config | M | 🔲 |
+| Client monitor enumeration | M | ✅ |
+| `PUT /users/me/monitors` sync | S | ✅ |
+| `GET /users/{id}/monitors` for room members | S | ✅ |
+| WS `monitor:update` / `monitor:changed` | M | ✅ |
+| Visual Placement Canvas in Room | L | ✅ |
+| Normalized coordinate prank config | M | ✅ |
 
 **Why MVP:** Enables precise prank positioning (Figma-style canvas) without desktop streaming or screen capture — core privacy promise.
 

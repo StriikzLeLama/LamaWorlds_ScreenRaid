@@ -43,6 +43,9 @@ export function useWebSocket() {
       if (type === 'prank:sent' || type === 'prank:blocked') {
         window.dispatchEvent(new CustomEvent('screenraid:room', { detail: { type, payload } }));
       }
+      if (type === 'monitor:changed') {
+        window.dispatchEvent(new CustomEvent('screenraid:monitors', { detail: payload }));
+      }
     });
 
     return () => {

@@ -71,6 +71,8 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/v1/consent", consent_routes)
         .nest("/v1/media", media_routes)
         .route("/v1/rooms/{id}/media", get(handlers::list_room_media))
+        .route("/v1/users/me/monitors", get(handlers::get_my_monitors).put(handlers::update_my_monitors))
+        .route("/v1/users/{id}/monitors", get(handlers::get_user_monitors))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)

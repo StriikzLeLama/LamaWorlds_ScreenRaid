@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { sendNotification } from '@tauri-apps/plugin-notification';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { getServerUrl } from '../services/api';
@@ -47,6 +48,15 @@ export function usePrankReceiver() {
       }
 
       try {
+        try {
+          await sendNotification({
+            title: 'ScreenRaid',
+            body: `${prank.sender.display_name} sent you a prank`,
+          });
+        } catch {
+          // notifications optional
+        }
+
         await invoke('show_overlay', {
           payload: {
             id: prank.prank_id,
@@ -57,6 +67,11 @@ export function usePrankReceiver() {
             duration_ms: prank.duration_ms,
             animation: prank.config.animation,
             sender_name: prank.sender.display_name,
+            position_x: prank.config.position.x,
+            position_y: prank.config.position.y,
+            monitor_index: prank.config.position.monitor_index ?? 0,
+            scale: prank.config.scale,
+            opacity: prank.config.opacity,
           },
         });
 
@@ -65,10 +80,6 @@ export function usePrankReceiver() {
         if (mediaUrl?.startsWith('blob:')) {
           setTimeout(() => URL.revokeObjectURL(mediaUrl!), prank.duration_ms + 5000);
         }
-
-        setTimeout(() => {
-          invoke('hide_overlay', { id: prank.prank_id }).catch(() => undefined);
-        }, prank.duration_ms);
       } catch {
         ackPrank(prank.prank_id, false);
       }

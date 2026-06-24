@@ -6,7 +6,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
-use screenraid_types::{ConnectedPayload, ConsentSyncPayload, PrankAckPayload, SubscribeRoomPayload, WsMessage};
+use screenraid_types::{ConnectedPayload, ConsentSyncPayload, MonitorSyncPayload, PrankAckPayload, SubscribeRoomPayload, WsMessage};
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -118,6 +118,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sessio
                                     .pranks
                                     .ack(user_id, payload.prank_id, payload.rendered)
                                     .await;
+                            }
+                        }
+                        "monitor:update" => {
+                            if let Ok(payload) =
+                                serde_json::from_value::<MonitorSyncPayload>(
+                                    envelope.get("payload").cloned().unwrap_or_default(),
+                                )
+                            {
+                                let _ = state.monitors.sync_ws(user_id, payload).await;
                             }
                         }
                         _ => {}

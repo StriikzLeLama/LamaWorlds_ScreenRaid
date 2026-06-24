@@ -80,6 +80,10 @@ export function ackPrankWs(prankId: string, rendered: boolean): void {
   send({ type: 'prank:ack', payload: { prank_id: prankId, rendered } });
 }
 
+export function syncMonitorsWs(monitors: unknown[]): void {
+  send({ type: 'monitor:update', payload: { monitors } });
+}
+
 export function send(data: object): void {
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(

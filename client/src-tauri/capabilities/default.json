@@ -14,6 +14,14 @@
     "notification:default",
     "autostart:default",
     "sql:default",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "core:window:allow-create",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-ignore-cursor-events",
+    "core:webview:allow-create-webview-window",
+    "core:event:allow-emit",
+    "core:event:allow-emit-to",
+    "core:event:allow-listen"
   ]
 }

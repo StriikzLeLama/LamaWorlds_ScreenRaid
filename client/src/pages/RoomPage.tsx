@@ -12,7 +12,9 @@ import {
   type PrankHistoryItem,
 } from '../services/pranks';
 import { deleteRoom, getRoom, leaveRoom } from '../services/rooms';
+import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
+import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { useAuthStore } from '../stores/authStore';
 import type { RoomDetail, RoomMember } from '../types/room';
 
@@ -32,6 +34,12 @@ export function RoomPage() {
   const [textContent, setTextContent] = useState('');
   const [mediaId, setMediaId] = useState('');
   const [durationMs, setDurationMs] = useState(5000);
+  const [placement, setPlacement] = useState<PlacementPosition>({
+    monitor_index: 0,
+    x: 0.5,
+    y: 0.5,
+  });
+  const [targetMonitors, setTargetMonitors] = useState<MonitorDescriptor[]>([]);
 
   const loadRoom = () => {
     if (!id) return;
@@ -55,6 +63,27 @@ export function RoomPage() {
       window.removeEventListener('screenraid:room', handler);
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!targetId) {
+      setTargetMonitors([]);
+      return;
+    }
+    const refresh = () => {
+      getUserMonitors(targetId)
+        .then((layout) => setTargetMonitors(layout?.monitors ?? []))
+        .catch(() => setTargetMonitors([]));
+    };
+    refresh();
+    const onMonitorsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ user_id?: string }>).detail;
+      if (detail?.user_id === targetId) {
+        refresh();
+      }
+    };
+    window.addEventListener('screenraid:monitors', onMonitorsChanged);
+    return () => window.removeEventListener('screenraid:monitors', onMonitorsChanged);
+  }, [targetId]);
 
   const copyCode = () => {
     if (room) {
@@ -89,13 +118,20 @@ export function RoomPage() {
     setSending(true);
     setError('');
     try {
+      const config = defaultOverlayConfig();
+      config.position = {
+        monitor_index: placement.monitor_index,
+        x: placement.x,
+        y: placement.y,
+        preset: 'exact',
+      };
       await sendPrank(id, {
         target_id: targetId || null,
         media_id: overlayType === 'text' ? null : mediaId || null,
         overlay_type: overlayType,
         text_content: overlayType === 'text' ? textContent : null,
         duration_ms: durationMs,
-        config: defaultOverlayConfig(),
+        config,
       });
       setTextContent('');
       listPrankHistory(id).then(setHistory).catch(() => undefined);
@@ -237,6 +273,20 @@ export function RoomPage() {
                   className="w-full accent-raid-accent"
                 />
               </div>
+
+              {targetId && (
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-raid-text-secondary">
+                    Visual placement
+                  </label>
+                  <MonitorCanvas
+                    monitors={targetMonitors}
+                    position={placement}
+                    onChange={setPlacement}
+                    previewLabel={overlayType === 'text' ? 'TXT' : 'IMG'}
+                  />
+                </div>
+              )}
 
               <Button disabled={sending} onClick={() => void handleSend()}>
                 <Send size={16} />

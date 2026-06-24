@@ -33,8 +33,36 @@ pub enum PrankStatus {
     Expired,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlacementPreset {
+    Exact,
+    Center,
+    Random,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OverlayTargetPosition {
+    #[serde(default)]
+    pub monitor_index: u32,
+    pub x: f32,
+    pub y: f32,
+    #[serde(default = "default_preset")]
+    pub preset: PlacementPreset,
+}
+
+fn default_preset() -> PlacementPreset {
+    PlacementPreset::Exact
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlayPosition {
+    #[serde(default)]
+    pub monitor_index: u32,
     pub x: f32,
     pub y: f32,
 }
@@ -42,22 +70,25 @@ pub struct OverlayPosition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlayConfig {
     pub animation: Animation,
-    pub position: OverlayPosition,
+    pub position: OverlayTargetPosition,
     pub scale: f32,
     pub opacity: f32,
     pub volume: f32,
-    pub monitor_id: Option<u32>,
 }
 
 impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
             animation: Animation::Fade,
-            position: OverlayPosition { x: 0.5, y: 0.5 },
+            position: OverlayTargetPosition {
+                monitor_index: 0,
+                x: 0.5,
+                y: 0.5,
+                preset: PlacementPreset::Center,
+            },
             scale: 1.0,
             opacity: 1.0,
             volume: 0.8,
-            monitor_id: None,
         }
     }
 }

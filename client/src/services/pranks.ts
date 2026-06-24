@@ -4,18 +4,17 @@ import { ackPrankWs } from './websocket';
 export type OverlayType = 'image' | 'gif' | 'video' | 'text' | 'sound';
 export type Animation = 'fade' | 'zoom' | 'bounce' | 'none';
 
-export interface OverlayPosition {
-  x: number;
-  y: number;
-}
-
 export interface OverlayConfig {
   animation: Animation;
-  position: OverlayPosition;
+  position: {
+    monitor_index: number;
+    x: number;
+    y: number;
+    preset?: string;
+  };
   scale: number;
   opacity: number;
   volume: number;
-  monitor_id: number | null;
 }
 
 export interface SendPrankRequest {
@@ -89,9 +88,8 @@ export function ackPrank(prankId: string, rendered: boolean): void {
 
 export const defaultOverlayConfig = (): OverlayConfig => ({
   animation: 'fade',
-  position: { x: 0.5, y: 0.5 },
+  position: { monitor_index: 0, x: 0.5, y: 0.5, preset: 'center' },
   scale: 1.0,
   opacity: 1.0,
   volume: 0.8,
-  monitor_id: null,
 });

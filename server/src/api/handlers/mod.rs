@@ -3,6 +3,7 @@ pub mod consent;
 pub mod friends;
 pub mod health;
 pub mod media;
+pub mod monitors;
 pub mod pranks;
 pub mod rooms;
 
@@ -17,6 +18,7 @@ pub use friends::{
 };
 pub use health::{health, ready};
 pub use media::{delete_media, download_media, list_media, list_room_media, upload_media};
+pub use monitors::{get_my_monitors, get_user_monitors, update_my_monitors};
 pub use pranks::{list_pranks, send_prank};
 pub use rooms::{
     change_member_role, create_room, delete_room, get_room, join_room, kick_member, leave_room,

@@ -129,14 +129,14 @@
 
 | ID | Description | Dependencies | Hours | Files | DoD | Status |
 |----|-------------|--------------|-------|-------|-----|--------|
-| MVP-VMP-001 | Monitor layout DB migration | MVP-FND-002 | 3 | `server/migrations/002_monitor_layouts.sql` | Tables created | 🔲 |
-| MVP-VMP-002 | Monitor repo + service | MVP-VMP-001 | 6 | `server/src/repository/monitor_repo.rs` | Upsert layout + monitors | 🔲 |
-| MVP-VMP-003 | Monitor HTTP handlers | MVP-VMP-002 | 4 | `server/src/api/handlers/monitors.rs` | GET/PUT monitor endpoints | 🔲 |
-| MVP-VMP-004 | WS monitor:update/changed | MVP-VMP-002 | 4 | `server/src/websocket/handler.rs` | Room broadcast on change | 🔲 |
-| MVP-VMP-005 | Client monitor collector | MVP-FND-004 | 6 | `client/src-tauri/src/commands/monitor.rs` | Tauri monitor enumeration | 🔲 |
-| MVP-VMP-006 | MonitorCanvas UI | MVP-VMP-003 | 12 | `client/src/components/placement/*` | Virtual layout + drag-drop | 🔲 |
-| MVP-VMP-007 | OverlayTargetPosition types | MVP-FND-001 | 2 | `crates/screenraid-types/src/prank.rs` | Normalized coords model | 🔲 |
-| MVP-VMP-008 | Coordinate transform in overlay | MVP-OVL-004 | 6 | `docs/OVERLAY_ENGINE.md` impl | Pixel mapping from normalized | 🔲 |
+| MVP-VMP-001 | Monitor layout DB migration | MVP-FND-002 | 3 | `server/migrations/002_monitor_layouts.sql` | Tables created | ✅ |
+| MVP-VMP-002 | Monitor repo + service | MVP-VMP-001 | 6 | `server/src/repository/monitor_repo.rs` | Upsert layout + monitors | ✅ |
+| MVP-VMP-003 | Monitor HTTP handlers | MVP-VMP-002 | 4 | `server/src/api/handlers/monitors.rs` | GET/PUT monitor endpoints | ✅ |
+| MVP-VMP-004 | WS monitor:update/changed | MVP-VMP-002 | 4 | `server/src/websocket/handler.rs` | Room broadcast on change | ✅ |
+| MVP-VMP-005 | Client monitor collector | MVP-FND-004 | 6 | `client/src-tauri/src/commands/monitor.rs` | Tauri monitor enumeration | ✅ |
+| MVP-VMP-006 | MonitorCanvas UI | MVP-VMP-003 | 12 | `client/src/components/placement/MonitorCanvas.tsx` | Virtual layout + drag-drop | ✅ |
+| MVP-VMP-007 | OverlayTargetPosition types | MVP-FND-001 | 2 | `crates/screenraid-types/src/prank.rs` | Normalized coords model | ✅ |
+| MVP-VMP-008 | Coordinate transform in overlay | MVP-OVL-004 | 6 | `client/src-tauri/src/commands/window.rs` | Per-monitor overlay window | ✅ |
 
 ---
 
@@ -161,14 +161,14 @@
 
 | ID | Description | Dependencies | Hours | Files | DoD | Status |
 |----|-------------|--------------|-------|-------|-----|--------|
-| MVP-OVL-001 | Overlay window (transparent) | MVP-FND-004 | 12 | `client/src-tauri/src/commands/window.rs` | Always-on-top, click-through, fullscreen | 🔲 |
-| MVP-OVL-002 | Overlay manager (Rust) | MVP-FND-004 | 6 | `client/src-tauri/src/commands/overlay.rs` | Track active overlays, panic clear | 🔄 |
-| MVP-OVL-003 | `show_overlay` / `hide_overlay` commands | MVP-OVL-002 | 4 | `client/src-tauri/src/commands/overlay.rs` | Tauri invoke works from frontend | 🔄 |
-| MVP-OVL-004 | Overlay React window | MVP-OVL-001 | 8 | `client/src/components/overlay/OverlayWindow.tsx` | Separate webview renders overlays | 🔲 |
-| MVP-OVL-005 | Overlay Zustand store | MVP-OVL-003 | 4 | `client/src/stores/overlayStore.ts` | Queue, active, dismiss state | 🔲 |
-| MVP-OVL-006 | `useOverlay` hook | MVP-OVL-005 | 4 | `client/src/hooks/useOverlay.ts` | Bridge WS → invoke show/hide | 🔲 |
-| MVP-OVL-007 | Duration auto-dismiss timer | MVP-OVL-003 | 3 | `client/src-tauri/src/commands/overlay.rs` | Overlay removed after `duration_ms` | 🔲 |
-| MVP-OVL-008 | Notification on incoming prank | MVP-PRK-009 | 3 | `client/src-tauri/` (notification plugin) | Desktop notification before overlay | 🔲 |
+| MVP-OVL-001 | Overlay window (transparent) | MVP-FND-004 | 12 | `client/src-tauri/src/commands/window.rs` | Always-on-top, click-through, fullscreen | ✅ |
+| MVP-OVL-002 | Overlay manager (Rust) | MVP-FND-004 | 6 | `client/src-tauri/src/commands/overlay.rs` | Track active overlays, panic clear | ✅ |
+| MVP-OVL-003 | `show_overlay` / `hide_overlay` commands | MVP-OVL-002 | 4 | `client/src-tauri/src/commands/overlay.rs` | Tauri invoke + IPC emit | ✅ |
+| MVP-OVL-004 | Overlay React window | MVP-OVL-001 | 8 | `client/src/overlay/*`, `overlay.html` | Dedicated webview renders overlays | ✅ |
+| MVP-OVL-005 | Overlay Zustand store | MVP-OVL-003 | 4 | `client/src/overlay/OverlayApp.tsx` | Event-driven overlay state | ✅ |
+| MVP-OVL-006 | `useOverlay` hook | MVP-OVL-005 | 4 | `client/src/hooks/usePrankReceiver.ts` | WS → invoke show_overlay | ✅ |
+| MVP-OVL-007 | Duration auto-dismiss timer | MVP-OVL-003 | 3 | `client/src-tauri/src/commands/overlay.rs` | Rust timer emits overlay:hide | ✅ |
+| MVP-OVL-008 | Notification on incoming prank | MVP-PRK-009 | 3 | `client/src/hooks/usePrankReceiver.ts` | Desktop notification before overlay | ✅ |
 
 ---
 
@@ -176,10 +176,10 @@
 
 | ID | Description | Dependencies | Hours | Files | DoD | Status |
 |----|-------------|--------------|-------|-------|-----|--------|
-| MVP-IMG-001 | Download media to client cache | MVP-MED-005 | 6 | `client/src/services/media.ts` | File saved to local cache path | 🔲 |
-| MVP-IMG-002 | Image overlay renderer | MVP-OVL-004 | 8 | `client/src/components/overlay/ImageOverlay.tsx` | PNG/JPG/WebP displayed centered | 🔲 |
-| MVP-IMG-003 | Position + scale config | MVP-IMG-002 | 4 | `crates/screenraid-types/src/prank.rs` | Config applied to render | 🔲 |
-| MVP-IMG-004 | Fade-in animation | MVP-IMG-002 | 3 | `client/src/components/overlay/ImageOverlay.tsx` | CSS fade on appear | 🔲 |
+| MVP-IMG-001 | Download media to client cache | MVP-MED-005 | 6 | `client/src/hooks/usePrankReceiver.ts` | Blob URL for authenticated media | ✅ |
+| MVP-IMG-002 | Image overlay renderer | MVP-OVL-004 | 8 | `client/src/overlay/components/ImageOverlay.tsx` | PNG/JPG/WebP/GIF displayed | ✅ |
+| MVP-IMG-003 | Position + scale config | MVP-IMG-002 | 4 | `OverlayPayload` position_x/y | Config applied to render | ✅ |
+| MVP-IMG-004 | Fade-in animation | MVP-IMG-002 | 3 | `client/src/overlay/overlay.css` | CSS fade/zoom/bounce | ✅ |
 
 ---
 
@@ -187,10 +187,10 @@
 
 | ID | Description | Dependencies | Hours | Files | DoD | Status |
 |----|-------------|--------------|-------|-------|-----|--------|
-| MVP-TXT-001 | Text overlay renderer | MVP-OVL-004 | 6 | `client/src/components/overlay/TextOverlay.tsx` | Text with font size/color | 🔲 |
-| MVP-TXT-002 | Text prank config types | MVP-PRK-006 | 2 | `crates/screenraid-types/src/prank.rs` | Text, color, size, position fields | 🔲 |
-| MVP-TXT-003 | Send text prank UI | MVP-PRK-008 | 4 | `client/src/pages/RoomPage.tsx` | Text input + send without media | 🔲 |
-| MVP-TXT-004 | Text fade animation | MVP-TXT-001 | 2 | `client/src/components/overlay/TextOverlay.tsx` | Fade in/out matches image overlays | 🔲 |
+| MVP-TXT-001 | Text overlay renderer | MVP-OVL-004 | 6 | `client/src/overlay/components/TextOverlay.tsx` | Text with sender name | ✅ |
+| MVP-TXT-002 | Text prank config types | MVP-PRK-006 | 2 | `crates/screenraid-types/src/prank.rs` | Text, position fields | ✅ |
+| MVP-TXT-003 | Send text prank UI | MVP-PRK-008 | 4 | `client/src/pages/RoomPage.tsx` | Text input + send | ✅ |
+| MVP-TXT-004 | Text fade animation | MVP-TXT-001 | 2 | `client/src/overlay/overlay.css` | Shared animation classes | ✅ |
 
 ---
 
@@ -202,8 +202,8 @@
 | MVP-QA-002 | E2E: create room, join, send image prank | MVP-IMG-002 | 6 | manual | Receiver sees overlay, auto-dismiss | 🔲 |
 | MVP-QA-003 | E2E: consent revoke blocks prank | MVP-CNS-010 | 3 | manual | Prank rejected after revoke | 🔲 |
 | MVP-QA-004 | E2E: panic hotkey hides overlay | MVP-CNS-011 | 2 | manual | Ctrl+Shift+Esc clears screen | 🔲 |
-| MVP-QA-005 | CI workflow (cargo + npm build) | MVP-FND-001 | 4 | `.github/workflows/ci.yml` | PR checks pass | 🔲 |
-| MVP-QA-006 | Server integration tests | MVP-AUTH-004 | 8 | `server/tests/` | Auth + room API tests in CI | 🔲 |
+| MVP-QA-005 | CI workflow (cargo + npm build) | MVP-FND-001 | 4 | `.github/workflows/ci.yml` | PR checks pass | ✅ |
+| MVP-QA-006 | Server integration tests | MVP-AUTH-004 | 8 | `server/tests/` | Auth + room API tests in CI | ✅ |
 
 ---
 
@@ -218,13 +218,13 @@
 | WebSocket | 8 | 8 | 0 |
 | Consent & Security | 13 | 13 | 0 |
 | Media Upload | 9 | 9 | 0 |
-| Virtual Monitor Placement | 8 | 0 | 32 |
-| Prank Pipeline | 10 | 0 | 46 |
-| Overlay Engine | 8 | 0 | 44 |
-| Image Overlays | 4 | 0 | 21 |
-| Text Overlays | 4 | 0 | 14 |
-| Integration & QA | 6 | 0 | 27 |
-| **Total** | **98** | **58** | **~164** |
+| Virtual Monitor Placement | 8 | 8 | 0 |
+| Prank Pipeline | 10 | 10 | 0 |
+| Overlay Engine | 8 | 8 | 0 |
+| Image Overlays | 4 | 4 | 0 |
+| Text Overlays | 4 | 4 | 0 |
+| Integration & QA | 6 | 2 | 15 |
+| **Total** | **98** | **90** | **~15** |
 
 ---
 
@@ -232,9 +232,9 @@
 
 1. **Sprint A** (done): Foundation → Auth → Friends → Rooms → WebSocket → Consent
 2. **Sprint B** (done): Media Upload (MVP-MED-001 → 009)
-3. **Sprint C**: Virtual Monitor Placement (MVP-VMP-001 → 008)
-4. **Sprint D**: Prank Pipeline (MVP-PRK-001 → 010)
-5. **Sprint E**: Overlay Engine + Image + Text (MVP-OVL-001 → MVP-TXT-004)
-6. **Sprint F**: Integration & QA (MVP-QA-001 → 006)
+3. **Sprint C** (done): Virtual Monitor Placement (MVP-VMP-001 → 008)
+4. **Sprint D** (done): Prank Pipeline (MVP-PRK-001 → 010)
+5. **Sprint E** (done): Overlay Engine + Image + Text (MVP-OVL-001 → MVP-TXT-004)
+6. **Sprint F** (in progress): Integration & QA (MVP-QA-001 → 006)
 
 See [ROADMAP.md](./ROADMAP.md) for milestone context and dependency graph.
