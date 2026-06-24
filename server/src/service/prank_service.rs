@@ -24,6 +24,7 @@ pub struct PrankService {
     media: MediaRepository,
     consent: ConsentService,
     hub: Arc<WsHub>,
+    allow_self_prank: bool,
 }
 
 impl PrankService {
@@ -34,6 +35,7 @@ impl PrankService {
         media: MediaRepository,
         consent: ConsentService,
         hub: Arc<WsHub>,
+        allow_self_prank: bool,
     ) -> Self {
         Self {
             pranks,
@@ -42,6 +44,7 @@ impl PrankService {
             media,
             consent,
             hub,
+            allow_self_prank,
         }
     }
 
@@ -301,7 +304,7 @@ impl PrankService {
         target_id: Option<Uuid>,
     ) -> Result<Vec<Uuid>, AppError> {
         if let Some(tid) = target_id {
-            if tid == sender_id {
+            if tid == sender_id && !self.allow_self_prank {
                 return Err(AppError::Validation("cannot prank yourself".into()));
             }
             let is_member = members.iter().any(|m| m.user_id == tid.to_string());
@@ -316,7 +319,11 @@ impl PrankService {
             .filter_map(|m| {
                 let uid = Uuid::parse_str(&m.user_id).ok()?;
                 if uid == sender_id {
-                    None
+                    if self.allow_self_prank {
+                        Some(uid)
+                    } else {
+                        None
+                    }
                 } else {
                     Some(uid)
                 }

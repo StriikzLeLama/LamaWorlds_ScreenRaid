@@ -13,6 +13,7 @@ services:
       - STORAGE_PATH=/data/media
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:1420,tauri://localhost}
       - ADMIN_USERNAMES=${ADMIN_USERNAMES:-}
+      - ALLOW_SELF_PRANK=${ALLOW_SELF_PRANK:-false}
       - RUST_LOG=screenraid_server=info
     volumes:
       - screenraid-data:/data

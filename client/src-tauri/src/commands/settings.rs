@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
+/// Client preferences persisted to disk (survives app restarts).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub autostart: bool,
@@ -29,12 +32,39 @@ impl Default for AppSettings {
     }
 }
 
-pub struct SettingsStore(pub Mutex<AppSettings>);
+/// In-memory cache plus JSON file under the app config directory.
+pub struct SettingsStore {
+    inner: Mutex<AppSettings>,
+    path: PathBuf,
+}
+
+impl SettingsStore {
+    pub fn new(app: &AppHandle) -> Result<Self, String> {
+        let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let path = dir.join("settings.json");
+
+        let settings = fs::read_to_string(&path)
+            .ok()
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default();
+
+        Ok(Self {
+            inner: Mutex::new(settings),
+            path,
+        })
+    }
+
+    fn write_disk(&self, settings: &AppSettings) -> Result<(), String> {
+        let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+        fs::write(&self.path, json).map_err(|e| e.to_string())
+    }
+}
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, SettingsStore>) -> Result<AppSettings, String> {
     state
-        .0
+        .inner
         .lock()
         .map(|s| s.clone())
         .map_err(|e| e.to_string())
@@ -45,7 +75,7 @@ pub fn save_settings(
     settings: AppSettings,
     state: State<'_, SettingsStore>,
 ) -> Result<(), String> {
-    let mut store = state.0.lock().map_err(|e| e.to_string())?;
-    *store = settings;
+    state.write_disk(&settings)?;
+    *state.inner.lock().map_err(|e| e.to_string())? = settings;
     Ok(())
 }

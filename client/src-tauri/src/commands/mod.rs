@@ -1,3 +1,4 @@
+pub mod media_cache;
 pub mod monitor;
 pub mod overlay;
 pub mod settings;

@@ -59,11 +59,7 @@ export async function apiFetch<T>(
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
 
-  const doFetch = () =>
-    fetch(`${getServerUrl()}${path}`, {
-      ...options,
-      headers,
-    });
+  const doFetch = () => fetch(`${getServerUrl()}${path}`, { ...options, headers });
 
   let response = await doFetch();
 

@@ -1,18 +1,18 @@
 mod commands;
 
+use commands::media_cache::{clear_media_cache, remove_media_cache_file, write_media_cache};
 use commands::monitor::collect_monitors;
 use commands::overlay::{
-    get_active_overlays, hide_overlay, panic_hide_all, show_overlay, OverlayManager, OverlayState,
+    get_active_overlays, hide_overlay, overlay_surface_idle, panic_hide_all, show_overlay,
+    OverlayManager,
 };
-use commands::settings::{get_settings, save_settings, AppSettings, SettingsStore};
-use std::sync::Mutex;
+use commands::settings::{get_settings, save_settings, SettingsStore};
 use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(SettingsStore(Mutex::new(AppSettings::default())))
-        .manage(OverlayManager(Mutex::new(Vec::<OverlayState>::new())))
+        .manage(OverlayManager::new())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
@@ -35,6 +35,8 @@ pub fn run() {
         )
         .setup(|app| {
             use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+
+            app.manage(SettingsStore::new(&app.handle())?);
 
             let handle = app.handle().clone();
             let shortcut =
@@ -85,6 +87,10 @@ pub fn run() {
             hide_overlay,
             panic_hide_all,
             get_active_overlays,
+            overlay_surface_idle,
+            write_media_cache,
+            remove_media_cache_file,
+            clear_media_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

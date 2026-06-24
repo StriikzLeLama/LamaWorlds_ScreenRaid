@@ -1,12 +1,46 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { OverlayCanvas } from './components/OverlayCanvas';
 import type { ActiveOverlay, OverlayShowPayload } from './types';
 
 const MAX_STACK = 4;
 
+function exitDurationMs(): number {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 50 : 350;
+}
+
+function parseMonitorIndex(label: string): number {
+  const match = /^overlay-(\d+)$/.exec(label);
+  return match ? Number.parseInt(match[1], 10) : 0;
+}
+
 export function OverlayApp() {
   const [overlays, setOverlays] = useState<ActiveOverlay[]>([]);
+  const exitingCountRef = useRef(0);
+  const monitorIndexRef = useRef(0);
+
+  const requestSurfaceIdle = useCallback(() => {
+    if (exitingCountRef.current > 0) return;
+    void invoke('overlay_surface_idle', { monitorIndex: monitorIndexRef.current }).catch(
+      () => undefined,
+    );
+  }, []);
+
+  useEffect(() => {
+    try {
+      monitorIndexRef.current = parseMonitorIndex(getCurrentWebviewWindow().label);
+    } catch {
+      monitorIndexRef.current = 0;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (overlays.length === 0) {
+      requestSurfaceIdle();
+    }
+  }, [overlays.length, requestSurfaceIdle]);
 
   useEffect(() => {
     const unsubs: Array<Promise<() => void>> = [];
@@ -16,7 +50,7 @@ export function OverlayApp() {
         const payload = event.payload;
         setOverlays((prev) => {
           const next = prev.filter((o) => o.id !== payload.id);
-          const item: ActiveOverlay = { ...payload, visible: true };
+          const item: ActiveOverlay = { ...payload, visible: true, exiting: false };
           const merged = [...next, item];
           return merged.slice(-MAX_STACK);
         });
@@ -26,20 +60,35 @@ export function OverlayApp() {
     unsubs.push(
       listen<string>('overlay:hide', (event) => {
         const id = event.payload;
-        setOverlays((prev) => prev.filter((o) => o.id !== id));
+        exitingCountRef.current += 1;
+        setOverlays((prev) =>
+          prev.map((o) => (o.id === id ? { ...o, exiting: true } : o)),
+        );
+        window.setTimeout(() => {
+          exitingCountRef.current = Math.max(0, exitingCountRef.current - 1);
+          setOverlays((prev) => {
+            const next = prev.filter((o) => o.id !== id);
+            if (next.length === 0 && exitingCountRef.current === 0) {
+              requestSurfaceIdle();
+            }
+            return next;
+          });
+        }, exitDurationMs());
       }),
     );
 
     unsubs.push(
       listen('overlay:clear', () => {
+        exitingCountRef.current = 0;
         setOverlays([]);
+        requestSurfaceIdle();
       }),
     );
 
     return () => {
       unsubs.forEach((p) => p.then((fn) => fn()));
     };
-  }, []);
+  }, [requestSurfaceIdle]);
 
   return <OverlayCanvas overlays={overlays} />;
 }

@@ -25,6 +25,8 @@ pub async fn spawn_app() -> TestApp {
         jwt_secret: "test-secret-for-ci-only".into(),
         storage_path: storage,
         cors_origins: vec![],
+        admin_usernames: std::collections::HashSet::new(),
+        allow_self_prank: false,
     };
 
     let connect_options = SqliteConnectOptions::new()

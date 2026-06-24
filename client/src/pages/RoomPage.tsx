@@ -8,6 +8,7 @@ import {
   defaultOverlayConfig,
   listPrankHistory,
   sendPrank,
+  type Animation,
   type OverlayType,
   type PrankHistoryItem,
 } from '../services/pranks';
@@ -17,6 +18,30 @@ import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { useAuthStore } from '../stores/authStore';
 import type { RoomDetail, RoomMember } from '../types/room';
+import type { MediaType } from '../types';
+
+const OVERLAY_TYPES: OverlayType[] = ['text', 'image', 'gif', 'video', 'sound'];
+const ANIMATIONS: Animation[] = ['fade', 'zoom', 'bounce', 'none'];
+
+function mediaForOverlay(type: OverlayType, items: Media[]): Media[] {
+  const map: Partial<Record<OverlayType, MediaType>> = {
+    image: 'image',
+    gif: 'gif',
+    video: 'video',
+    sound: 'audio',
+  };
+  const wanted = map[type];
+  if (!wanted) return [];
+  return items.filter((m) => m.media_type === wanted);
+}
+
+function previewLabel(type: OverlayType): string {
+  if (type === 'text') return 'TXT';
+  if (type === 'sound') return 'SND';
+  if (type === 'video') return 'VID';
+  if (type === 'gif') return 'GIF';
+  return 'IMG';
+}
 
 export function RoomPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +59,8 @@ export function RoomPage() {
   const [textContent, setTextContent] = useState('');
   const [mediaId, setMediaId] = useState('');
   const [durationMs, setDurationMs] = useState(5000);
+  const [animation, setAnimation] = useState<Animation>('fade');
+  const [volume, setVolume] = useState(0.8);
   const [placement, setPlacement] = useState<PlacementPosition>({
     monitor_index: 0,
     x: 0.5,
@@ -119,6 +146,8 @@ export function RoomPage() {
     setError('');
     try {
       const config = defaultOverlayConfig();
+      config.animation = animation;
+      config.volume = volume;
       config.position = {
         monitor_index: placement.monitor_index,
         x: placement.x,
@@ -150,7 +179,10 @@ export function RoomPage() {
   const isOwner = myRole === 'owner';
   const canSend = myRole !== 'guest';
   const otherMembers = room.members.filter((m) => m.user_id !== currentUserId);
-  const imageMedia = mediaItems.filter((m) => m.media_type === 'image' || m.media_type === 'gif');
+  const selectableMedia = mediaForOverlay(overlayType, mediaItems);
+  const needsMedia = overlayType !== 'text';
+  const isSoundOnly = overlayType === 'sound';
+  const showPlacement = Boolean(targetId) && !isSoundOnly;
 
   return (
     <div className="space-y-6">
@@ -214,6 +246,9 @@ export function RoomPage() {
                   onChange={(e) => setTargetId(e.target.value)}
                 >
                   <option value="">Everyone in room</option>
+                  {currentUserId && (
+                    <option value={currentUserId}>Yourself (solo test)</option>
+                  )}
                   {otherMembers.map((m) => (
                     <option key={m.user_id} value={m.user_id}>
                       {m.display_name}
@@ -222,12 +257,15 @@ export function RoomPage() {
                 </select>
               </div>
 
-              <div className="flex gap-2">
-                {(['text', 'image'] as OverlayType[]).map((t) => (
+              <div className="flex flex-wrap gap-2">
+                {OVERLAY_TYPES.map((t) => (
                   <Button
                     key={t}
                     variant={overlayType === t ? 'primary' : 'secondary'}
-                    onClick={() => setOverlayType(t)}
+                    onClick={() => {
+                      setOverlayType(t);
+                      setMediaId('');
+                    }}
                   >
                     {t}
                   </Button>
@@ -250,12 +288,50 @@ export function RoomPage() {
                     onChange={(e) => setMediaId(e.target.value)}
                   >
                     <option value="">Select from library…</option>
-                    {imageMedia.map((m) => (
+                    {selectableMedia.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.original_name}
                       </option>
                     ))}
                   </select>
+                  {selectableMedia.length === 0 && (
+                    <p className="mt-1 text-xs text-raid-text-secondary">
+                      Upload {overlayType} media in the Media library first.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-xs text-raid-text-secondary">Animation</label>
+                <select
+                  className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                  value={animation}
+                  onChange={(e) => setAnimation(e.target.value as Animation)}
+                  disabled={isSoundOnly}
+                >
+                  {ANIMATIONS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(overlayType === 'sound' || overlayType === 'video') && (
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">
+                    Volume: {Math.round(volume * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                    className="w-full accent-raid-accent"
+                  />
                 </div>
               )}
 
@@ -274,7 +350,7 @@ export function RoomPage() {
                 />
               </div>
 
-              {targetId && (
+              {showPlacement && (
                 <div>
                   <label className="mb-2 block text-xs font-medium text-raid-text-secondary">
                     Visual placement
@@ -283,12 +359,25 @@ export function RoomPage() {
                     monitors={targetMonitors}
                     position={placement}
                     onChange={setPlacement}
-                    previewLabel={overlayType === 'text' ? 'TXT' : 'IMG'}
+                    previewLabel={previewLabel(overlayType)}
                   />
                 </div>
               )}
 
-              <Button disabled={sending} onClick={() => void handleSend()}>
+              {targetId === currentUserId && (
+                <p className="text-xs text-raid-text-secondary">
+                  Solo test requires <code className="text-raid-accent">ALLOW_SELF_PRANK=true</code> on the server.
+                </p>
+              )}
+
+              <Button
+                disabled={
+                  sending ||
+                  (overlayType === 'text' && !textContent.trim()) ||
+                  (needsMedia && !mediaId)
+                }
+                onClick={() => void handleSend()}
+              >
                 <Send size={16} />
                 {sending ? 'Sending…' : 'Send prank'}
               </Button>

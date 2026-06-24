@@ -17,6 +17,7 @@ interface ConsentStore {
   setRoomConsent: (roomId: string, consented: boolean) => Promise<void>;
   loadFromServer: () => Promise<void>;
   applyServerState: (state: ConsentState) => void;
+  reset: () => void;
 }
 
 function fromServer(state: ConsentState) {
@@ -82,6 +83,13 @@ export const useConsentStore = create<ConsentStore>()(
         set(next);
         syncConsentWs(wsPayload(next));
       },
+      reset: () =>
+        set({
+          globalConsent: false,
+          isPaused: false,
+          consentPromptSeen: false,
+          roomConsents: {},
+        }),
     }),
     { name: 'screenraid-consent' },
   ),

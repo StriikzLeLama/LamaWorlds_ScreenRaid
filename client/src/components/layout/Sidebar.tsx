@@ -14,6 +14,7 @@ import { Button } from '../ui/Button';
 import { useAuthStore } from '../../stores/authStore';
 import { useConsentStore } from '../../stores/consentStore';
 import { logout as logoutApi } from '../../services/auth';
+import { clearLocalSession } from '../../services/session';
 
 const baseNavItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -29,7 +30,6 @@ export function Sidebar() {
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const accessToken = useAuthStore((s) => s.accessToken);
   const refreshToken = useAuthStore((s) => s.refreshToken);
-  const logout = useAuthStore((s) => s.logout);
   const pause = useConsentStore((s) => s.pause);
 
   const navItems = isAdmin
@@ -41,16 +41,13 @@ export function Sidebar() {
     await pause();
   };
 
-  const handleLogout = async () => {
-    try {
-      if (accessToken && refreshToken) {
-        await logoutApi(accessToken, refreshToken);
-      }
-    } catch {
-      // Clear local session even if server logout fails
-    } finally {
-      logout();
-      navigate('/login', { replace: true });
+  const handleLogout = () => {
+    const token = accessToken;
+    const refresh = refreshToken;
+    clearLocalSession();
+    navigate('/login', { replace: true });
+    if (token && refresh) {
+      void logoutApi(token, refresh).catch(() => undefined);
     }
   };
 

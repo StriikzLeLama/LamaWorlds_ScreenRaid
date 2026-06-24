@@ -1,4 +1,4 @@
-import { getServerUrl } from './api';
+import { getServerUrl, onServerUrlChange } from './serverConfig';
 import { useAuthStore } from '../stores/authStore';
 
 type MessageHandler = (type: string, payload: unknown) => void;
@@ -6,6 +6,8 @@ type MessageHandler = (type: string, payload: unknown) => void;
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let backoff = 1000;
+/** Server base URL the current socket was opened against (detect stale connections). */
+let connectedServerBase: string | null = null;
 const handlers = new Set<MessageHandler>();
 
 function wsUrl(token: string): string {
@@ -20,9 +22,15 @@ export function onWsMessage(handler: MessageHandler): () => void {
 
 export function connectWebSocket(): void {
   const token = useAuthStore.getState().accessToken;
-  if (!token || socket?.readyState === WebSocket.OPEN) return;
+  if (!token) return;
+
+  const base = getServerUrl();
+  if (socket?.readyState === WebSocket.OPEN && connectedServerBase === base) {
+    return;
+  }
 
   disconnectWebSocket(false);
+  connectedServerBase = base;
 
   socket = new WebSocket(wsUrl(token));
 
@@ -41,6 +49,7 @@ export function connectWebSocket(): void {
 
   socket.onclose = () => {
     socket = null;
+    connectedServerBase = null;
     if (useAuthStore.getState().isAuthenticated) {
       reconnectTimer = setTimeout(() => {
         backoff = Math.min(backoff * 2, 30000);
@@ -48,6 +57,13 @@ export function connectWebSocket(): void {
       }, backoff);
     }
   };
+}
+
+/** Force a new connection (e.g. after server URL change). */
+export function reconnectWebSocket(): void {
+  if (!useAuthStore.getState().accessToken) return;
+  disconnectWebSocket(false);
+  connectWebSocket();
 }
 
 export function disconnectWebSocket(clearBackoff = true): void {
@@ -58,6 +74,7 @@ export function disconnectWebSocket(clearBackoff = true): void {
   if (clearBackoff) backoff = 1000;
   socket?.close();
   socket = null;
+  connectedServerBase = null;
 }
 
 export function subscribeRoom(roomId: string): void {
@@ -100,3 +117,5 @@ export function startHeartbeat(): ReturnType<typeof setInterval> {
     send({ type: 'ping', payload: {} });
   }, 30000);
 }
+
+onServerUrlChange(() => reconnectWebSocket());

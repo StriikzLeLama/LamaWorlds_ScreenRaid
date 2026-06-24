@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
 import { useAuthStore } from '../stores/authStore';
 import { login as loginApi } from '../services/auth';
-import { ApiError } from '../services/api';
+import { ApiError, getServerUrl } from '../services/api';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -36,9 +36,10 @@ export function LoginPage() {
             <div className="h-4 w-4 rounded-full bg-raid-accent" />
           </div>
           <h1 className="text-2xl font-bold text-raid-text">Welcome to ScreenRaid</h1>
-          <p className="mt-1 text-sm text-raid-text-secondary">
-            Sign in to your prank dashboard
-          </p>
+        <p className="mt-1 text-sm text-raid-text-secondary">
+          Sign in to your prank dashboard
+        </p>
+        <p className="mt-2 text-xs text-raid-text-secondary">Server: {getServerUrl()}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input

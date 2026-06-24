@@ -78,6 +78,7 @@ impl AppState {
             MediaRepository::new(db.clone()),
             (*consent).clone(),
             ws_hub.clone(),
+            config.allow_self_prank,
         ));
 
         let monitors = Arc::new(MonitorService::new(

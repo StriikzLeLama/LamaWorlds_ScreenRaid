@@ -5,6 +5,29 @@ body,
   overflow: hidden;
 }
 
+/* Isolate overlay repaints from the rest of the desktop compositor. */
+.overlay-root {
+  contain: strict;
+  pointer-events: none;
+}
+
+.overlay-item {
+  contain: layout style paint;
+}
+
+.overlay-media {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.overlay-anim {
+  will-change: transform, opacity;
+}
+
+.overlay-anim--done {
+  will-change: auto;
+}
+
 @keyframes overlay-fade-in {
   from {
     opacity: 0;
@@ -14,29 +37,49 @@ body,
   }
 }
 
+@keyframes overlay-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes overlay-zoom-in {
   from {
     opacity: 0;
-    transform: scale(0.6);
+    transform: scale3d(0.6, 0.6, 1);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale3d(1, 1, 1);
+  }
+}
+
+@keyframes overlay-zoom-out {
+  from {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+  }
+  to {
+    opacity: 0;
+    transform: scale3d(0.6, 0.6, 1);
   }
 }
 
 @keyframes overlay-bounce-in {
   0% {
     opacity: 0;
-    transform: scale(0.3);
+    transform: scale3d(0.3, 0.3, 1);
   }
   50% {
     opacity: 1;
-    transform: scale(1.08);
+    transform: scale3d(1.08, 1.08, 1);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: scale3d(1, 1, 1);
   }
 }
 
@@ -44,10 +87,31 @@ body,
   animation: overlay-fade-in 0.35s ease-out forwards;
 }
 
+.animate-overlay-fade-out {
+  animation: overlay-fade-out 0.35s ease-in forwards;
+}
+
 .animate-overlay-zoom {
   animation: overlay-zoom-in 0.45s ease-out forwards;
 }
 
+.animate-overlay-zoom-out {
+  animation: overlay-zoom-out 0.35s ease-in forwards;
+}
+
 .animate-overlay-bounce {
   animation: overlay-bounce-in 0.55s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-overlay-fade,
+  .animate-overlay-zoom,
+  .animate-overlay-bounce {
+    animation: overlay-fade-in 0.05s ease-out forwards;
+  }
+
+  .animate-overlay-fade-out,
+  .animate-overlay-zoom-out {
+    animation: overlay-fade-out 0.05s ease-in forwards;
+  }
 }

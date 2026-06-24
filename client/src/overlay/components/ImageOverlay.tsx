@@ -1,29 +1,32 @@
 import type { ActiveOverlay } from '../types';
+import { animationClass, overlayMediaSrc, useAnimationDone } from '../utils';
 
 interface Props {
   overlay: ActiveOverlay;
 }
 
 export function ImageOverlay({ overlay }: Props) {
-  if (!overlay.media_url) return null;
+  const src = overlayMediaSrc(overlay);
+  const exiting = Boolean(overlay.exiting);
+  const animDone = useAnimationDone(!exiting, 500);
+  const anim = animationClass(overlay.animation, exiting);
+  const animClass = animDone && !exiting ? `${anim} overlay-anim--done` : anim;
 
-  const animClass =
-    overlay.animation === 'zoom'
-      ? 'animate-overlay-zoom'
-      : overlay.animation === 'bounce'
-        ? 'animate-overlay-bounce'
-        : 'animate-overlay-fade';
+  if (!src) return null;
 
   return (
-    <img
-      src={overlay.media_url}
-      alt=""
-      draggable={false}
-      className={`pointer-events-none max-h-[70vh] max-w-[70vw] object-contain drop-shadow-2xl ${animClass}`}
-      style={{
-        transform: `scale(${overlay.scale})`,
-        opacity: overlay.opacity,
-      }}
-    />
+    <div className={animClass}>
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        decoding="async"
+        className="overlay-media pointer-events-none max-h-[70vh] max-w-[70vw] object-contain"
+        style={{
+          transform: `scale3d(${overlay.scale}, ${overlay.scale}, 1)`,
+          opacity: overlay.opacity,
+        }}
+      />
+    </div>
   );
 }

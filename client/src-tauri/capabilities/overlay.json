@@ -2,6 +2,15 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "overlay",
   "description": "ScreenRaid overlay window capabilities",
-  "windows": ["overlay-0", "overlay-1", "overlay-2", "overlay-3"],
+  "windows": [
+    "overlay-0",
+    "overlay-1",
+    "overlay-2",
+    "overlay-3",
+    "overlay-4",
+    "overlay-5",
+    "overlay-6",
+    "overlay-7"
+  ],
   "permissions": ["core:default", "core:event:default"]
 }

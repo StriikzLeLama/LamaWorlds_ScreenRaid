@@ -1,7 +1,16 @@
 const DEFAULT_SERVER =
   import.meta.env.VITE_SERVER_URL?.replace(/\/$/, '') ?? 'http://localhost:8080';
 
+/** Runtime API base URL (loaded from Tauri settings on boot, then updated in Settings). */
 let serverUrl = DEFAULT_SERVER;
+
+const urlChangeListeners = new Set<() => void>();
+
+/** Subscribe to server URL changes (used by WebSocket to reconnect). */
+export function onServerUrlChange(listener: () => void): () => void {
+  urlChangeListeners.add(listener);
+  return () => urlChangeListeners.delete(listener);
+}
 
 export function getServerUrl(): string {
   return serverUrl;
@@ -9,9 +18,16 @@ export function getServerUrl(): string {
 
 export function setServerUrl(url: string): void {
   const trimmed = url.trim().replace(/\/$/, '');
-  serverUrl = trimmed || DEFAULT_SERVER;
+  const next = trimmed || DEFAULT_SERVER;
+  const changed = serverUrl !== next;
+  serverUrl = next;
+  // Reconnect WS when the target host changes while still logged in.
+  if (changed) {
+    urlChangeListeners.forEach((fn) => fn());
+  }
 }
 
+/** Apply persisted Tauri settings before the first API call. */
 export async function loadServerUrlFromSettings(): Promise<void> {
   try {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -20,6 +36,6 @@ export async function loadServerUrlFromSettings(): Promise<void> {
       setServerUrl(settings.server_url);
     }
   } catch {
-    // Browser-only dev without Tauri falls back to VITE_SERVER_URL
+    // Non-Tauri dev (browser-only) falls back to VITE_SERVER_URL.
   }
 }

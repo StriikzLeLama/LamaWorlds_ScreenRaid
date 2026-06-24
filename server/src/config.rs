@@ -11,6 +11,8 @@ pub struct Config {
     pub storage_path: PathBuf,
     pub cors_origins: Vec<String>,
     pub admin_usernames: HashSet<String>,
+    /// Dev/solo testing: allow sending pranks to yourself.
+    pub allow_self_prank: bool,
 }
 
 impl Config {
@@ -42,6 +44,9 @@ impl Config {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_ascii_lowercase())
                 .collect(),
+            allow_self_prank: env::var("ALLOW_SELF_PRANK")
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+                .unwrap_or(false),
         }
     }
 

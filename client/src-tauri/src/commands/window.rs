@@ -12,6 +12,7 @@ pub fn overlay_url() -> WebviewUrl {
     }
 }
 
+/// Lazily create an overlay webview for a monitor (hidden until content is shown).
 pub fn ensure_overlay_window(app: &AppHandle, monitor_index: u32) -> Result<(), String> {
     let label = format!("overlay-{monitor_index}");
     if app.get_webview_window(&label).is_some() {
@@ -33,7 +34,8 @@ pub fn ensure_overlay_window(app: &AppHandle, monitor_index: u32) -> Result<(), 
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .visible(true)
+        // Hidden by default — zero GPU compositing cost while idle.
+        .visible(false)
         .focused(false)
         .resizable(false)
         .position(pos.x as f64, pos.y as f64)
@@ -43,6 +45,26 @@ pub fn ensure_overlay_window(app: &AppHandle, monitor_index: u32) -> Result<(), 
 
     window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Show the overlay surface when prank content is active.
+pub fn show_overlay_surface(app: &AppHandle, monitor_index: u32) -> Result<(), String> {
+    let label = overlay_label(monitor_index);
+    let Some(window) = app.get_webview_window(&label) else {
+        return Ok(());
+    };
+    window.show().map_err(|e| e.to_string())?;
+    let _ = window.set_ignore_cursor_events(true);
+    Ok(())
+}
+
+/// Hide the overlay surface when no content remains (restores full FPS).
+pub fn hide_overlay_surface(app: &AppHandle, monitor_index: u32) -> Result<(), String> {
+    let label = overlay_label(monitor_index);
+    let Some(window) = app.get_webview_window(&label) else {
+        return Ok(());
+    };
+    window.hide().map_err(|e| e.to_string())
 }
 
 pub fn resize_overlay_monitor(app: &AppHandle, monitor_index: u32) -> Result<(), String> {
@@ -72,4 +94,11 @@ pub fn resize_overlay_monitor(app: &AppHandle, monitor_index: u32) -> Result<(),
 
 pub fn overlay_label(monitor_index: u32) -> String {
     format!("overlay-{monitor_index}")
+}
+
+/// Hide every overlay webview (panic / clear).
+pub fn hide_all_overlay_surfaces(app: &AppHandle, max_monitors: u32) {
+    for i in 0..max_monitors {
+        let _ = hide_overlay_surface(app, i);
+    }
 }

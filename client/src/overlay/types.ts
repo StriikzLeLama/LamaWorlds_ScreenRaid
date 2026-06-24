@@ -2,6 +2,7 @@ export interface OverlayShowPayload {
   id: string;
   overlay_type: string;
   media_url: string | null;
+  local_path: string | null;
   text: string | null;
   duration_ms: number;
   animation: string;
@@ -11,8 +12,10 @@ export interface OverlayShowPayload {
   monitor_index: number;
   scale: number;
   opacity: number;
+  volume: number;
 }
 
 export interface ActiveOverlay extends OverlayShowPayload {
   visible: boolean;
+  exiting?: boolean;
 }

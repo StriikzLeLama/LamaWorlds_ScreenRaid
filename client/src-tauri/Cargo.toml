@@ -19,7 +19,7 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 log = "0.4"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tokio = { version = "1", features = ["time"] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
