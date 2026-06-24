@@ -13,6 +13,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Button } from '../ui/Button';
 import { useAuthStore } from '../../stores/authStore';
 import { useConsentStore } from '../../stores/consentStore';
+import { isReceiverApp } from '../../lib/platform';
 import { logout as logoutApi } from '../../services/auth';
 import { clearLocalSession } from '../../services/session';
 
@@ -37,7 +38,9 @@ export function Sidebar() {
     : baseNavItems;
 
   const handlePanic = async () => {
-    await invoke('panic_hide_all');
+    if (isReceiverApp()) {
+      await invoke('panic_hide_all');
+    }
     await pause();
   };
 
@@ -90,7 +93,7 @@ export function Sidebar() {
         )}
         <Button variant="danger" className="w-full" onClick={handlePanic}>
           <ShieldAlert size={18} />
-          Panic — Hide All
+          {isReceiverApp() ? 'Panic — Hide All' : 'Pause receiving'}
         </Button>
         <Button variant="ghost" className="w-full" onClick={handleLogout}>
           <LogOut size={18} />

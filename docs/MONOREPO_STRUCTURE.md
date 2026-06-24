@@ -55,19 +55,21 @@ Axum HTTP server with SQLite (SQLx), JWT auth, WebSocket hub, and file storage.
 | `src/websocket/` | WS upgrade, hub, session management |
 | `migrations/` | SQLx schema migrations |
 
-### `client/` — Desktop app (`screenraid-client`)
+### `client/` — React frontend (two builds)
 
-Tauri 2 shell wrapping a React + Vite + Tailwind UI.
+| Build | Script | Purpose |
+|-------|--------|---------|
+| **Web dashboard** | `npm run build:web` | Embedded in server Docker image at `STATIC_PATH` |
+| **Receiver** | `npm run build` + `tauri build` | Desktop overlay client only |
 
 | Path | Responsibility |
 |------|----------------|
-| `src/` | React application (pages, components, hooks, stores, services) |
-| `src-tauri/` | Rust native layer: overlay commands, settings, plugins |
+| `src/App.web.tsx` | Full dashboard routes (rooms, friends, media, admin) |
+| `src/App.receiver.tsx` | Minimal receiver routes (status, settings) |
+| `src/overlay/` | Transparent overlay renderer (receiver only) |
+| `src-tauri/` | Rust native layer: overlay windows, settings, cache |
 | `src-tauri/src/commands/` | Tauri invoke handlers (overlay, settings) |
-| `src-tauri/migrations/` | Client-side SQLite cache schema |
-| `src-tauri/capabilities/` | Tauri 2 permission capabilities |
-| `public/` | Static assets |
-| `package.json` | Frontend dependencies and scripts |
+| `.env.web` / `.env.receiver` | Vite mode: `VITE_APP_MODE=web` or `receiver` |
 
 ### `docker/` (planned)
 

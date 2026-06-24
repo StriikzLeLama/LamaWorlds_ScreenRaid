@@ -2,6 +2,8 @@
 
 > Actionable task breakdown for the entire MVP. Status: ✅ done · 🔄 in progress · 🔲 pending.
 
+**Architecture note:** The **web dashboard** is served by the server (`npm run build:web` → Docker `STATIC_PATH`). The **Tauri receiver** (`npm run build` / `tauri build`) only displays overlays.
+
 **Total estimated hours (MVP):** ~280h
 
 ---
@@ -28,6 +30,7 @@
 | MVP-FND-004 | Tauri + React scaffold | MVP-FND-001 | 8 | `client/`, `client/src-tauri/` | App window opens with HomeBoard theme | ✅ |
 | MVP-FND-005 | Docker compose dev stack | MVP-FND-002 | 3 | `docker-compose.yml`, `.env.example` | Server starts via compose | ✅ |
 | MVP-FND-006 | Design system tokens + UI kit | MVP-FND-004 | 6 | `docs/DESIGN_SYSTEM.md`, `client/src/components/ui/*` | Button, Card, Input, Modal styled | ✅ |
+| MVP-FND-007 | Web dashboard on server + receiver split | MVP-FND-004 | 8 | `server/Dockerfile`, `App.web.tsx`, `App.receiver.tsx` | Docker serves `/`; Tauri is receiver-only | ✅ |
 
 ---
 
@@ -102,7 +105,7 @@
 | MVP-CNS-007 | Client consent service | MVP-CNS-003 | 4 | `client/src/services/consent.ts` | API calls for all consent actions | ✅ |
 | MVP-CNS-008 | Consent Zustand store | MVP-CNS-007 | 4 | `client/src/stores/consentStore.ts` | State persisted, WS sync on change | ✅ |
 | MVP-CNS-009 | Consent gate component | MVP-CNS-008 | 4 | `client/src/components/ConsentGate.tsx` | First-run prompt grants via API | ✅ |
-| MVP-CNS-010 | Settings consent controls | MVP-CNS-008 | 3 | `client/src/pages/SettingsPage.tsx` | Grant/revoke/resume buttons work | ✅ |
+| MVP-CNS-010 | Settings consent controls | MVP-CNS-008 | 3 | `WebSettingsPage.tsx`, receiver home | Grant/revoke/resume buttons work | ✅ |
 | MVP-CNS-011 | Panic hotkey (Ctrl+Shift+Esc) | MVP-FND-004 | 4 | `client/src-tauri/src/lib.rs`, `hooks/usePanicHotkey.ts` | Hotkey clears overlays + pauses consent | ✅ |
 | MVP-CNS-012 | Load consent on login/WS | MVP-CNS-008 | 2 | `hooks/useWebSocket.ts` | Consent fetched on connect | ✅ |
 | MVP-CNS-013 | Audit log for consent changes | MVP-CNS-002 | 4 | `server/src/service/consent_service.rs` | Consent changes written to audit table | ✅ |

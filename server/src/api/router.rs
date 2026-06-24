@@ -8,6 +8,7 @@ use tower_http::{
 };
 
 use crate::api::handlers;
+use crate::api::static_files;
 use crate::state::AppState;
 use crate::websocket::ws_handler;
 
@@ -65,7 +66,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/media", get(handlers::list_admin_media))
         .route("/media/{id}", delete(handlers::delete_media_admin));
 
-    Router::new()
+    let static_path = state.config.static_path.clone();
+
+    let mut router = Router::new()
         .route("/health", get(handlers::health))
         .route("/health/ready", get(handlers::ready))
         .route("/v1/health", get(handlers::health))
@@ -82,5 +85,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/users/{id}/monitors", get(handlers::get_user_monitors))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
-        .with_state(state)
+        .with_state(state);
+
+    if let Some(spa) = static_files::static_fallback_router(&static_path) {
+        router = router.merge(spa);
+    }
+
+    router
 }

@@ -1,5 +1,13 @@
-const DEFAULT_SERVER =
-  import.meta.env.VITE_SERVER_URL?.replace(/\/$/, '') ?? 'http://localhost:8080';
+import { isWebApp } from '../lib/platform';
+
+function defaultServerUrl(): string {
+  if (isWebApp() && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return import.meta.env.VITE_SERVER_URL?.replace(/\/$/, '') ?? 'http://localhost:8080';
+}
+
+const DEFAULT_SERVER = defaultServerUrl();
 
 /** Runtime API base URL (loaded from Tauri settings on boot, then updated in Settings). */
 let serverUrl = DEFAULT_SERVER;
@@ -13,6 +21,9 @@ export function onServerUrlChange(listener: () => void): () => void {
 }
 
 export function getServerUrl(): string {
+  if (isWebApp() && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
   return serverUrl;
 }
 

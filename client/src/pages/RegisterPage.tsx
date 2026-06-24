@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 import { register as registerApi, getMe } from '../services/auth';
 import { ApiError } from '../services/api';
 import { getServerUrl } from '../services/serverConfig';
+import { isReceiverApp, isWebApp } from '../lib/platform';
 
 function authErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -35,7 +36,7 @@ export function RegisterPage() {
     setError('');
     setLoading(true);
     try {
-      await ensureServerUrl(serverUrl);
+      await ensureServerUrl(isWebApp() ? getServerUrl() : serverUrl);
       const res = await registerApi({
         username: form.username,
         email: form.email,
@@ -63,7 +64,7 @@ export function RegisterPage() {
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <ServerUrlField onChange={setServerUrl} />
+          {isReceiverApp() && <ServerUrlField onChange={setServerUrl} />}
           <Input
             label="Username"
             value={form.username}

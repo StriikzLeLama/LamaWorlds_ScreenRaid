@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "ScreenRaid",
+  "productName": "ScreenRaid Receiver",
   "version": "0.1.0",
   "identifier": "com.screenraid.app",
   "build": {
@@ -13,11 +13,11 @@
     "windows": [
       {
         "label": "main",
-        "title": "ScreenRaid",
-        "width": 1200,
-        "height": 800,
-        "minWidth": 900,
-        "minHeight": 600,
+        "title": "ScreenRaid Receiver",
+        "width": 960,
+        "height": 640,
+        "minWidth": 720,
+        "minHeight": 480,
         "resizable": true,
         "decorations": false,
         "fullscreen": false

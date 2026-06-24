@@ -26,31 +26,34 @@ See also: [ARCHITECTURE.md](./ARCHITECTURE.md) · [DATABASE.md](./DATABASE.md) �
 
 ## 1. Overview / Vue d'ensemble
 
-ScreenRaid ships a single **stateful** server container:
+ScreenRaid ships a single **stateful** server container that includes the **web dashboard** (built React SPA at `/`):
 
 | Component | Location | Persistence |
 |-----------|----------|-------------|
 | API + WebSocket | `screenraid-server` binary (Axum) | Stateless process |
+| Web dashboard | `/app/web` (`STATIC_PATH`) — built via `npm run build:web` in Docker | Baked into image |
 | SQLite database | `/data/screenraid.db` | Docker volume `screenraid-data` |
 | Media blobs | `/data/media/` | Same volume |
 
-The Tauri desktop client is distributed separately (installer / auto-update channel). This guide covers **server-side** deployment only.
+The **Tauri receiver** is distributed separately (installer on each PC). Users manage rooms and send pranks in the **browser**; overlays render only on machines running the receiver app.
 
 ```
 Internet
     │
     ▼
-┌─────────────┐     HTTP/WS      ┌──────────────────┐
-│ Caddy/nginx │ ───────────────► │ screenraid-server│
-│  :443 TLS   │   proxy :8080    │  :8080           │
-└─────────────┘                  └────────┬─────────┘
-                                          │
-                                          ▼
-                                 ┌──────────────────┐
-                                 │ screenraid-data  │
-                                 │  screenraid.db   │
-                                 │  media/          │
-                                 └──────────────────┘
+┌─────────────┐     HTTP/WS      ┌──────────────────────────────┐
+│ Caddy/nginx │ ───────────────► │ screenraid-server :8080      │
+│  :443 TLS   │                  │  /      → web dashboard SPA  │
+└─────────────┘                  │  /v1/*  → REST + /v1/ws     │
+                                 └──────────────┬───────────────┘
+                                                │
+                    ┌───────────────────────────┼───────────────────┐
+                    ▼                           ▼                   ▼
+           ┌──────────────────┐        ┌──────────────┐   ┌──────────────┐
+           │ screenraid-data  │        │ Tauri        │   │ Browsers     │
+           │  screenraid.db   │        │ Receiver(s)  │   │ (dashboard)  │
+           │  media/          │        │ WS + overlays│   │ same origin  │
+           └──────────────────┘        └──────────────┘   └──────────────┘
 ```
 
 ---
@@ -362,14 +365,18 @@ Canonical reference: [`.env.example`](../.env.example) and `server/src/config.rs
 | `DATABASE_URL` | Yes | `sqlite://./data/screenraid.db` | SQLite path (`sqlite:///data/screenraid.db` in Docker) |
 | `JWT_SECRET` | **Yes (prod)** | `dev-secret-change-in-production` | HMAC secret for access tokens — **must** be unique in production |
 | `STORAGE_PATH` | Yes | `./data/media` | Media filesystem root (`/data/media` in Docker) |
-| `CORS_ORIGINS` | No | `http://localhost:1420,tauri://localhost` | Comma-separated allowed origins |
+| `STATIC_PATH` | No | `./web` (Docker: `/app/web`) | Built web dashboard (`index.html` + assets). Omit or leave empty if API-only. |
+| `CORS_ORIGINS` | No | `http://localhost:1420,tauri://localhost` | Comma-separated allowed origins (Tauri receiver + optional extra web origins) |
+| `ADMIN_USERNAMES` | No | — | Comma-separated usernames with admin panel access |
+| `ALLOW_SELF_PRANK` | No | `false` | Solo testing: allow pranking yourself |
 | `RUST_LOG` | No | `screenraid_server=info` | Tracing filter (`tower_http=info` for HTTP traces) |
 
 ### 6.2 Client Variables (build-time)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_SERVER_URL` | `http://localhost:8080` | API base URL baked into the Vite client |
+| `VITE_APP_MODE` | `receiver` | `web` = dashboard SPA; `receiver` = Tauri overlay client |
+| `VITE_SERVER_URL` | `http://localhost:8080` | API base for **receiver** build only (web uses same origin) |
 
 ### 6.3 Generating Secrets
 

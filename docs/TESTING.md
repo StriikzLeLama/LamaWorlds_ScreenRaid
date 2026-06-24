@@ -1,7 +1,6 @@
 # ScreenRaid — Testing Guide / Guide de tests
 
-> Testing strategy for the ScreenRaid monorepo: Rust server, shared crates, Tauri client, WebSocket protocol, and overlay engine.  
-> Stratégie de tests pour le serveur Rust, le client Tauri et le protocole temps réel.
+> Testing strategy for the ScreenRaid monorepo: Rust server (API + embedded web UI), shared crates, Tauri **receiver**, WebSocket protocol, and overlay engine.
 
 See also: [ARCHITECTURE.md](./ARCHITECTURE.md) · [API.md](./API.md) · [WEBSOCKET.md](./WEBSOCKET.md) · [OVERLAY_ENGINE.md](./OVERLAY_ENGINE.md) · [WIREFRAMES.md](./WIREFRAMES.md)
 

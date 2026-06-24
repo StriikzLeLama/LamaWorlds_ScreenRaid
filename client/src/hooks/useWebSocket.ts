@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import {
-  connectWebSocket,
   disconnectWebSocket,
   onWsMessage,
+  reconnectWebSocket,
   startHeartbeat,
 } from '../services/websocket';
 import { useAuthStore } from '../stores/authStore';
@@ -11,16 +11,17 @@ import type { ConsentState } from '../services/consent';
 
 export function useWebSocket() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const loadConsent = useConsentStore((s) => s.loadFromServer);
   const applyServerState = useConsentStore((s) => s.applyServerState);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !accessToken) {
       disconnectWebSocket();
       return;
     }
 
-    connectWebSocket();
+    reconnectWebSocket();
     loadConsent().catch(() => undefined);
     const heartbeat = startHeartbeat();
 
@@ -53,5 +54,5 @@ export function useWebSocket() {
       clearInterval(heartbeat);
       disconnectWebSocket();
     };
-  }, [isAuthenticated, loadConsent, applyServerState]);
+  }, [isAuthenticated, accessToken, loadConsent, applyServerState]);
 }

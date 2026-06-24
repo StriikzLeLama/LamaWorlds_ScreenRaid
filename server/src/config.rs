@@ -13,6 +13,8 @@ pub struct Config {
     pub admin_usernames: HashSet<String>,
     /// Dev/solo testing: allow sending pranks to yourself.
     pub allow_self_prank: bool,
+    /// Directory with built web UI (`index.html` + assets). Served at `/` when present.
+    pub static_path: PathBuf,
 }
 
 impl Config {
@@ -47,6 +49,9 @@ impl Config {
             allow_self_prank: env::var("ALLOW_SELF_PRANK")
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
                 .unwrap_or(false),
+            static_path: PathBuf::from(
+                env::var("STATIC_PATH").unwrap_or_else(|_| "./web".into()),
+            ),
         }
     }
 

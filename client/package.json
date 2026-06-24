@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "vite --mode receiver",
+    "dev:web": "vite --mode web",
+    "build": "tsc -b && vite build --mode receiver",
+    "build:web": "tsc -b && vite build --mode web",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

@@ -8,7 +8,29 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let backoff = 1000;
 /** Server base URL the current socket was opened against (detect stale connections). */
 let connectedServerBase: string | null = null;
+/** Access token used for the active (or last attempted) connection. */
+let connectedToken: string | null = null;
+let wsConnected = false;
 const handlers = new Set<MessageHandler>();
+const connectionListeners = new Set<(connected: boolean) => void>();
+
+function setWsConnected(connected: boolean): void {
+  if (wsConnected === connected) return;
+  wsConnected = connected;
+  connectionListeners.forEach((listener) => listener(connected));
+}
+
+export function isWebSocketConnected(): boolean {
+  return wsConnected;
+}
+
+export function onWebSocketConnectionChange(
+  listener: (connected: boolean) => void,
+): () => void {
+  connectionListeners.add(listener);
+  listener(wsConnected);
+  return () => connectionListeners.delete(listener);
+}
 
 function wsUrl(token: string): string {
   const base = getServerUrl().replace(/^http/, 'ws');
@@ -25,17 +47,23 @@ export function connectWebSocket(): void {
   if (!token) return;
 
   const base = getServerUrl();
-  if (socket?.readyState === WebSocket.OPEN && connectedServerBase === base) {
+  if (
+    socket?.readyState === WebSocket.OPEN &&
+    connectedServerBase === base &&
+    connectedToken === token
+  ) {
     return;
   }
 
   disconnectWebSocket(false);
   connectedServerBase = base;
+  connectedToken = token;
 
   socket = new WebSocket(wsUrl(token));
 
   socket.onopen = () => {
     backoff = 1000;
+    setWsConnected(true);
   };
 
   socket.onmessage = (event) => {
@@ -50,6 +78,8 @@ export function connectWebSocket(): void {
   socket.onclose = () => {
     socket = null;
     connectedServerBase = null;
+    connectedToken = null;
+    setWsConnected(false);
     if (useAuthStore.getState().isAuthenticated) {
       reconnectTimer = setTimeout(() => {
         backoff = Math.min(backoff * 2, 30000);
@@ -72,9 +102,20 @@ export function disconnectWebSocket(clearBackoff = true): void {
     reconnectTimer = null;
   }
   if (clearBackoff) backoff = 1000;
-  socket?.close();
+  const s = socket;
   socket = null;
   connectedServerBase = null;
+  connectedToken = null;
+  setWsConnected(false);
+  if (s) {
+    s.onopen = null;
+    s.onmessage = null;
+    s.onerror = null;
+    s.onclose = null;
+    if (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CONNECTING) {
+      s.close();
+    }
+  }
 }
 
 export function subscribeRoom(roomId: string): void {

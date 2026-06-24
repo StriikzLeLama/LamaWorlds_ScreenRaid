@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { Card, Button, Input } from '../components/ui';
-import { checkServerHealth } from '../services/api';
-import { clearMediaCache } from '../services/mediaCache';
-import { getMe } from '../services/auth';
-import { clearLocalSession } from '../services/session';
-import { getServerUrl, setServerUrl } from '../services/serverConfig';
-import { useConsentStore } from '../stores/consentStore';
-import { useAuthStore } from '../stores/authStore';
+import { Card, Button, Input } from '../../components/ui';
+import { checkServerHealth } from '../../services/api';
+import { clearMediaCache } from '../../services/mediaCache';
+import { clearLocalSession } from '../../services/session';
+import { getServerUrl, setServerUrl } from '../../services/serverConfig';
+import { useAuthStore } from '../../stores/authStore';
 
 interface AppSettings {
   autostart: boolean;
@@ -21,14 +19,10 @@ interface AppSettings {
   selected_monitor: string;
 }
 
-export function SettingsPage() {
+/** Tauri receiver — server URL, cache, autostart, overlay defaults. */
+export function ReceiverSettingsPage() {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = useAuthStore((s) => s.isAdmin);
-  const setIsAdmin = useAuthStore((s) => s.setIsAdmin);
-  const accessToken = useAuthStore((s) => s.accessToken);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { globalConsent, isPaused, grant, revoke, resume, loadFromServer } = useConsentStore();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -36,29 +30,10 @@ export function SettingsPage() {
   const [cacheClearing, setCacheClearing] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadFromServer().catch(() => undefined);
-    }
     invoke<AppSettings>('get_settings')
       .then(setSettings)
       .catch(() => setSettings(null));
-  }, [loadFromServer, isAuthenticated]);
-
-  const refreshAdminStatus = async () => {
-    if (!accessToken) return;
-    setError('');
-    try {
-      const profile = await getMe(accessToken);
-      setIsAdmin(Boolean(profile.is_admin));
-      setMessage(
-        profile.is_admin
-          ? 'Admin access confirmed for this account.'
-          : `Not admin. Set ADMIN_USERNAMES=${user?.username ?? '?'} in the CT .env and rebuild Docker.`,
-      );
-    } catch {
-      setError('Could not refresh account status from server.');
-    }
-  };
+  }, [isAuthenticated]);
 
   const save = async () => {
     if (!settings) return;
@@ -78,8 +53,7 @@ export function SettingsPage() {
       setServerUrl(normalized);
       setSettings(nextSettings);
 
-      const urlChanged = previousUrl !== normalized;
-      if (urlChanged) {
+      if (previousUrl !== normalized) {
         clearLocalSession();
         setMessage('Server URL updated. Sign in again to connect to the new server.');
         navigate('/login', { replace: true });
@@ -111,7 +85,7 @@ export function SettingsPage() {
   if (!settings) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-raid-text">Settings</h1>
+        <h1 className="text-2xl font-bold text-raid-text">Receiver settings</h1>
         <p className="text-sm text-raid-text-secondary">Loading settings…</p>
       </div>
     );
@@ -120,8 +94,10 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-raid-text">Settings</h1>
-        <p className="text-sm text-raid-text-secondary">Configure your ScreenRaid client</p>
+        <h1 className="text-2xl font-bold text-raid-text">Receiver settings</h1>
+        <p className="text-sm text-raid-text-secondary">
+          Server connection, cache, and overlay defaults for the desktop receiver.
+        </p>
       </div>
 
       {error && (
@@ -137,52 +113,19 @@ export function SettingsPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Account</h2>
-          <p className="text-sm text-raid-text">
-            Logged in as <strong>@{user?.username ?? '—'}</strong>
+          <h2 className="mb-4 text-lg font-semibold text-raid-text">Server</h2>
+          <Input
+            label="Server URL"
+            value={settings.server_url}
+            onChange={(e) => setSettings({ ...settings, server_url: e.target.value })}
+          />
+          <p className="mt-2 text-xs text-raid-text-secondary">
+            Web dashboard: {getServerUrl()} — changing URL signs you out.
           </p>
-          <p className="mt-2 text-sm text-raid-text-secondary">
-            Admin panel:{' '}
-            <span className={isAdmin ? 'text-raid-success' : 'text-raid-danger'}>
-              {isAdmin ? 'enabled' : 'disabled'}
-            </span>
-          </p>
-          {!isAdmin && (
-            <p className="mt-2 text-xs text-raid-text-secondary">
-              Admin uses your <strong>username</strong> (not display name). Set{' '}
-              <code className="text-raid-accent">ADMIN_USERNAMES={user?.username ?? 'your_username'}</code>{' '}
-              in <code className="text-raid-accent">/opt/LamaWorlds_ScreenRaid/.env</code> on the CT, then{' '}
-              <code className="text-raid-accent">docker compose up -d --build</code>.
-            </p>
-          )}
-          <Button variant="secondary" className="mt-4" onClick={() => void refreshAdminStatus()}>
-            Refresh admin status
-          </Button>
         </Card>
 
         <Card>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Consent</h2>
-          <p className="mb-4 text-sm text-raid-text-secondary">
-            You must grant consent before receiving overlays from friends.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {!globalConsent ? (
-              <Button onClick={() => void grant()}>Grant Consent</Button>
-            ) : (
-              <Button variant="secondary" onClick={() => void revoke()}>
-                Revoke Consent
-              </Button>
-            )}
-            {isPaused && (
-              <Button variant="secondary" onClick={() => void resume()}>
-                Resume Receiving
-              </Button>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Overlay Defaults</h2>
+          <h2 className="mb-4 text-lg font-semibold text-raid-text">Overlay defaults</h2>
           <div className="space-y-4">
             <Input
               label="Default duration (ms)"
@@ -209,14 +152,6 @@ export function SettingsPage() {
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">System</h2>
           <div className="space-y-4">
-            <Input
-              label="Server URL"
-              value={settings.server_url}
-              onChange={(e) => setSettings({ ...settings, server_url: e.target.value })}
-            />
-            <p className="text-xs text-raid-text-secondary">
-              Current: {getServerUrl()} — changing URL signs you out and requires login again.
-            </p>
             <Input
               label="Cache limit (MB)"
               type="number"

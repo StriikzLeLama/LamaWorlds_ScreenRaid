@@ -1,8 +1,8 @@
 # ScreenRaid Overlay Engine — Technical Specification
 
 > **Version:** 1.0.0  
-> **Platform:** Windows 11 · Tauri 2 · Rust backend · React frontend  
-> **Status:** Architecture specification (implementation: Phase 6)
+> **Platform:** Windows 11 · Tauri 2 **Receiver** · Rust backend · React overlay frontend  
+> **Note:** Room management and prank sending happen in the **web dashboard** served by the server. Only overlay rendering runs in the desktop receiver.
 
 ---
 

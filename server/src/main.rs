@@ -43,7 +43,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let addr: SocketAddr = config.addr().parse()?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!("ScreenRaid server listening on http://{}", listener.local_addr()?);
+    info!(
+        "ScreenRaid server listening on http://{}",
+        listener.local_addr()?
+    );
+    if config.static_path.join("index.html").is_file() {
+        info!("Web dashboard served from {}", config.static_path.display());
+    }
     axum::serve(listener, app).await?;
 
     Ok(())

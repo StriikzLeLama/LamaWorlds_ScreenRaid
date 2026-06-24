@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 import { login as loginApi, getMe } from '../services/auth';
 import { ApiError } from '../services/api';
 import { getServerUrl } from '../services/serverConfig';
+import { isReceiverApp, isWebApp } from '../lib/platform';
 
 function authErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -31,7 +32,7 @@ export function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await ensureServerUrl(serverUrl);
+      await ensureServerUrl(isWebApp() ? getServerUrl() : serverUrl);
       const res = await loginApi({ username, password });
       login({ access: res.access_token, refresh: res.refresh_token }, res.user);
       const profile = await getMe(res.access_token);
@@ -51,13 +52,17 @@ export function LoginPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-raid-accent/15">
             <div className="h-4 w-4 rounded-full bg-raid-accent" />
           </div>
-          <h1 className="text-2xl font-bold text-raid-text">Welcome to ScreenRaid</h1>
+          <h1 className="text-2xl font-bold text-raid-text">
+            {isReceiverApp() ? 'ScreenRaid Receiver' : 'Welcome to ScreenRaid'}
+          </h1>
           <p className="mt-1 text-sm text-raid-text-secondary">
-            Sign in to your prank dashboard
+            {isReceiverApp()
+              ? 'Sign in to receive overlays on this PC'
+              : 'Sign in to your prank dashboard'}
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <ServerUrlField onChange={setServerUrl} />
+          {isReceiverApp() && <ServerUrlField onChange={setServerUrl} />}
           <Input
             label="Username"
             value={username}

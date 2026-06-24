@@ -17,6 +17,8 @@ import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { useAuthStore } from '../stores/authStore';
+import { useConsentStore } from '../stores/consentStore';
+import { useWsConnection } from '../hooks/useWsConnection';
 import type { RoomDetail, RoomMember } from '../types/room';
 import type { MediaType } from '../types';
 
@@ -47,6 +49,8 @@ export function RoomPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const { globalConsent, isPaused } = useConsentStore();
+  const wsConnected = useWsConnection();
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -83,7 +87,18 @@ export function RoomPage() {
     listPrankHistory(id).then(setHistory).catch(() => undefined);
     subscribeRoom(id);
 
-    const handler = () => loadRoom();
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string; payload?: { reason?: string } }>).detail;
+      if (detail?.type === 'prank:blocked') {
+        const reason = detail.payload?.reason ?? 'CONSENT_REQUIRED';
+        setError(
+          reason.includes('CONSENT')
+            ? 'Prank blocked: target has not granted consent (Settings → Grant consent).'
+            : `Prank blocked: ${reason}`,
+        );
+      }
+      loadRoom();
+    };
     window.addEventListener('screenraid:room', handler);
     return () => {
       unsubscribeRoom(id);
@@ -220,6 +235,14 @@ export function RoomPage() {
       </div>
 
       {error && <p className="text-sm text-raid-danger">{error}</p>}
+
+      {canSend && (!wsConnected || !globalConsent || isPaused) && (
+        <p className="rounded-xl border border-raid-warning/40 bg-raid-warning/10 px-3 py-2 text-sm text-raid-text">
+          {!wsConnected && 'Live connection offline — pranks will not display until WebSocket reconnects. '}
+          {!globalConsent && 'Grant consent in Settings to receive overlays. '}
+          {globalConsent && isPaused && 'Receiving is paused — resume in Settings.'}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>

@@ -1,32 +1,32 @@
-# React + TypeScript + Vite
+# ScreenRaid Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Two builds from one React codebase:
 
-Currently, two official plugins are available:
+| Build | Command | Output | Used for |
+|-------|---------|--------|----------|
+| **Web dashboard** | `npm run build:web` | `dist/` (main only) | Embedded in Docker server at `/` |
+| **Receiver** | `npm run build` | `dist/` + `overlay.html` | Tauri desktop app |
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Environment modes
 
-## React Compiler
+- `.env.web` — `VITE_APP_MODE=web` (same-origin API, no server URL field on login)
+- `.env.receiver` — `VITE_APP_MODE=receiver` (Tauri receiver UI)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Scripts
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm run dev:web      # Web dashboard at :5173 (proxies /v1 → :8080)
+npm run tauri:dev    # Desktop receiver (Vite :1420 + Tauri)
+npm run build:web    # Production web bundle for server
+npm run build        # Production receiver bundle for Tauri
+npm run tauri:build  # Windows/macOS/Linux installer
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## App entry
+
+`src/App.tsx` loads `App.web.tsx` or `App.receiver.tsx` based on `VITE_APP_MODE`.
+
+- **Web**: full dashboard (`/rooms`, `/friends`, `/media`, `/admin`, …)
+- **Receiver**: minimal UI (`/` status, `/settings` for server URL & cache)
+
+Overlay rendering lives in `src/overlay/` and is **receiver-only**.

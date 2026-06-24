@@ -25,23 +25,34 @@
 
 ## 1. High-Level Overview
 
+ScreenRaid uses a **split client model**:
+
+| Surface | Role | Connects via |
+|---------|------|--------------|
+| **Web dashboard** | Rooms, friends, media, admin, send pranks | Browser → `http://<server>:8080/` (same origin REST + WS) |
+| **Desktop receiver** | Display overlays, panic, monitor sync, cache | Tauri app → `ws://<server>:8080/v1/ws` |
+| **Server** | API, WebSocket hub, SQLite, media storage, **embedded web UI** | Docker / `cargo run` |
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         ScreenRaid Ecosystem                            │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  ┌──────────────┐    REST + WS     ┌──────────────┐                    │
-│  │ Tauri Client │◄───────────────►│ Rust Server  │                    │
-│  │ (React UI)   │                  │ (Axum)       │                    │
-│  └──────┬───────┘                  └──────┬───────┘                    │
-│         │                                  │                            │
-│         │ Overlay Window                   │ SQLite + File Storage      │
-│         ▼                                  ▼                            │
+│  ┌──────────────┐                  ┌──────────────────────────────┐    │
+│  │ Web browser  │── same host ──►│ Rust Server (Axum)           │    │
+│  │ Dashboard    │   REST + WS     │  /v1/* API + WS              │    │
+│  └──────────────┘                  │  / static SPA (web/dist)     │    │
+│                                    └──────────────┬───────────────┘    │
+│  ┌──────────────┐    REST + WS                  │                      │
+│  │ Tauri        │◄─────────────────────────────┘                      │
+│  │ Receiver     │                                                       │
+│  └──────┬───────┘                                                       │
+│         │ Overlay windows (multi-monitor, always-on-top)                │
+│         ▼                                                               │
 │  ┌──────────────┐                  ┌──────────────┐                    │
-│  │ Multi-monitor│                  │ Media Store  │                    │
-│  │ Transparent  │                  │ (local disk) │                    │
-│  │ Always-on-top│                  └──────────────┘                    │
-│  └──────────────┘                                                       │
+│  │ Transparent  │                  │ SQLite +     │                    │
+│  │ overlays     │                  │ media disk   │                    │
+│  └──────────────┘                  └──────────────┘                    │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -59,7 +70,7 @@
 ### Data Flow — Sending a Prank
 
 ```
-Sender Client                Server                    Receiver Client
+Web dashboard                Server                    Receiver (Tauri)
      │                          │                            │
      │── POST /rooms/:id/pranks │                            │
      │   (media_id, config)     │                            │
@@ -68,7 +79,6 @@ Sender Client                Server                    Receiver Client
      │                          │── validate role/limits     │
      │                          │                            │
      │                          │── WS: prank:incoming ─────►│
-     │                          │                            │
      │◄── WS: prank:sent ───────│                            │── download media (cache)
      │                          │                            │── render overlay
      │                          │                            │── notify user

@@ -10,6 +10,8 @@
 
 Minimum viable product: consent-based pranks with images and text in private rooms.
 
+**Client split (implemented):** Web dashboard on the server (`http://host:8080/`) for management; Tauri **receiver** on each PC for overlays only.
+
 | Module | Complexity | Status | Notes |
 |--------|------------|--------|-------|
 | **Authentication** | M | ✅ Done | JWT + refresh, register/login, client token refresh |

@@ -1,0 +1,123 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Activity, ExternalLink, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
+import { Card, Button, Badge } from '../../components/ui';
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-shell';
+import { getServerUrl } from '../../services/serverConfig';
+import { useConsentStore } from '../../stores/consentStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useWsConnection } from '../../hooks/useWsConnection';
+
+export function ReceiverHomePage() {
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const wsConnected = useWsConnection();
+  const { globalConsent, isPaused, grant, revoke, resume, pause } = useConsentStore();
+  const [webUrl, setWebUrl] = useState(getServerUrl());
+
+  useEffect(() => {
+    setWebUrl(getServerUrl());
+  }, []);
+
+  const handlePanic = async () => {
+    await invoke('panic_hide_all');
+    await pause();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-raid-text">ScreenRaid Receiver</h1>
+        <p className="text-sm text-raid-text-secondary">
+          This app displays overlays on your screen. Manage rooms and send pranks in the web dashboard.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm text-raid-text-secondary">Live connection</p>
+              <p className="mt-1 text-lg font-semibold text-raid-text">
+                {wsConnected ? 'Connected' : 'Disconnected'}
+              </p>
+            </div>
+            {wsConnected ? (
+              <Wifi className="text-raid-success" size={24} />
+            ) : (
+              <WifiOff className="text-raid-warning" size={24} />
+            )}
+          </div>
+          {!wsConnected && (
+            <p className="mt-3 text-xs text-raid-text-secondary">
+              Check server URL in Settings, then sign out and sign in again.
+            </p>
+          )}
+        </Card>
+
+        <Card>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm text-raid-text-secondary">Receiving overlays</p>
+              <p className="mt-1 text-lg font-semibold text-raid-text">
+                {isPaused ? 'Paused' : globalConsent ? 'Active' : 'Not consented'}
+              </p>
+            </div>
+            <Activity className="text-raid-accent" size={24} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {!globalConsent ? (
+              <Button className="text-xs" onClick={() => void grant()}>
+                Grant consent
+              </Button>
+            ) : (
+              <Button variant="secondary" className="text-xs" onClick={() => void revoke()}>
+                Revoke
+              </Button>
+            )}
+            {isPaused && (
+              <Button variant="secondary" className="text-xs" onClick={() => void resume()}>
+                Resume
+              </Button>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <Card accentHeader>
+        <h2 className="mb-2 text-lg font-semibold text-raid-text">Web dashboard</h2>
+        <p className="mb-4 text-sm text-raid-text-secondary">
+          Create rooms, upload media, and send pranks from your browser — signed in as{' '}
+          <strong>@{user?.username}</strong>.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <code className="rounded-lg bg-raid-surface px-2 py-1 text-sm text-raid-accent">{webUrl}</code>
+          <Button variant="secondary" onClick={() => void open(webUrl)}>
+            <ExternalLink size={16} />
+            Open dashboard
+          </Button>
+        </div>
+      </Card>
+
+      <div className="flex flex-wrap gap-3">
+        <Button variant="danger" onClick={() => void handlePanic()}>
+          <ShieldAlert size={18} />
+          Panic — hide all overlays
+        </Button>
+        <Button variant="secondary" onClick={() => navigate('/settings')}>
+          Receiver settings
+        </Button>
+      </div>
+
+      <div className="flex gap-2">
+        {wsConnected ? <Badge variant="success">Live</Badge> : <Badge variant="warning">WS offline</Badge>}
+        {globalConsent && !isPaused ? (
+          <Badge variant="success">Ready to receive</Badge>
+        ) : (
+          <Badge variant="neutral">Not receiving</Badge>
+        )}
+      </div>
+    </div>
+  );
+}

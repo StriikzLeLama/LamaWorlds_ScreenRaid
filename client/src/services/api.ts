@@ -1,6 +1,7 @@
 import { useAuthStore } from '../stores/authStore';
 import { refreshToken } from './auth';
 import { getServerUrl } from './serverConfig';
+import { reconnectWebSocket } from './websocket';
 
 export class ApiError extends Error {
   status: number;
@@ -30,6 +31,7 @@ async function tryRefresh(): Promise<string | null> {
           { access: res.access_token, refresh: res.refresh_token },
           res.user,
         );
+        reconnectWebSocket();
         return res.access_token;
       })
       .catch(() => {

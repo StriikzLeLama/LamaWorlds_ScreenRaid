@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Activity, DoorOpen, Users, Zap } from 'lucide-react';
+import { Activity, DoorOpen, Users, Wifi, WifiOff, Zap } from 'lucide-react';
 import { Card, Badge } from '../components/ui';
 import { checkServerHealth } from '../services/api';
 import { listFriends } from '../services/friends';
 import { listRooms } from '../services/rooms';
 import { useConsentStore } from '../stores/consentStore';
+import { useWsConnection } from '../hooks/useWsConnection';
 
 export function DashboardPage() {
   const [serverOk, setServerOk] = useState(false);
   const [roomCount, setRoomCount] = useState(0);
   const [friendsOnline, setFriendsOnline] = useState(0);
   const { globalConsent, isPaused } = useConsentStore();
+  const wsConnected = useWsConnection();
 
   useEffect(() => {
     checkServerHealth().then(setServerOk);
@@ -25,6 +27,7 @@ export function DashboardPage() {
     { label: 'Friends Online', value: String(friendsOnline), icon: Users },
     { label: 'Pranks Today', value: '0', icon: Zap },
     { label: 'Server Status', value: serverOk ? 'Online' : 'Offline', icon: Activity },
+    { label: 'Live Connection', value: wsConnected ? 'Connected' : 'Disconnected', icon: wsConnected ? Wifi : WifiOff },
   ];
 
   return (
@@ -35,6 +38,11 @@ export function DashboardPage() {
           <p className="text-sm text-raid-text-secondary">Overview of your ScreenRaid activity</p>
         </div>
         <div className="flex gap-2">
+          {wsConnected ? (
+            <Badge variant="success">Live</Badge>
+          ) : (
+            <Badge variant="warning">WS offline</Badge>
+          )}
           {isPaused ? (
             <Badge variant="warning">Paused</Badge>
           ) : globalConsent ? (
@@ -44,6 +52,30 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {(!wsConnected || !globalConsent || isPaused) && (
+        <Card className="border-raid-warning/40 bg-raid-warning/10">
+          <p className="text-sm text-raid-text">
+            {!wsConnected && (
+              <>
+                <strong>WebSocket disconnected</strong> — overlays will not appear until the live
+                connection is restored. Try logging out and back in after a server rebuild.
+              </>
+            )}
+            {!wsConnected && (!globalConsent || isPaused) && ' '}
+            {!globalConsent && (
+              <>
+                <strong>Consent not granted</strong> — go to Settings and enable receiving overlays.
+              </>
+            )}
+            {globalConsent && isPaused && (
+              <>
+                <strong>Receiving paused</strong> — resume in Settings to see pranks.
+              </>
+            )}
+          </p>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {displayStats.map(({ label, value, icon: Icon }) => (
@@ -72,9 +104,9 @@ export function DashboardPage() {
           <h2 className="mb-4 text-lg font-semibold text-raid-text">Quick Actions</h2>
           <ul className="space-y-2 text-sm text-raid-text-secondary">
             <li>• Create or join a private room</li>
-            <li>• Grant consent to receive overlays</li>
+            <li>• Grant consent (web or desktop receiver)</li>
             <li>• Upload media to your library</li>
-            <li>• Use Panic to hide all overlays instantly</li>
+            <li>• Run the ScreenRaid Receiver app on your PC to display overlays</li>
           </ul>
         </Card>
       </div>
