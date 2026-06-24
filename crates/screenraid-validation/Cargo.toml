@@ -1,0 +1,8 @@
+[package]
+name = "screenraid-validation"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+screenraid-types = { workspace = true }
+thiserror = { workspace = true }

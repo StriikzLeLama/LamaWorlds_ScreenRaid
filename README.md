@@ -20,6 +20,11 @@ A consent-based social prank platform where friends in a private room can send t
 | [WebSocket Protocol](./docs/WEBSOCKET.md) | Real-time event specification |
 | [Database Schema](./docs/DATABASE.md) | Tables, migrations, client cache DB |
 | [Design System](./docs/DESIGN_SYSTEM.md) | HomeBoard Anthracite Orange UI tokens & components |
+| [Overlay Engine](./docs/OVERLAY_ENGINE.md) | Overlay rendering architecture specification |
+| [Deployment](./docs/DEPLOYMENT.md) | Docker, HTTPS, backups, production |
+| [Security](./docs/SECURITY.md) | JWT, anti-spam, audit, upload protection |
+| [Testing](./docs/TESTING.md) | Test strategy and CI/CD |
+| [Wireframes](./docs/WIREFRAMES.md) | Desktop UI wireframes (HomeBoard) |
 
 ## Project Structure (planned)
 
@@ -53,16 +58,19 @@ ScreenRaid/
 
 ## Implementation Status
 
-🚧 **Architecture phase complete** — see [Implementation Roadmap](./docs/ARCHITECTURE.md#13-implementation-roadmap) for the 10-week build plan.
+**Phase 2 complete** — rooms, friends, WebSocket hub.
 
-## Quick Start (after implementation)
+**Phase 1** — JWT auth. **Phase 0** — scaffold + HomeBoard UI.
 
 ```bash
-# Start server
+# Server (from repo root)
+cargo run -p screenraid-server
+
+# Or Docker
 docker compose up -d
 
-# Run client (dev)
-cd client && npm install && npm run tauri dev
+# Client
+cd client && npm run tauri:dev
 ```
 
 ## License

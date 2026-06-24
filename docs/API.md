@@ -131,6 +131,65 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for full system design. This document p
 }
 ```
 
+### GET `/users/{id}/monitors`
+
+Returns monitor topology for a user. Callable by room members who share a room with the target (friend/room ACL).
+
+**Response `200`:**
+```json
+{
+  "user_id": "uuid",
+  "updated_at": "2026-06-24T12:00:00Z",
+  "monitors": [
+    {
+      "id": 0,
+      "x": 0,
+      "y": 0,
+      "width": 2560,
+      "height": 1440,
+      "scale_factor": 1.0,
+      "is_primary": true
+    },
+    {
+      "id": 1,
+      "x": 2560,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "scale_factor": 1.25,
+      "is_primary": false
+    }
+  ]
+}
+```
+
+**Response `404`:** User has not synced monitor layout yet.
+
+### PUT `/users/me/monitors`
+
+Updates the authenticated user's monitor topology. Replaces all monitor rows for the user's layout.
+
+**Request:**
+```json
+{
+  "monitors": [
+    {
+      "id": 0,
+      "x": 0,
+      "y": 0,
+      "width": 2560,
+      "height": 1440,
+      "scale_factor": 1.0,
+      "is_primary": true
+    }
+  ]
+}
+```
+
+**Response `200`:** Same shape as `GET /users/{id}/monitors`.
+
+**Side effects:** Server broadcasts `monitor:changed` to subscribed room members via WebSocket.
+
 ---
 
 ## Friends
@@ -307,6 +366,18 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for full system design. This document p
 }
 ```
 
+### GET `/media/{id}/file`
+
+Streams the media file (auth required). Returns `Content-Type` matching stored MIME.
+
+### GET `/rooms/{id}/media?page=1&limit=20`
+
+Room-scoped media list (members only). Same response shape as `GET /media`.
+
+### DELETE `/media/{id}`
+
+**Response `204`:** Media deleted (uploader only).
+
 ---
 
 ## Pranks
@@ -323,11 +394,15 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for full system design. This document p
   "duration_ms": 5000,
   "config": {
     "animation": "fade | zoom | bounce | none",
-    "position": { "x": 0.5, "y": 0.5 },
+    "position": {
+      "monitor_index": 0,
+      "x": 0.5,
+      "y": 0.5,
+      "preset": "exact | center | random | top_left | top_right | bottom_left | bottom_right"
+    },
     "scale": 1.0,
     "opacity": 1.0,
-    "volume": 0.8,
-    "monitor_id": null
+    "volume": 0.8
   }
 }
 ```

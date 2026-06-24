@@ -16,6 +16,8 @@ erDiagram
     users ||--o{ room_members : joins
     users ||--o{ media : uploads
     users ||--o{ pranks : sends
+    users ||--o| monitor_layouts : has
+    monitor_layouts ||--o{ monitors : contains
     rooms ||--o{ room_members : contains
     rooms ||--o{ media : scopes
     rooms ||--o{ pranks : contains
@@ -102,6 +104,24 @@ erDiagram
         text delivered_at
         text expires_at
     }
+
+    monitor_layouts {
+        text id PK
+        text user_id FK
+        text updated_at
+    }
+
+    monitors {
+        text id PK
+        text layout_id FK
+        int monitor_index
+        int x
+        int y
+        int width
+        int height
+        real scale_factor
+        int is_primary
+    }
 ```
 
 ---
@@ -117,6 +137,43 @@ Contains all tables from ARCHITECTURE.md Section 6:
 - `user_consent`
 - `media`, `pranks`
 - `audit_log`, `upload_quotas`
+- `monitor_layouts`, `monitors` (Virtual Monitor Placement — migration `002_monitor_layouts.sql`)
+
+---
+
+## Migration 002 — Monitor Layouts (planned)
+
+File: `server/migrations/002_monitor_layouts.sql`
+
+```sql
+CREATE TABLE monitor_layouts (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_monitor_layouts_user ON monitor_layouts(user_id);
+
+CREATE TABLE monitors (
+    id              TEXT PRIMARY KEY,
+    layout_id       TEXT NOT NULL REFERENCES monitor_layouts(id) ON DELETE CASCADE,
+    monitor_index   INTEGER NOT NULL,
+    x               INTEGER NOT NULL,
+    y               INTEGER NOT NULL,
+    width           INTEGER NOT NULL,
+    height          INTEGER NOT NULL,
+    scale_factor    REAL NOT NULL DEFAULT 1.0,
+    is_primary      INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (layout_id, monitor_index)
+);
+
+CREATE INDEX idx_monitors_layout ON monitors(layout_id);
+```
+
+**Relationships:**
+- `users` 1 — 1 `monitor_layouts` (one active layout per user)
+- `monitor_layouts` 1 — N `monitors` (one row per physical display)
+- `monitor_index` is stable within a layout revision; re-synced on hotplug
 
 ---
 
@@ -193,6 +250,32 @@ Row created on user registration with all flags false.
 | `config` | TEXT | JSON OverlayConfig |
 | `status` | TEXT | See lifecycle below |
 | `expires_at` | TEXT | `created_at + duration_ms + 30s buffer` |
+
+**Prank status lifecycle:**
+
+### `monitor_layouts`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | UUID v4 |
+| `user_id` | TEXT FK UNIQUE | → users, one layout per user |
+| `updated_at` | TEXT | ISO 8601, bumped on every sync |
+
+### `monitors`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | UUID v4 |
+| `layout_id` | TEXT FK | → monitor_layouts |
+| `monitor_index` | INTEGER | 0-based, stable within layout |
+| `x` | INTEGER | Virtual desktop X offset (px) |
+| `y` | INTEGER | Virtual desktop Y offset (px) |
+| `width` | INTEGER | Resolution width (px) |
+| `height` | INTEGER | Resolution height (px) |
+| `scale_factor` | REAL | DPI scale (1.0 = 100%) |
+| `is_primary` | INTEGER | 1 = primary monitor |
+
+**Indexes:** `idx_monitor_layouts_user`, `idx_monitors_layout`, unique `(layout_id, monitor_index)`.
 
 **Prank status lifecycle:**
 ```

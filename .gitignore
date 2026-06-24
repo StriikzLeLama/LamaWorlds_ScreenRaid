@@ -1,0 +1,30 @@
+# Build
+target/
+**/target/
+dist/
+client/dist/
+
+# Dependencies
+node_modules/
+
+# Data & secrets
+.env
+server/data/
+*.db
+*.db-*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tauri
+client/src-tauri/gen/
+
+# Logs
+*.log

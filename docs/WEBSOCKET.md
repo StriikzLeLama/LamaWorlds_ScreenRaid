@@ -133,6 +133,32 @@ Push local consent state to server (e.g. after panic button).
 }
 ```
 
+### `monitor:update`
+
+Client → server. Push monitor layout after local rescan (login, hotplug, display settings change).
+
+```json
+{
+  "type": "monitor:update",
+  "payload": {
+    "monitors": [
+      {
+        "id": 0,
+        "x": 0,
+        "y": 0,
+        "width": 2560,
+        "height": 1440,
+        "scale_factor": 1.0,
+        "is_primary": true
+      }
+    ]
+  },
+  "timestamp": "2026-06-24T12:00:00Z"
+}
+```
+
+Server persists layout and broadcasts `monitor:changed` to room subscribers.
+
 ---
 
 ## Server → Client Events
@@ -354,6 +380,37 @@ When a room member changes consent (visible to room members).
 }
 ```
 
+### `monitor:changed`
+
+Server → room members when a user's monitor layout is updated (via REST or WS `monitor:update`).
+
+```json
+{
+  "type": "monitor:changed",
+  "payload": {
+    "user_id": "uuid",
+    "updated_at": "2026-06-24T12:00:00Z",
+    "monitors": [
+      {
+        "id": 0,
+        "x": 0,
+        "y": 0,
+        "width": 2560,
+        "height": 1440,
+        "scale_factor": 1.0,
+        "is_primary": true
+      }
+    ]
+  },
+  "timestamp": "2026-06-24T12:00:00Z"
+}
+```
+
+**Behavior:**
+- Triggers when target connects, hotplugs a display, or changes resolution
+- Room members with placement canvas open refresh the virtual monitor preview
+- Does **not** include any screen pixel data
+
 ### `presence:changed`
 
 ```json
@@ -397,6 +454,7 @@ type WsEventType =
   | 'room:member_joined' | 'room:member_left' | 'room:member_role_changed'
   | 'friend:request' | 'friend:accepted'
   | 'consent:sync' | 'consent:updated'
+  | 'monitor:update' | 'monitor:changed'
   | 'presence:update' | 'presence:changed';
 
 interface PrankIncomingPayload {

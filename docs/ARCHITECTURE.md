@@ -19,6 +19,7 @@
 11. [UI / Design System](#11-ui--design-system) — see also [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)
 12. [Docker Deployment](#12-docker-deployment)
 13. [Implementation Roadmap](#13-implementation-roadmap)
+14. [Virtual Monitor Placement System](#14-virtual-monitor-placement-system)
 
 ---
 
@@ -1209,6 +1210,91 @@ volumes:
 
 ---
 
+## 14. Virtual Monitor Placement System
+
+> Users **never** see another user's screen. Clients share **monitor topology metadata** only so senders can place overlays on a virtual canvas that mirrors the target's layout.
+
+### Responsibilities
+
+| Component | Responsibility |
+|-----------|----------------|
+| **Client monitor collector** | Enumerate monitors via Tauri/OS APIs: resolution, position, DPI scale, primary flag |
+| **Monitor sync service** | `PUT /users/me/monitors` on login, hotplug, and display change |
+| **Server store** | Persist `monitor_layouts` + `monitors` rows per user |
+| **Room exposure** | Room members fetch `GET /users/{id}/monitors` for placement targets |
+| **Placement canvas (UI)** | Figma-style drag-and-drop on virtual monitor preview |
+| **Coordinate transform** | Normalized `0.0–1.0` coords → physical pixels at render time |
+
+### Architecture
+
+```
+┌─────────────────┐     PUT /users/me/monitors     ┌─────────────────┐
+│  Client A       │───────────────────────────────►│  Server         │
+│  (target)       │     monitor topology JSON      │  SQLite         │
+│  Tauri Monitor  │                                │  monitor_layouts│
+│  API            │◄────── monitor:changed ────────│  monitors       │
+└─────────────────┘         (WebSocket)            └────────┬────────┘
+                                                              │
+┌─────────────────┐     GET /users/{id}/monitors              │
+│  Client B       │◄────────────────────────────────────────┘
+│  (sender)       │
+│  MonitorCanvas  │──► normalized position (0.5, 0.5)
+│  drag & drop    │         │
+└─────────────────┘         ▼
+                     POST /rooms/:id/pranks
+                     config.position = { x: 0.5, y: 0.5, monitor_index: 0 }
+                              │
+                              ▼
+                     ┌─────────────────┐
+                     │  Client A       │
+                     │  Overlay Engine │──► render at center of monitor 0
+                     │  (no streaming) │    regardless of 1080p vs 4K
+                     └─────────────────┘
+```
+
+### Data Flow — Placement
+
+```
+1. Target client boots → collect MonitorInfo[] from OS
+2. Target → PUT /users/me/monitors → server upserts layout
+3. Target → WS monitor:update → server broadcasts monitor:changed to room subscribers
+4. Sender opens Room → GET /users/{target_id}/monitors
+5. Sender drags GIF to center of virtual Monitor 1 → canvas (x: 0.50, y: 0.50)
+6. Sender → POST prank with OverlayTargetPosition { monitor_index: 0, x: 0.5, y: 0.5 }
+7. Receiver overlay engine: pixel_x = monitor.x + x * monitor.width
+8. Overlay renders — sender never received screen pixels
+```
+
+### Hotplug
+
+```mermaid
+sequenceDiagram
+    participant OS as OS Display
+    participant Client as Target Client
+    participant Server as Server
+    participant Room as Room Members
+
+    OS->>Client: display added/removed/resized
+    Client->>Client: debounce 250ms, rescan monitors
+    Client->>Server: PUT /users/me/monitors
+    Server->>Server: upsert monitor_layouts + monitors
+    Server->>Room: WS monitor:changed
+    Room->>Room: refresh placement canvas
+```
+
+### Privacy Boundary
+
+| Transmitted | Never transmitted |
+|-------------|-------------------|
+| Resolution, count, x/y positions | Screen pixels |
+| DPI scale factor | Window contents |
+| Primary monitor index | Application list |
+| Monitor names (optional) | Desktop screenshots |
+
+See [SECURITY.md](./SECURITY.md) § Monitor Metadata, [OVERLAY_ENGINE.md](./OVERLAY_ENGINE.md) § Virtual Placement Mode, [WIREFRAMES.md](./WIREFRAMES.md) § Visual Placement Canvas.
+
+---
+
 ## Appendix A — Shared Type Examples (Rust)
 
 ```rust
@@ -1221,11 +1307,17 @@ pub enum Animation { Fade, Zoom, Bounce, None }
 
 pub struct OverlayConfig {
     pub animation: Animation,
-    pub position: (f32, f32),
+    pub position: OverlayTargetPosition,
     pub scale: f32,
     pub opacity: f32,
     pub volume: f32,
-    pub monitor_id: Option<u32>,
+}
+
+pub struct OverlayTargetPosition {
+    pub monitor_index: u32,
+    pub x: f32,  // 0.0–1.0 normalized
+    pub y: f32,
+    pub preset: PlacementPreset,
 }
 ```
 

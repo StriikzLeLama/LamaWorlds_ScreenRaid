@@ -1,0 +1,35 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+@import 'tailwindcss';
+
+@theme {
+  --color-raid-bg: #1a1a1a;
+  --color-raid-surface: #232323;
+  --color-raid-card: #2f2f2f;
+  --color-raid-border: #3a3a3a;
+  --color-raid-accent: #f97316;
+  --color-raid-accent-hover: #ea580c;
+  --color-raid-text: #ececec;
+  --color-raid-text-secondary: #b4b4b4;
+  --color-raid-success: #22c55e;
+  --color-raid-danger: #ef4444;
+  --color-raid-warning: #eab308;
+  --color-raid-info: #94a3b8;
+  --color-raid-disabled: #6b6b6b;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --radius-card: 16px;
+}
+
+body {
+  @apply bg-raid-bg text-raid-text font-sans antialiased;
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}

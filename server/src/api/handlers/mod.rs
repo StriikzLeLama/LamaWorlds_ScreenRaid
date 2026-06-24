@@ -1,0 +1,24 @@
+pub mod auth;
+pub mod consent;
+pub mod friends;
+pub mod health;
+pub mod media;
+pub mod pranks;
+pub mod rooms;
+
+pub use auth::{login, logout, me, refresh, register};
+pub use consent::{
+    check_can_receive, get_consent, grant_consent, pause_consent, resume_consent, revoke_consent,
+    room_consent,
+};
+pub use friends::{
+    accept_request, block_friend, decline_request, list_friends, list_requests, remove_friend,
+    send_request,
+};
+pub use health::{health, ready};
+pub use media::{delete_media, download_media, list_media, list_room_media, upload_media};
+pub use pranks::{list_pranks, send_prank};
+pub use rooms::{
+    change_member_role, create_room, delete_room, get_room, join_room, kick_member, leave_room,
+    list_rooms,
+};
