@@ -59,6 +59,12 @@ pub fn create_router(state: AppState) -> Router {
         .route("/{id}/file", get(handlers::download_media))
         .route("/{id}", delete(handlers::delete_media));
 
+    let admin_routes = Router::new()
+        .route("/users", get(handlers::list_admin_users))
+        .route("/users/{id}", delete(handlers::deactivate_user))
+        .route("/media", get(handlers::list_admin_media))
+        .route("/media/{id}", delete(handlers::delete_media_admin));
+
     Router::new()
         .route("/health", get(handlers::health))
         .route("/health/ready", get(handlers::ready))
@@ -70,6 +76,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/v1/friends", friend_routes)
         .nest("/v1/consent", consent_routes)
         .nest("/v1/media", media_routes)
+        .nest("/v1/admin", admin_routes)
         .route("/v1/rooms/{id}/media", get(handlers::list_room_media))
         .route("/v1/users/me/monitors", get(handlers::get_my_monitors).put(handlers::update_my_monitors))
         .route("/v1/users/{id}/monitors", get(handlers::get_user_monitors))

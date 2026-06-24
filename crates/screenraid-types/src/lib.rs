@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod auth;
 pub mod consent;
 pub mod friend;
@@ -9,6 +10,7 @@ pub mod room;
 pub mod user;
 pub mod websocket;
 
+pub use admin::*;
 pub use auth::*;
 pub use consent::*;
 pub use friend::*;

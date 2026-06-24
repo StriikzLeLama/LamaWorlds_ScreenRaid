@@ -1,14 +1,13 @@
 # Build stage
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.90-bookworm AS builder
 
 WORKDIR /app
 
-# Copy workspace manifests
-COPY Cargo.toml Cargo.lock* ./
+COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY server ./server
+COPY client ./client
 
-# Build server binary
 RUN cargo build --release -p screenraid-server
 
 # Runtime stage

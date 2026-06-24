@@ -10,6 +10,7 @@ export interface AuthResponse {
 export interface UserProfile extends UserSummary {
   email: string;
   created_at: string;
+  is_admin?: boolean;
 }
 
 export interface RegisterPayload {

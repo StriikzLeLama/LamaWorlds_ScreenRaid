@@ -27,4 +27,6 @@ pub struct UserProfile {
     pub display_name: String,
     pub avatar_url: Option<String>,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub is_admin: bool,
 }

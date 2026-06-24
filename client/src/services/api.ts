@@ -1,7 +1,6 @@
 import { useAuthStore } from '../stores/authStore';
 import { refreshToken } from './auth';
-
-const DEFAULT_SERVER = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:8080';
+import { getServerUrl } from './serverConfig';
 
 export class ApiError extends Error {
   status: number;
@@ -61,7 +60,7 @@ export async function apiFetch<T>(
   }
 
   const doFetch = () =>
-    fetch(`${DEFAULT_SERVER}${path}`, {
+    fetch(`${getServerUrl()}${path}`, {
       ...options,
       headers,
     });
@@ -96,13 +95,11 @@ export async function apiFetch<T>(
 
 export async function checkServerHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${DEFAULT_SERVER}/v1/health`);
+    const res = await fetch(`${getServerUrl()}/v1/health`);
     return res.ok;
   } catch {
     return false;
   }
 }
 
-export function getServerUrl(): string {
-  return DEFAULT_SERVER;
-}
+export { getServerUrl } from './serverConfig';

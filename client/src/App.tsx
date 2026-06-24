@@ -11,16 +11,19 @@ import { FriendsPage } from './pages/FriendsPage';
 import { MediaLibraryPage } from './pages/MediaLibraryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { RoomPage } from './pages/RoomPage';
+import { AdminPage } from './pages/AdminPage';
 import { useWebSocket } from './hooks/useWebSocket';
 import { usePanicHotkey } from './hooks/usePanicHotkey';
 import { usePrankReceiver } from './hooks/usePrankReceiver';
 import { useMonitorSync } from './hooks/useMonitorSync';
+import { useAdminBootstrap } from './hooks/useAdminBootstrap';
 
 function WsProvider({ children }: { children: React.ReactNode }) {
   useWebSocket();
   usePanicHotkey();
   usePrankReceiver();
   useMonitorSync();
+  useAdminBootstrap();
   return <>{children}</>;
 }
 
@@ -62,6 +65,7 @@ export default function App() {
           <Route path="/rooms/:id" element={<RoomPage />} />
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/media" element={<MediaLibraryPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -49,6 +49,7 @@ impl AppState {
         let auth = Arc::new(AuthService::new(
             UserRepository::new(db.clone()),
             Arc::new(config.jwt_secret.clone()),
+            Arc::new(config.admin_usernames.clone()),
         ));
 
         let rooms = Arc::new(RoomService::new(

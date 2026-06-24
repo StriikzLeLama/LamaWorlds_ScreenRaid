@@ -7,7 +7,9 @@ interface AuthStore {
   refreshToken: string | null;
   user: UserSummary | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   login: (tokens: { access: string; refresh: string }, user: UserSummary) => void;
+  setIsAdmin: (isAdmin: boolean) => void;
   logout: () => void;
 }
 
@@ -18,6 +20,7 @@ export const useAuthStore = create<AuthStore>()(
       refreshToken: null,
       user: null,
       isAuthenticated: false,
+      isAdmin: false,
       login: (tokens, user) =>
         set({
           accessToken: tokens.access,
@@ -25,12 +28,14 @@ export const useAuthStore = create<AuthStore>()(
           user,
           isAuthenticated: true,
         }),
+      setIsAdmin: (isAdmin) => set({ isAdmin }),
       logout: () =>
         set({
           accessToken: null,
           refreshToken: null,
           user: null,
           isAuthenticated: false,
+          isAdmin: false,
         }),
     }),
     { name: 'screenraid-auth' },

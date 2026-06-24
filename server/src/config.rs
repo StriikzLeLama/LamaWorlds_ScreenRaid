@@ -1,4 +1,5 @@
 use std::env;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -9,6 +10,7 @@ pub struct Config {
     pub jwt_secret: String,
     pub storage_path: PathBuf,
     pub cors_origins: Vec<String>,
+    pub admin_usernames: HashSet<String>,
 }
 
 impl Config {
@@ -32,6 +34,13 @@ impl Config {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(String::from)
+                .collect(),
+            admin_usernames: env::var("ADMIN_USERNAMES")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_ascii_lowercase())
                 .collect(),
         }
     }

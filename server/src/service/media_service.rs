@@ -213,4 +213,38 @@ impl MediaService {
         }
         Ok(())
     }
+
+    pub async fn admin_delete(&self, media_id: Uuid) -> Result<(), AppError> {
+        let row = self
+            .repo
+            .delete_by_id(media_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("media".into()))?;
+
+        let path = self.storage_path.join(&row.storage_path);
+        if path.exists() {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        Ok(())
+    }
+
+    pub async fn admin_list(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<screenraid_types::AdminMediaListResponse, AppError> {
+        let (rows, total) = self.repo.list_all(page, limit).await?;
+        Ok(screenraid_types::AdminMediaListResponse {
+            items: rows
+                .into_iter()
+                .map(|(row, uploader_username)| screenraid_types::AdminMediaItem {
+                    media: row_to_media(row, Self::base_url()),
+                    uploader_username,
+                })
+                .collect(),
+            total,
+            page: page.max(1),
+            limit: limit.clamp(1, 100),
+        })
+    }
 }

@@ -212,4 +212,35 @@ impl UserRepository {
         .await?;
         Ok(())
     }
+
+    pub async fn set_active(&self, user_id: Uuid, is_active: bool) -> Result<bool, AppError> {
+        let result = sqlx::query(
+            "UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(if is_active { 1 } else { 0 })
+        .bind(Utc::now().to_rfc3339())
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn list_all(&self, page: u32, limit: u32) -> Result<(Vec<UserRecord>, i64), AppError> {
+        let limit = limit.clamp(1, 100) as i64;
+        let offset = ((page.max(1) - 1) * limit as u32) as i64;
+
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+
+        let rows = sqlx::query_as::<_, UserRow>(
+            "SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok((rows.into_iter().map(Into::into).collect(), total.0))
+    }
 }

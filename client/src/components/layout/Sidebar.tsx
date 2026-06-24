@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   DoorOpen,
   LogOut,
+  Shield,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { Button } from '../ui/Button';
@@ -14,7 +15,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useConsentStore } from '../../stores/consentStore';
 import { logout as logoutApi } from '../../services/auth';
 
-const navItems = [
+const baseNavItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/rooms', icon: DoorOpen, label: 'Rooms' },
   { to: '/friends', icon: Users, label: 'Friends' },
@@ -25,10 +26,15 @@ const navItems = [
 export function Sidebar() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const accessToken = useAuthStore((s) => s.accessToken);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const logout = useAuthStore((s) => s.logout);
   const pause = useConsentStore((s) => s.pause);
+
+  const navItems = isAdmin
+    ? [...baseNavItems.slice(0, 4), { to: '/admin', icon: Shield, label: 'Admin' }, ...baseNavItems.slice(4)]
+    : baseNavItems;
 
   const handlePanic = async () => {
     await invoke('panic_hide_all');

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Card, Button, Input } from '../components/ui';
+import { setServerUrl } from '../services/serverConfig';
 import { useConsentStore } from '../stores/consentStore';
 
 interface AppSettings {
@@ -30,6 +31,7 @@ export function SettingsPage() {
 
   const save = async () => {
     await invoke('save_settings', { settings });
+    setServerUrl(settings.server_url);
   };
 
   return (
@@ -94,6 +96,9 @@ export function SettingsPage() {
               value={settings.server_url}
               onChange={(e) => setSettings({ ...settings, server_url: e.target.value })}
             />
+            <p className="text-xs text-raid-text-secondary">
+              Example: http://192.168.1.109:8080 — restart app after changing if connection fails.
+            </p>
             <Input
               label="Cache limit (MB)"
               type="number"

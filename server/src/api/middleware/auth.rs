@@ -11,6 +11,11 @@ pub struct AuthUser {
     pub session_id: Uuid,
 }
 
+#[derive(Debug, Clone)]
+pub struct AdminUser {
+    pub user_id: Uuid,
+}
+
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = AppError;
 
@@ -35,6 +40,33 @@ impl FromRequestParts<AppState> for AuthUser {
                 user_id: claims.sub,
                 session_id: claims.sid,
             })
+        }
+    }
+}
+
+impl FromRequestParts<AppState> for AdminUser {
+    type Rejection = AppError;
+
+    fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        let token = parts
+            .headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .map(str::to_string);
+
+        let auth = state.auth.clone();
+
+        async move {
+            let token = token.ok_or(AppError::Unauthorized)?;
+            let claims = auth.verify_access_token(&token)?;
+            if !auth.is_admin(claims.sub).await? {
+                return Err(AppError::Forbidden);
+            }
+            Ok(AdminUser { user_id: claims.sub })
         }
     }
 }

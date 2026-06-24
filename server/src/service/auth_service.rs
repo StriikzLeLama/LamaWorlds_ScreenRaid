@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::collections::HashSet;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -23,11 +24,16 @@ const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
 pub struct AuthService {
     users: UserRepository,
     jwt_secret: Arc<String>,
+    admin_usernames: Arc<HashSet<String>>,
 }
 
 impl AuthService {
-    pub fn new(users: UserRepository, jwt_secret: Arc<String>) -> Self {
-        Self { users, jwt_secret }
+    pub fn new(users: UserRepository, jwt_secret: Arc<String>, admin_usernames: Arc<HashSet<String>>) -> Self {
+        Self {
+            users,
+            jwt_secret,
+            admin_usernames,
+        }
     }
 
     pub async fn register(&self, req: RegisterRequest) -> Result<AuthResponse, AppError> {
@@ -99,6 +105,31 @@ impl AuthService {
         self.users.revoke_refresh_token(&token_hash).await
     }
 
+    pub async fn deactivate_user(&self, user_id: Uuid) -> Result<bool, AppError> {
+        self.users.revoke_all_user_tokens(user_id).await?;
+        self.users.set_active(user_id, false).await
+    }
+
+    pub async fn list_users(&self, page: u32, limit: u32) -> Result<screenraid_types::AdminUsersResponse, AppError> {
+        let (users, total) = self.users.list_all(page, limit).await?;
+        Ok(screenraid_types::AdminUsersResponse {
+            users: users
+                .into_iter()
+                .map(|u| screenraid_types::AdminUserItem {
+                    id: u.id,
+                    username: u.username,
+                    email: u.email,
+                    display_name: u.display_name,
+                    is_active: u.is_active,
+                    created_at: u.created_at,
+                })
+                .collect(),
+            total,
+            page: page.max(1),
+            limit: limit.clamp(1, 100),
+        })
+    }
+
     pub async fn me(&self, user_id: Uuid) -> Result<UserProfile, AppError> {
         let user = self
             .users
@@ -113,6 +144,7 @@ impl AuthService {
             display_name: user.display_name,
             avatar_url: user.avatar_url,
             created_at: user.created_at,
+            is_admin: self.is_admin(user_id).await?,
         })
     }
 
@@ -125,6 +157,15 @@ impl AuthService {
         .map_err(|_| AppError::Unauthorized)?;
 
         Ok(data.claims)
+    }
+
+    pub async fn is_admin(&self, user_id: Uuid) -> Result<bool, AppError> {
+        let Some(user) = self.users.find_by_id(user_id).await? else {
+            return Ok(false);
+        };
+        Ok(self
+            .admin_usernames
+            .contains(&user.username.to_ascii_lowercase()))
     }
 
     async fn issue_tokens(&self, user: &crate::repository::user_repo::UserRecord) -> Result<AuthResponse, AppError> {

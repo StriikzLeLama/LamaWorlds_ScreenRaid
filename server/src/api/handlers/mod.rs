@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod auth;
 pub mod consent;
 pub mod friends;
@@ -7,6 +8,7 @@ pub mod monitors;
 pub mod pranks;
 pub mod rooms;
 
+pub use admin::{deactivate_user, delete_media_admin, list_admin_media, list_admin_users};
 pub use auth::{login, logout, me, refresh, register};
 pub use consent::{
     check_can_receive, get_consent, grant_consent, pause_consent, resume_consent, revoke_consent,

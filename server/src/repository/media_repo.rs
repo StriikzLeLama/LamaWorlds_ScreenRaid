@@ -184,6 +184,93 @@ impl MediaRepository {
         Ok(Some(row))
     }
 
+    pub async fn delete_by_id(&self, id: Uuid) -> Result<Option<MediaRow>, AppError> {
+        let row = self.find_by_id(id).await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        sqlx::query("DELETE FROM media WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+
+        Ok(Some(row))
+    }
+
+    pub async fn list_all(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<(Vec<(MediaRow, String)>, i64), AppError> {
+        let limit = limit.clamp(1, 100) as i64;
+        let offset = ((page.max(1) - 1) * limit as u32) as i64;
+
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM media")
+            .fetch_one(&self.pool)
+            .await?;
+
+        #[derive(sqlx::FromRow)]
+        struct AdminMediaJoinRow {
+            id: String,
+            uploader_id: String,
+            room_id: Option<String>,
+            filename: String,
+            original_name: String,
+            mime_type: String,
+            size_bytes: i64,
+            media_type: String,
+            storage_path: String,
+            hash_sha256: String,
+            duration_ms: Option<i32>,
+            width: Option<i32>,
+            height: Option<i32>,
+            created_at: String,
+            uploader_username: String,
+        }
+
+        let rows = sqlx::query_as::<_, AdminMediaJoinRow>(
+            "SELECT m.id, m.uploader_id, m.room_id, m.filename, m.original_name, m.mime_type,
+                    m.size_bytes, m.media_type, m.storage_path, m.hash_sha256, m.duration_ms,
+                    m.width, m.height, m.created_at, u.username AS uploader_username
+             FROM media m
+             JOIN users u ON u.id = m.uploader_id
+             ORDER BY m.created_at DESC
+             LIMIT ? OFFSET ?",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok((
+            rows.into_iter()
+                .map(|r| {
+                    (
+                        MediaRow {
+                            id: r.id,
+                            uploader_id: r.uploader_id,
+                            room_id: r.room_id,
+                            filename: r.filename,
+                            original_name: r.original_name,
+                            mime_type: r.mime_type,
+                            size_bytes: r.size_bytes,
+                            media_type: r.media_type,
+                            storage_path: r.storage_path,
+                            hash_sha256: r.hash_sha256,
+                            duration_ms: r.duration_ms,
+                            width: r.width,
+                            height: r.height,
+                            created_at: r.created_at,
+                        },
+                        r.uploader_username,
+                    )
+                })
+                .collect(),
+            total.0,
+        ))
+    }
+
     pub async fn quota_today(&self, user_id: Uuid) -> Result<(i32, i64), AppError> {
         let today = Utc::now().format("%Y-%m-%d").to_string();
         let row: Option<(i32, i64)> = sqlx::query_as(

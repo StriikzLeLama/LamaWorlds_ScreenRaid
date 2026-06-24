@@ -4,14 +4,15 @@ services:
       context: .
       dockerfile: server/Dockerfile
     ports:
-      - "8080:8080"
+      - "${BIND_HOST:-0.0.0.0}:8080:8080"
     environment:
       - HOST=0.0.0.0
       - PORT=8080
       - DATABASE_URL=sqlite:///data/screenraid.db
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
       - STORAGE_PATH=/data/media
-      - CORS_ORIGINS=http://localhost:1420,tauri://localhost
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:1420,tauri://localhost}
+      - ADMIN_USERNAMES=${ADMIN_USERNAMES:-}
       - RUST_LOG=screenraid_server=info
     volumes:
       - screenraid-data:/data
