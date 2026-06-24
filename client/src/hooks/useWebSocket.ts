@@ -20,8 +20,12 @@ export function useWebSocket() {
       disconnectWebSocket();
       return;
     }
-
     reconnectWebSocket();
+  }, [isAuthenticated, accessToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
     loadConsent().catch(() => undefined);
     const heartbeat = startHeartbeat();
 
@@ -52,7 +56,6 @@ export function useWebSocket() {
     return () => {
       unsub();
       clearInterval(heartbeat);
-      disconnectWebSocket();
     };
-  }, [isAuthenticated, accessToken, loadConsent, applyServerState]);
+  }, [isAuthenticated, loadConsent, applyServerState]);
 }

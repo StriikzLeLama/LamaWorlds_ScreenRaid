@@ -25,6 +25,27 @@ export function ReceiverHomePage() {
     await pause();
   };
 
+  const handleTestOverlay = async () => {
+    await invoke('show_overlay', {
+      payload: {
+        id: 'test-overlay',
+        overlay_type: 'text',
+        media_url: null,
+        local_path: null,
+        text: 'ScreenRaid test — overlays work!',
+        duration_ms: 5000,
+        animation: 'fade',
+        sender_name: 'Test',
+        monitor_index: 0,
+        position_x: 0.5,
+        position_y: 0.5,
+        scale: 1,
+        opacity: 1,
+        volume: 0.8,
+      },
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -104,6 +125,9 @@ export function ReceiverHomePage() {
         <Button variant="danger" onClick={() => void handlePanic()}>
           <ShieldAlert size={18} />
           Panic — hide all overlays
+        </Button>
+        <Button variant="secondary" onClick={() => void handleTestOverlay()}>
+          Test overlay
         </Button>
         <Button variant="secondary" onClick={() => navigate('/settings')}>
           Receiver settings

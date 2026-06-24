@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: !!process.env.TAURI_ENV_DEBUG,
       rollupOptions: {
         input: isWebBuild
-          ? { main: resolve(__dirname, 'index.html') }
+          ? { main: resolve(__dirname, 'index.web.html') }
           : {
               main: resolve(__dirname, 'index.html'),
               overlay: resolve(__dirname, 'overlay.html'),

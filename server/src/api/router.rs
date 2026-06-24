@@ -68,7 +68,7 @@ pub fn create_router(state: AppState) -> Router {
 
     let static_path = state.config.static_path.clone();
 
-    let mut router = Router::new()
+    let router = Router::new()
         .route("/health", get(handlers::health))
         .route("/health/ready", get(handlers::ready))
         .route("/v1/health", get(handlers::health))
@@ -81,15 +81,12 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/v1/media", media_routes)
         .nest("/v1/admin", admin_routes)
         .route("/v1/rooms/{id}/media", get(handlers::list_room_media))
+        .route("/v1/rooms/{id}/pranks/{prank_id}/ack", post(handlers::ack_prank))
         .route("/v1/users/me/monitors", get(handlers::get_my_monitors).put(handlers::update_my_monitors))
         .route("/v1/users/{id}/monitors", get(handlers::get_user_monitors))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state);
 
-    if let Some(spa) = static_files::static_fallback_router(&static_path) {
-        router = router.merge(spa);
-    }
-
-    router
+    static_files::attach_static_fallback(router, &static_path)
 }

@@ -9,7 +9,6 @@ import {
   LogOut,
   Shield,
 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import { Button } from '../ui/Button';
 import { useAuthStore } from '../../stores/authStore';
 import { useConsentStore } from '../../stores/consentStore';
@@ -39,6 +38,7 @@ export function Sidebar() {
 
   const handlePanic = async () => {
     if (isReceiverApp()) {
+      const { invoke } = await import('@tauri-apps/api/core');
       await invoke('panic_hide_all');
     }
     await pause();

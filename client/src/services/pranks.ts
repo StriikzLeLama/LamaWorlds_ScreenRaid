@@ -1,5 +1,5 @@
 import { apiFetch } from './api';
-import { ackPrankWs } from './websocket';
+import { ackPrankWs, isWebSocketConnected } from './websocket';
 
 export type OverlayType = 'image' | 'gif' | 'video' | 'text' | 'sound';
 export type Animation = 'fade' | 'zoom' | 'bounce' | 'none';
@@ -82,8 +82,20 @@ export async function listPrankHistory(roomId: string): Promise<PrankHistoryItem
   return res.items;
 }
 
-export function ackPrank(prankId: string, rendered: boolean): void {
-  ackPrankWs(prankId, rendered);
+export async function ackPrank(
+  prankId: string,
+  rendered: boolean,
+  roomId?: string,
+): Promise<void> {
+  if (isWebSocketConnected()) {
+    ackPrankWs(prankId, rendered);
+    return;
+  }
+  if (!roomId) return;
+  await apiFetch(`/v1/rooms/${roomId}/pranks/${prankId}/ack`, {
+    method: 'POST',
+    body: JSON.stringify({ prank_id: prankId, rendered }),
+  });
 }
 
 export const defaultOverlayConfig = (): OverlayConfig => ({

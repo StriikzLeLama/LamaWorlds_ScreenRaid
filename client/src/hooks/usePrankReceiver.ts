@@ -34,13 +34,13 @@ export function usePrankReceiver() {
       const { globalConsent, isPaused } = useConsentStore.getState();
 
       if (!globalConsent || isPaused) {
-        ackPrank(prank.prank_id, false);
+        await ackPrank(prank.prank_id, false, prank.room_id);
         return;
       }
 
       const token = useAuthStore.getState().accessToken;
       if (!token) {
-        ackPrank(prank.prank_id, false);
+        await ackPrank(prank.prank_id, false, prank.room_id);
         return;
       }
 
@@ -60,7 +60,7 @@ export function usePrankReceiver() {
         if (prank.media) {
           const resolved = await resolveMediaForPrank(prank.media, token);
           if (!resolved) {
-            ackPrank(prank.prank_id, false);
+            await ackPrank(prank.prank_id, false, prank.room_id);
             return;
           }
           mediaUrl = resolved.mediaUrl;
@@ -76,11 +76,11 @@ export function usePrankReceiver() {
 
         if (prank.overlay_type === 'sound') {
           if (!mediaUrl) {
-            ackPrank(prank.prank_id, false);
+            await ackPrank(prank.prank_id, false, prank.room_id);
             return;
           }
           await playSoundPrank(mediaUrl, prank.config.volume, prank.duration_ms);
-          ackPrank(prank.prank_id, true);
+          await ackPrank(prank.prank_id, true, prank.room_id);
           return;
         }
 
@@ -103,9 +103,9 @@ export function usePrankReceiver() {
           },
         });
 
-        ackPrank(prank.prank_id, true);
+        await ackPrank(prank.prank_id, true, prank.room_id);
       } catch {
-        ackPrank(prank.prank_id, false);
+        await ackPrank(prank.prank_id, false, prank.room_id);
       }
     });
 

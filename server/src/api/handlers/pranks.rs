@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use screenraid_types::{PrankResponse, SendPrankRequest};
+use screenraid_types::{PrankAckPayload, PrankResponse, SendPrankRequest};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -79,4 +79,20 @@ pub async fn list_pranks(
         .collect();
 
     Ok(Json(PrankHistoryResponse { items }))
+}
+
+pub async fn ack_prank(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path((_room_id, prank_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<PrankAckPayload>,
+) -> Result<StatusCode, AppError> {
+    if payload.prank_id != prank_id {
+        return Err(AppError::Validation("prank_id mismatch".into()));
+    }
+    state
+        .pranks
+        .ack(auth.user_id, prank_id, payload.rendered)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }

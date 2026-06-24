@@ -1,17 +1,11 @@
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import App from './App';
+import { AppReceiver } from './App.receiver';
 import { loadServerUrlFromSettings } from './services/serverConfig';
 
 async function bootstrap() {
   await loadServerUrlFromSettings();
-
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
+  createRoot(document.getElementById('root')!).render(<AppReceiver />);
 }
 
 void bootstrap();
