@@ -62,3 +62,8 @@ pub struct RoomDetail {
     pub max_members: i32,
     pub members: Vec<RoomMember>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomsListResponse {
+    pub rooms: Vec<RoomSummary>,
+}
