@@ -68,13 +68,14 @@ impl RoomService {
     }
 
     pub async fn get_detail(&self, user_id: Uuid, room_id: Uuid) -> Result<RoomDetail, AppError> {
-        let role = self
+        if self
             .rooms
             .is_member(room_id, user_id)
             .await?
-            .ok_or_else(|| AppError::Forbidden)?;
-
-        let _ = role;
+            .is_none()
+        {
+            return Err(AppError::Forbidden);
+        }
 
         let room = self
             .rooms

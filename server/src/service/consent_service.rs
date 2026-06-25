@@ -6,7 +6,6 @@ use screenraid_types::{
     ConsentState, ConsentStatus, ConsentSyncPayload, RoomConsentRequest,
 };
 use serde_json::json;
-use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -17,7 +16,6 @@ use crate::websocket::WsHub;
 pub struct ConsentService {
     consent: ConsentRepository,
     rooms: RoomRepository,
-    db: SqlitePool,
     hub: Arc<WsHub>,
 }
 
@@ -25,13 +23,11 @@ impl ConsentService {
     pub fn new(
         consent: ConsentRepository,
         rooms: RoomRepository,
-        db: SqlitePool,
         hub: Arc<WsHub>,
     ) -> Self {
         Self {
             consent,
             rooms,
-            db,
             hub,
         }
     }
@@ -184,16 +180,6 @@ impl ConsentService {
         action: &str,
         resource_id: Option<Uuid>,
     ) -> Result<(), AppError> {
-        sqlx::query(
-            "INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, created_at)
-             VALUES (?, ?, ?, 'consent', ?, datetime('now'))",
-        )
-        .bind(Uuid::new_v4().to_string())
-        .bind(user_id.to_string())
-        .bind(action)
-        .bind(resource_id.map(|id| id.to_string()))
-        .execute(&self.db)
-        .await?;
-        Ok(())
+        self.consent.insert_audit(user_id, action, resource_id).await
     }
 }

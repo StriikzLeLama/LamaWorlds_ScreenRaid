@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { sendNotification } from '@tauri-apps/plugin-notification';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
@@ -45,6 +44,8 @@ export function usePrankReceiver() {
       }
 
       try {
+        const { invoke } = await import('@tauri-apps/api/core');
+
         try {
           await sendNotification({
             title: 'ScreenRaid',
@@ -66,7 +67,6 @@ export function usePrankReceiver() {
           mediaUrl = resolved.mediaUrl;
           localPath = resolved.localPath;
           try {
-            const { invoke } = await import('@tauri-apps/api/core');
             const settings = await invoke<{ cache_limit_mb: number }>('get_settings');
             void enforceCacheLimit(settings.cache_limit_mb).catch(() => undefined);
           } catch {

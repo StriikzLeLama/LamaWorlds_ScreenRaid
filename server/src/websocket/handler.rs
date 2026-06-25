@@ -72,8 +72,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sessio
 
                     match event_type {
                         "ping" => {
-                            hub.send_to_session(session_id, "pong", serde_json::json!({}))
-                                .await;
+                            hub.send_to_session(session_id, "pong", serde_json::json!({}));
                         }
                         "subscribe_room" => {
                             if let Ok(payload) =
@@ -86,8 +85,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sessio
                                     session_id,
                                     "subscribed",
                                     serde_json::json!({ "room_id": payload.room_id }),
-                                )
-                                .await;
+                                );
                             }
                         }
                         "unsubscribe_room" => {

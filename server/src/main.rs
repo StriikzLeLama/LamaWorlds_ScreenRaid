@@ -1,5 +1,6 @@
 use std::fs;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use screenraid_server::{api::create_router, Config, AppState};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -39,6 +40,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!().run(&pool).await?;
 
     let state = AppState::new(pool, config.clone());
+
+    // Background task: purge expired rate-limiter buckets every 5 minutes to
+    // avoid unbounded growth when many unique IPs hit rate-limited routes.
+    {
+        let login = state.login_limiter.clone();
+        let register = state.register_limiter.clone();
+        let api = state.api_limiter.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                login.purge_expired();
+                register.purge_expired();
+                api.purge_expired();
+            }
+        });
+    }
+
     let app = create_router(state);
 
     let addr: SocketAddr = config.addr().parse()?;

@@ -43,8 +43,3 @@ pub struct SendFriendRequest {
 pub struct FriendsListResponse {
     pub friends: Vec<FriendSummary>,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoomsListResponse {
-    pub rooms: Vec<crate::RoomSummary>,
-}

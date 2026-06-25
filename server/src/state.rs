@@ -42,7 +42,6 @@ impl AppState {
         let consent = Arc::new(ConsentService::new(
             consent_repo,
             RoomRepository::new(db.clone()),
-            db.clone(),
             ws_hub.clone(),
         ));
 

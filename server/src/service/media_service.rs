@@ -26,10 +26,6 @@ impl MediaService {
         }
     }
 
-    fn base_url() -> &'static str {
-        ""
-    }
-
     fn extension_for_mime(mime: &str) -> &'static str {
         match mime {
             "image/png" => "png",
@@ -79,7 +75,7 @@ impl MediaService {
         let hash = format!("{:x}", Sha256::digest(data));
 
         if let Some(existing) = self.repo.find_by_hash(user_id, &hash).await? {
-            return Ok(row_to_media(existing, Self::base_url()));
+            return Ok(row_to_media(existing, ""));
         }
 
         tokio::fs::create_dir_all(&self.storage_path)
@@ -128,7 +124,7 @@ impl MediaService {
             .await?
             .ok_or_else(|| AppError::Internal("media insert failed".into()))?;
 
-        Ok(row_to_media(row, Self::base_url()))
+        Ok(row_to_media(row, ""))
     }
 
     pub async fn list(
@@ -144,7 +140,7 @@ impl MediaService {
         Ok(MediaListResponse {
             items: rows
                 .into_iter()
-                .map(|r| row_to_media(r, Self::base_url()))
+                .map(|r| row_to_media(r, ""))
                 .collect(),
             total,
             page,
@@ -168,7 +164,7 @@ impl MediaService {
         Ok(MediaListResponse {
             items: rows
                 .into_iter()
-                .map(|r| row_to_media(r, Self::base_url()))
+                .map(|r| row_to_media(r, ""))
                 .collect(),
             total,
             page,
@@ -238,7 +234,7 @@ impl MediaService {
             items: rows
                 .into_iter()
                 .map(|(row, uploader_username)| screenraid_types::AdminMediaItem {
-                    media: row_to_media(row, Self::base_url()),
+                    media: row_to_media(row, ""),
                     uploader_username,
                 })
                 .collect(),

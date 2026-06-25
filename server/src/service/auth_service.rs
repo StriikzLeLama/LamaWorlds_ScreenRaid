@@ -78,7 +78,7 @@ impl AuthService {
     pub async fn refresh(&self, req: RefreshRequest) -> Result<AuthResponse, AppError> {
         let token_hash = hash_token(&req.refresh_token);
 
-        let (token_id, user_id, _) = self
+        let (_, user_id, _) = self
             .users
             .find_refresh_token(&token_hash)
             .await?
@@ -96,7 +96,6 @@ impl AuthService {
             return Err(AppError::Forbidden);
         }
 
-        let _ = token_id;
         self.issue_tokens(&user).await
     }
 

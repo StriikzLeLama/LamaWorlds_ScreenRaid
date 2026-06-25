@@ -155,8 +155,7 @@ impl PrankService {
                         "reason": "CONSENT_BLOCKED",
                         "blocked_count": blocked_count,
                     }),
-                )
-                .await;
+                );
 
             return Ok(PrankResponse {
                 id: prank_id,
@@ -201,8 +200,7 @@ impl PrankService {
                     *target_id,
                     "prank:incoming",
                     serde_json::to_value(&incoming).unwrap_or_default(),
-                )
-                .await;
+                );
         }
 
         self.pranks
@@ -218,8 +216,7 @@ impl PrankService {
                     "status": "delivered",
                     "delivered_count": deliverable.len(),
                 }),
-            )
-            .await;
+            );
 
         Ok(PrankResponse {
             id: prank_id,

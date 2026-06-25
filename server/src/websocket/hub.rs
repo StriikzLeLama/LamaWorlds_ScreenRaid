@@ -80,7 +80,7 @@ impl WsHub {
         }
     }
 
-    pub async fn send_to_session(&self, session_id: SessionId, event_type: &str, payload: serde_json::Value) {
+    pub fn send_to_session(&self, session_id: SessionId, event_type: &str, payload: serde_json::Value) {
         if let Some(conn) = self.sessions.get(&session_id) {
             let msg = WsMessage::new(event_type, payload);
             let _ = conn.tx.send(Message::Text(
@@ -89,10 +89,10 @@ impl WsHub {
         }
     }
 
-    pub async fn send_to_user(&self, user_id: Uuid, event_type: &str, payload: serde_json::Value) {
+    pub fn send_to_user(&self, user_id: Uuid, event_type: &str, payload: serde_json::Value) {
         if let Some(sessions) = self.user_sessions.get(&user_id) {
             for sid in sessions.iter() {
-                self.send_to_session(*sid, event_type, payload.clone()).await;
+                self.send_to_session(*sid, event_type, payload.clone());
             }
         }
     }

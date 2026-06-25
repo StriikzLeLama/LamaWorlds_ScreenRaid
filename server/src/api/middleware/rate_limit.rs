@@ -32,6 +32,13 @@ impl RateLimiter {
         entry.0 += 1;
         true
     }
+
+    /// Remove all entries whose window has expired. Call periodically to
+    /// prevent unbounded growth when many unique IPs hit rate-limited routes.
+    pub fn purge_expired(&self) {
+        let now = Instant::now();
+        self.buckets.retain(|_, (_, ts)| now.duration_since(*ts) <= self.window);
+    }
 }
 
 pub fn client_ip(headers: &axum::http::HeaderMap) -> String {

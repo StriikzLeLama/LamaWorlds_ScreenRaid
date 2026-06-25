@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use screenraid_types::PrankStatus;
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -140,10 +139,4 @@ pub fn parse_status(s: &str) -> PrankStatus {
         "expired" => PrankStatus::Expired,
         _ => PrankStatus::Pending,
     }
-}
-
-pub fn parse_dt(s: &str) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|d| d.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now())
 }

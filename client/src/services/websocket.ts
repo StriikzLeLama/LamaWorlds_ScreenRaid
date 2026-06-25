@@ -66,6 +66,10 @@ export function connectWebSocket(): void {
     setWsConnected(true);
   };
 
+  socket.onerror = (event) => {
+    console.warn('[WS] error', event);
+  };
+
   socket.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data as string) as { type: string; payload: unknown };

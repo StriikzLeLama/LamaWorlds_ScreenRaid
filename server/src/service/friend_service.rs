@@ -115,8 +115,7 @@ impl FriendService {
                         avatar_url: requester.avatar_url,
                     }
                 }),
-            )
-            .await;
+            );
 
         Ok(id)
     }
@@ -153,8 +152,7 @@ impl FriendService {
                         avatar_url: user.avatar_url,
                     }
                 }),
-            )
-            .await;
+            );
 
         Ok(())
     }

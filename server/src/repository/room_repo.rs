@@ -82,8 +82,12 @@ impl RoomRepository {
     }
 
     pub async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<(RoomRow, String, i32)>, AppError> {
-        let rows = sqlx::query_as::<_, (String, String, String, String, i32, i64, String, String, String)>(
-            "SELECT r.id, r.name, r.invite_code, r.owner_id, r.max_members, r.is_active, r.created_at, r.updated_at, rm.role
+        // Single query: join room_members twice — once for the caller's role,
+        // once (aggregated) to get the total member count per room.
+        let rows = sqlx::query_as::<_, (String, String, String, String, i32, i64, String, String, String, i64)>(
+            "SELECT r.id, r.name, r.invite_code, r.owner_id, r.max_members, r.is_active,
+                    r.created_at, r.updated_at, rm.role,
+                    (SELECT COUNT(*) FROM room_members mc WHERE mc.room_id = r.id) AS member_count
              FROM rooms r
              INNER JOIN room_members rm ON r.id = rm.room_id
              WHERE rm.user_id = ? AND r.is_active = 1
@@ -93,28 +97,22 @@ impl RoomRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut result = Vec::new();
-        for row in rows {
-            let room_id = row.0.clone();
-            let count: (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM room_members WHERE room_id = ?")
-                    .bind(&room_id)
-                    .fetch_one(&self.pool)
-                    .await?;
-
-            let room = RoomRow {
-                id: row.0,
-                name: row.1,
-                invite_code: row.2,
-                owner_id: row.3,
-                max_members: row.4,
-                is_active: row.5,
-                created_at: row.6,
-                updated_at: row.7,
-            };
-            result.push((room, row.8, count.0 as i32));
-        }
-        Ok(result)
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, invite_code, owner_id, max_members, is_active, created_at, updated_at, role, count)| {
+                let room = RoomRow {
+                    id,
+                    name,
+                    invite_code,
+                    owner_id,
+                    max_members,
+                    is_active,
+                    created_at,
+                    updated_at,
+                };
+                (room, role, count as i32)
+            })
+            .collect())
     }
 
     pub async fn find_by_id(&self, room_id: Uuid) -> Result<Option<RoomRow>, AppError> {

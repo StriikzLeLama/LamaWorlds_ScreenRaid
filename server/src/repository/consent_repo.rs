@@ -135,4 +135,23 @@ impl ConsentRepository {
         .await?;
         Ok(())
     }
+
+    pub async fn insert_audit(
+        &self,
+        user_id: Uuid,
+        action: &str,
+        resource_id: Option<Uuid>,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, created_at)
+             VALUES (?, ?, ?, 'consent', ?, datetime('now'))",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(user_id.to_string())
+        .bind(action)
+        .bind(resource_id.map(|id| id.to_string()))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }

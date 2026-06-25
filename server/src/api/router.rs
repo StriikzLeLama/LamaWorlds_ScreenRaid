@@ -1,4 +1,5 @@
 use axum::{
+    http::HeaderValue,
     routing::{delete, get, patch, post},
     Router,
 };
@@ -13,10 +14,25 @@ use crate::state::AppState;
 use crate::websocket::ws_handler;
 
 pub fn create_router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // Build a CORS layer from the configured origins. Falls back to `Any`
+    // only when no origins are configured (bare dev with no .env).
+    let cors = if state.config.cors_origins.is_empty() {
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any)
+    } else {
+        let origins: Vec<HeaderValue> = state
+            .config
+            .cors_origins
+            .iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
+        CorsLayer::new()
+            .allow_origin(origins)
+            .allow_methods(Any)
+            .allow_headers(Any)
+    };
 
     let auth_routes = Router::new()
         .route("/register", post(handlers::register))
