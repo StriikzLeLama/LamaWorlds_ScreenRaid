@@ -184,6 +184,10 @@ pub fn show_overlay(
     payload: OverlayPayload,
     manager: State<'_, OverlayManager>,
 ) -> Result<String, String> {
+    log::info!(
+        "[overlay] show_overlay id={} type={} monitor={} text={:?}",
+        payload.id, payload.overlay_type, payload.monitor_index, payload.text
+    );
     ensure_overlay_window(&app, payload.monitor_index)?;
     let _ = resize_overlay_monitor(&app, payload.monitor_index);
 
@@ -226,14 +230,37 @@ pub fn show_overlay(
     let label = overlay_label(payload.monitor_index);
     let window = app
         .get_webview_window(&label)
-        .ok_or_else(|| "overlay window not available".to_string())?;
+        .ok_or_else(|| {
+            log::error!("[overlay] window {label} missing after create");
+            "overlay window not available".to_string()
+        })?;
 
     // Emit the show event. The overlay webview also pulls active overlays on
     // mount (sync_overlays_for_monitor), so a freshly created window that
     // misses this emit will still render via the pull path.
     window
         .emit("overlay:show", &payload)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            log::error!("[overlay] emit overlay:show failed: {e}");
+            e.to_string()
+        })?;
+    log::info!("[overlay] emitted overlay:show to {label}");
+
+    // Re-apply click-through shortly after show. On Windows/WebView2 the first
+    // set_ignore_cursor_events (called during window creation, before the
+    // webview is ready) can be dropped, which would let the fullscreen
+    // always-on-top surface capture all input for the overlay's lifetime.
+    let app_for_cursor = app.clone();
+    let cursor_label = label.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        if let Some(win) = app_for_cursor.get_webview_window(&cursor_label) {
+            match win.set_ignore_cursor_events(true) {
+                Ok(()) => log::info!("[overlay] re-applied ignore-cursor-events on {cursor_label}"),
+                Err(e) => log::warn!("[overlay] ignore-cursor-events re-apply failed on {cursor_label}: {e}"),
+            }
+        }
+    });
 
     let duration = payload.duration_ms.max(500);
     let monitor_index = payload.monitor_index;
@@ -269,6 +296,7 @@ fn hide_overlay_internal(
             .and_then(|m| m.monitor_for_id(&id))
     }).unwrap_or(0);
 
+    log::info!("[overlay] hide_overlay_internal id={id} monitor={monitor}");
     emit_hide(&app, &id, monitor);
 
     if let Some(manager) = app.try_state::<OverlayManager>() {
@@ -278,7 +306,39 @@ fn hide_overlay_internal(
             overlays.retain(|o| o.id != id);
         }
     }
+
+    // Guaranteed surface hide — independent of the overlay webview. If the
+    // webview failed to load or never processes overlay:hide, it would never
+    // call overlay_surface_idle and the fullscreen always-on-top window would
+    // trap all input forever. This grace fallback hides the surface after the
+    // exit-animation window unless a new overlay appeared on that monitor.
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(800)).await;
+        let should_hide = app_clone
+            .try_state::<OverlayManager>()
+            .map(|m| m.count_on_monitor(monitor) == 0)
+            .unwrap_or(true);
+        if should_hide {
+            log::info!("[overlay] grace hide surface monitor={monitor}");
+            let _ = hide_overlay_surface(&app_clone, monitor);
+        }
+    });
+
     Ok(())
+}
+
+/// Forward a log line from a webview (e.g. the overlay window) to the Rust
+/// logger so it appears in the terminal / log file. Lets us diagnose overlay
+/// windows whose devtools cannot be opened (e.g. a click-through fullscreen
+/// window that has trapped input).
+#[tauri::command]
+pub fn debug_log(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!("[web] {message}"),
+        "warn" => log::warn!("[web] {message}"),
+        _ => log::info!("[web] {message}"),
+    }
 }
 
 /// Re-emit all active overlays for a monitor. Called by the overlay webview
@@ -291,8 +351,13 @@ pub fn sync_overlays_for_monitor(
     manager: State<'_, OverlayManager>,
 ) -> Result<(), String> {
     let payloads = manager.payloads_for_monitor(monitor_index);
+    log::info!(
+        "[overlay] sync_overlays_for_monitor monitor={monitor_index} count={}",
+        payloads.len()
+    );
     let label = overlay_label(monitor_index);
     let Some(window) = app.get_webview_window(&label) else {
+        log::warn!("[overlay] sync: window {label} not found");
         return Ok(());
     };
     for payload in payloads {
@@ -316,6 +381,7 @@ pub fn overlay_surface_idle(
 
 #[tauri::command]
 pub fn panic_hide_all(app: AppHandle, manager: State<'_, OverlayManager>) -> Result<(), String> {
+    log::info!("[overlay] panic_hide_all called");
     clear_all_overlays(&app, &manager);
     Ok(())
 }

@@ -3,8 +3,8 @@ mod commands;
 use commands::media_cache::{clear_media_cache, remove_media_cache_file, write_media_cache};
 use commands::monitor::collect_monitors;
 use commands::overlay::{
-    get_active_overlays, hide_overlay, overlay_surface_idle, panic_hide_all, show_overlay,
-    sync_overlays_for_monitor, OverlayManager,
+    debug_log, get_active_overlays, hide_overlay, overlay_surface_idle, panic_hide_all,
+    show_overlay, sync_overlays_for_monitor, OverlayManager,
 };
 use commands::settings::{get_settings, save_settings, SettingsStore};
 use tauri::{Emitter, Manager};
@@ -35,6 +35,27 @@ pub fn run() {
         )
         .setup(|app| {
             use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+            use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+
+            // Initialize logging first so every subsequent log::info!/warn!/error!
+            // (including the panic-hotkey warnings below) is captured.
+            let log_level = if cfg!(debug_assertions) {
+                log::LevelFilter::Info
+            } else {
+                log::LevelFilter::Warn
+            };
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log_level)
+                    .targets([
+                        Target::new(TargetKind::Stdout),
+                        Target::new(TargetKind::Webview),
+                        Target::new(TargetKind::LogDir { file_name: None }),
+                    ])
+                    .rotation_strategy(RotationStrategy::KeepOne)
+                    .build(),
+            )?;
+            log::info!("[boot] Tauri log plugin initialized (level={log_level})");
 
             app.manage(SettingsStore::new(&app.handle())?);
 
@@ -50,6 +71,7 @@ pub fn run() {
                     let handle = handle.clone();
                     move |_app, _shortcut, event| {
                         if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                            log::info!("[hotkey] panic Ctrl+Shift+Escape pressed");
                             if let Some(manager) = handle.try_state::<OverlayManager>() {
                                 commands::overlay::clear_all_overlays(&handle, &manager);
                             }
@@ -70,13 +92,6 @@ pub fn run() {
                 }
             }
 
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -89,6 +104,7 @@ pub fn run() {
             get_active_overlays,
             overlay_surface_idle,
             sync_overlays_for_monitor,
+            debug_log,
             write_media_cache,
             remove_media_cache_file,
             clear_media_cache,

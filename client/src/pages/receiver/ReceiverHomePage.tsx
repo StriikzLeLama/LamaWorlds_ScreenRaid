@@ -9,6 +9,7 @@ import { useConsentStore } from '../../stores/consentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useWsConnection } from '../../hooks/useWsConnection';
 import { isTauriRuntime } from '../../lib/platform';
+import { log } from '../../lib/log';
 
 export function ReceiverHomePage() {
   const navigate = useNavigate();
@@ -21,32 +22,45 @@ export function ReceiverHomePage() {
 
   useEffect(() => {
     setWebUrl(getServerUrl());
+    log.info('ReceiverHomePage mount', {
+      inTauri,
+      wsConnected,
+      globalConsent,
+      isPaused,
+      serverUrl: getServerUrl(),
+    });
   }, []);
 
   const handlePanic = async () => {
     setStatusMsg('');
+    log.info('panic button clicked');
     try {
       await invoke('panic_hide_all');
+      log.info('panic_hide_all ok');
       await pause();
       setStatusMsg('Panic triggered — all overlays hidden.');
     } catch (e) {
+      log.error('panic_hide_all failed', e);
       setStatusMsg(`Panic failed: ${e instanceof Error ? e.message : 'unknown error'}`);
     }
   };
 
   const handleConsent = async (action: 'grant' | 'revoke' | 'resume') => {
     setStatusMsg('');
+    log.info('consent action', action);
     try {
       if (action === 'grant') await grant();
       if (action === 'revoke') await revoke();
       if (action === 'resume') await resume();
     } catch (e) {
+      log.error('consent failed', e);
       setStatusMsg(`Consent update failed: ${e instanceof Error ? e.message : 'unknown error'}`);
     }
   };
 
   const handleTestOverlay = async () => {
     setStatusMsg('');
+    log.info('test overlay button clicked, inTauri=', inTauri);
     try {
       await invoke('show_overlay', {
         payload: {
@@ -66,8 +80,10 @@ export function ReceiverHomePage() {
           volume: 0.8,
         },
       });
+      log.info('test overlay invoke ok');
       setStatusMsg('Test overlay sent — check your screen.');
     } catch (e) {
+      log.error('test overlay invoke failed', e);
       setStatusMsg(`Test overlay failed: ${e instanceof Error ? e.message : 'unknown error'}`);
     }
   };

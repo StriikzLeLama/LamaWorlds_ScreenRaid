@@ -8,6 +8,7 @@ import { clearLocalSession } from '../../services/session';
 import { getServerUrl, setServerUrl } from '../../services/serverConfig';
 import { useAuthStore } from '../../stores/authStore';
 import { isTauriRuntime } from '../../lib/platform';
+import { log } from '../../lib/log';
 
 interface AppSettings {
   autostart: boolean;
@@ -43,7 +44,9 @@ export function ReceiverSettingsPage() {
   const [cacheClearing, setCacheClearing] = useState(false);
 
   useEffect(() => {
+    log.info('ReceiverSettingsPage mount, isTauriRuntime=', isTauriRuntime());
     if (!isTauriRuntime()) {
+      log.warn('ReceiverSettingsPage: not in Tauri runtime');
       setLoadError(
         'Receiver settings are only available inside the desktop app. Run "npm run tauri:dev" (or the installed app), not in a browser.',
       );
@@ -51,14 +54,17 @@ export function ReceiverSettingsPage() {
       return;
     }
     let cancelled = false;
+    log.info('ReceiverSettingsPage: invoking get_settings');
     invoke<AppSettings>('get_settings')
       .then((s) => {
+        log.info('ReceiverSettingsPage: get_settings ok', s);
         if (!cancelled) {
           setSettings(s);
           setLoadError('');
         }
       })
       .catch((e) => {
+        log.error('ReceiverSettingsPage: get_settings failed', e);
         if (cancelled) return;
         setLoadError(`Could not load settings: ${e instanceof Error ? e.message : String(e)}`);
         setSettings(DEFAULT_SETTINGS);

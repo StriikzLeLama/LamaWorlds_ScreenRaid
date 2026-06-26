@@ -5,6 +5,7 @@ import { useConsentStore } from '../stores/consentStore';
 import { enforceCacheLimit, resolveMediaForPrank } from '../services/mediaCache';
 import { ackPrank, type PrankIncomingPayload } from '../services/pranks';
 import { onWsMessage } from '../services/websocket';
+import { log } from '../lib/log';
 
 async function playSoundPrank(
   mediaUrl: string,
@@ -30,15 +31,18 @@ export function usePrankReceiver() {
       if (type !== 'prank:incoming') return;
 
       const prank = payload as PrankIncomingPayload;
+      log.info('prank:incoming', prank.prank_id, prank.overlay_type, 'from', prank.sender?.display_name);
       const { globalConsent, isPaused } = useConsentStore.getState();
 
       if (!globalConsent || isPaused) {
+        log.warn('prank blocked by consent (globalConsent=', globalConsent, 'isPaused=', isPaused, ')');
         await ackPrank(prank.prank_id, false, prank.room_id);
         return;
       }
 
       const token = useAuthStore.getState().accessToken;
       if (!token) {
+        log.warn('prank dropped — no access token');
         await ackPrank(prank.prank_id, false, prank.room_id);
         return;
       }
@@ -51,21 +55,24 @@ export function usePrankReceiver() {
             title: 'ScreenRaid',
             body: `${prank.sender.display_name} sent you a prank`,
           });
-        } catch {
-          // notifications optional
+        } catch (e) {
+          log.warn('notification failed', e);
         }
 
         let mediaUrl: string | null = null;
         let localPath: string | null = null;
 
         if (prank.media) {
+          log.info('prank resolving media', prank.media.id);
           const resolved = await resolveMediaForPrank(prank.media, token);
           if (!resolved) {
+            log.error('prank media resolve failed');
             await ackPrank(prank.prank_id, false, prank.room_id);
             return;
           }
           mediaUrl = resolved.mediaUrl;
           localPath = resolved.localPath;
+          log.info('prank media resolved', { mediaUrl, localPath });
           try {
             const settings = await invoke<{ cache_limit_mb: number }>('get_settings');
             void enforceCacheLimit(settings.cache_limit_mb).catch(() => undefined);
@@ -76,6 +83,7 @@ export function usePrankReceiver() {
 
         if (prank.overlay_type === 'sound') {
           if (!mediaUrl) {
+            log.warn('sound prank has no media');
             await ackPrank(prank.prank_id, false, prank.room_id);
             return;
           }
@@ -84,6 +92,7 @@ export function usePrankReceiver() {
           return;
         }
 
+        log.info('prank invoking show_overlay', prank.prank_id);
         await invoke('show_overlay', {
           payload: {
             id: prank.prank_id,
@@ -102,9 +111,11 @@ export function usePrankReceiver() {
             volume: prank.config.volume,
           },
         });
+        log.info('prank show_overlay ok', prank.prank_id);
 
         await ackPrank(prank.prank_id, true, prank.room_id);
-      } catch {
+      } catch (e) {
+        log.error('prank render failed', e);
         await ackPrank(prank.prank_id, false, prank.room_id);
       }
     });

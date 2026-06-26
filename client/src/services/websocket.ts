@@ -1,5 +1,6 @@
 import { getServerUrl, onServerUrlChange } from './serverConfig';
 import { useAuthStore } from '../stores/authStore';
+import { log } from '../lib/log';
 
 type MessageHandler = (type: string, payload: unknown) => void;
 
@@ -44,7 +45,10 @@ export function onWsMessage(handler: MessageHandler): () => void {
 
 export function connectWebSocket(): void {
   const token = useAuthStore.getState().accessToken;
-  if (!token) return;
+  if (!token) {
+    log.warn('connectWebSocket: no token, abort');
+    return;
+  }
 
   const base = getServerUrl();
   if (
@@ -52,34 +56,41 @@ export function connectWebSocket(): void {
     connectedServerBase === base &&
     connectedToken === token
   ) {
+    log.info('connectWebSocket: already open to', base);
     return;
   }
 
+  log.info('connectWebSocket: opening to', base);
   disconnectWebSocket(false);
   connectedServerBase = base;
   connectedToken = token;
 
-  socket = new WebSocket(wsUrl(token));
+  const url = wsUrl(token);
+  log.info('connectWebSocket: ws url', url.replace(/token=[^&]+/, 'token=***'));
+  socket = new WebSocket(url);
 
   socket.onopen = () => {
+    log.info('WS open');
     backoff = 1000;
     setWsConnected(true);
   };
 
   socket.onerror = (event) => {
-    console.warn('[WS] error', event);
+    log.warn('WS error', event);
   };
 
   socket.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data as string) as { type: string; payload: unknown };
+      log.info('WS msg', msg.type);
       handlers.forEach((h) => h(msg.type, msg.payload));
-    } catch {
-      // ignore malformed
+    } catch (e) {
+      log.warn('WS malformed message', e);
     }
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
+    log.info('WS close code=', event.code, 'reason=', event.reason);
     socket = null;
     connectedServerBase = null;
     connectedToken = null;
@@ -87,6 +98,7 @@ export function connectWebSocket(): void {
     if (useAuthStore.getState().isAuthenticated) {
       reconnectTimer = setTimeout(() => {
         backoff = Math.min(backoff * 2, 30000);
+        log.info('WS reconnect backoff=', backoff);
         connectWebSocket();
       }, backoff);
     }
@@ -154,6 +166,8 @@ export function send(data: object): void {
         timestamp: new Date().toISOString(),
       }),
     );
+  } else {
+    log.warn('WS send skipped (not open)', (data as { type?: string }).type);
   }
 }
 

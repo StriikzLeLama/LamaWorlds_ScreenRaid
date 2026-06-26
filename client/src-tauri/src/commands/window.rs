@@ -16,17 +16,29 @@ pub fn overlay_url() -> WebviewUrl {
 pub fn ensure_overlay_window(app: &AppHandle, monitor_index: u32) -> Result<(), String> {
     let label = format!("overlay-{monitor_index}");
     if app.get_webview_window(&label).is_some() {
+        log::info!("[overlay] window {label} already exists — resizing");
         return resize_overlay_monitor(app, monitor_index);
     }
 
-    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    log::info!("[overlay] creating new window {label}");
+    let monitors = app.available_monitors().map_err(|e| {
+        log::error!("[overlay] available_monitors failed: {e}");
+        e.to_string()
+    })?;
     let monitor = monitors
         .get(monitor_index as usize)
         .or(monitors.first())
-        .ok_or_else(|| "no monitors".to_string())?;
+        .ok_or_else(|| {
+            log::error!("[overlay] no monitors available");
+            "no monitors".to_string()
+        })?;
 
     let size = monitor.size();
     let pos = monitor.position();
+    log::info!(
+        "[overlay] monitor {monitor_index}: size={}x{} pos={},{}",
+        size.width, size.height, pos.x, pos.y
+    );
 
     let window = WebviewWindowBuilder::new(app, &label, overlay_url())
         .title("ScreenRaid Overlay")
@@ -41,9 +53,17 @@ pub fn ensure_overlay_window(app: &AppHandle, monitor_index: u32) -> Result<(), 
         .position(pos.x as f64, pos.y as f64)
         .inner_size(size.width as f64, size.height as f64)
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            log::error!("[overlay] window build failed: {e}");
+            e.to_string()
+        })?;
 
-    window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
+    log::info!("[overlay] window {label} built, setting ignore-cursor-events");
+    window.set_ignore_cursor_events(true).map_err(|e| {
+        log::error!("[overlay] set_ignore_cursor_events failed: {e}");
+        e.to_string()
+    })?;
+    log::info!("[overlay] window {label} ready");
     Ok(())
 }
 

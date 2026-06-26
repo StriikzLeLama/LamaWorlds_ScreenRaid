@@ -63,11 +63,15 @@ impl SettingsStore {
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, SettingsStore>) -> Result<AppSettings, String> {
+    log::info!("[settings] get_settings called");
     state
         .inner
         .lock()
         .map(|s| s.clone())
-        .map_err(|e| e.to_string())
+        .map_err(|e| {
+            log::error!("[settings] lock failed: {e}");
+            e.to_string()
+        })
 }
 
 #[tauri::command]
@@ -75,6 +79,7 @@ pub fn save_settings(
     settings: AppSettings,
     state: State<'_, SettingsStore>,
 ) -> Result<(), String> {
+    log::info!("[settings] save_settings server_url={}", settings.server_url);
     state.write_disk(&settings)?;
     *state.inner.lock().map_err(|e| e.to_string())? = settings;
     Ok(())
