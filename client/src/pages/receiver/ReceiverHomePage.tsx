@@ -8,6 +8,7 @@ import { getServerUrl } from '../../services/serverConfig';
 import { useConsentStore } from '../../stores/consentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useWsConnection } from '../../hooks/useWsConnection';
+import { isTauriRuntime } from '../../lib/platform';
 
 export function ReceiverHomePage() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export function ReceiverHomePage() {
   const { globalConsent, isPaused, grant, revoke, resume, pause } = useConsentStore();
   const [webUrl, setWebUrl] = useState(getServerUrl());
   const [statusMsg, setStatusMsg] = useState('');
+  const inTauri = isTauriRuntime();
 
   useEffect(() => {
     setWebUrl(getServerUrl());
@@ -78,6 +80,16 @@ export function ReceiverHomePage() {
           This app displays overlays on your screen. Manage rooms and send pranks in the web dashboard.
         </p>
       </div>
+
+      {!inTauri && (
+        <Card className="border-raid-warning/40 bg-raid-warning/10">
+          <p className="text-sm text-raid-text">
+            <strong>Browser mode detected.</strong> Overlays and the panic button only work inside the
+            desktop receiver. Stop the Vite dev server and run{' '}
+            <code className="text-raid-accent">npm run tauri:dev</code> to launch the real app window.
+          </p>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
@@ -152,11 +164,11 @@ export function ReceiverHomePage() {
       )}
 
       <div className="flex flex-wrap gap-3">
-        <Button variant="danger" onClick={() => void handlePanic()}>
+        <Button variant="danger" onClick={() => void handlePanic()} disabled={!inTauri}>
           <ShieldAlert size={18} />
           Panic — hide all overlays
         </Button>
-        <Button variant="secondary" onClick={() => void handleTestOverlay()}>
+        <Button variant="secondary" onClick={() => void handleTestOverlay()} disabled={!inTauri}>
           Test overlay
         </Button>
         <Button variant="secondary" onClick={() => navigate('/settings')}>

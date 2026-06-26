@@ -4,7 +4,7 @@ use commands::media_cache::{clear_media_cache, remove_media_cache_file, write_me
 use commands::monitor::collect_monitors;
 use commands::overlay::{
     get_active_overlays, hide_overlay, overlay_surface_idle, panic_hide_all, show_overlay,
-    OverlayManager,
+    sync_overlays_for_monitor, OverlayManager,
 };
 use commands::settings::{get_settings, save_settings, SettingsStore};
 use tauri::{Emitter, Manager};
@@ -88,6 +88,7 @@ pub fn run() {
             panic_hide_all,
             get_active_overlays,
             overlay_surface_idle,
+            sync_overlays_for_monitor,
             write_media_cache,
             remove_media_cache_file,
             clear_media_cache,

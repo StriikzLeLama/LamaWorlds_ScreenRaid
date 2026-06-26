@@ -85,6 +85,12 @@ export function OverlayApp() {
       }),
     );
 
+    // Pull any overlays that were shown before this webview mounted its
+    // listeners (race when the overlay window is created fresh).
+    void invoke('sync_overlays_for_monitor', {
+      monitorIndex: monitorIndexRef.current,
+    }).catch(() => undefined);
+
     return () => {
       unsubs.forEach((p) => p.then((fn) => fn()));
     };

@@ -67,6 +67,8 @@ pub struct OverlayState {
 
 pub struct OverlayManager {
     pub overlays: Mutex<Vec<OverlayState>>,
+    /// Full payloads keyed by overlay id (needed to re-emit to freshly loaded overlay windows).
+    payloads: Mutex<HashMap<String, OverlayPayload>>,
     /// Cancels stale auto-dismiss timers when the same overlay id is reshown.
     dismiss_generations: Mutex<HashMap<String, u64>>,
 }
@@ -75,8 +77,38 @@ impl OverlayManager {
     pub fn new() -> Self {
         Self {
             overlays: Mutex::new(Vec::new()),
+            payloads: Mutex::new(HashMap::new()),
             dismiss_generations: Mutex::new(HashMap::new()),
         }
+    }
+
+    fn store_payload(&self, payload: &OverlayPayload) {
+        if let Ok(mut map) = self.payloads.lock() {
+            map.insert(payload.id.clone(), payload.clone());
+        }
+    }
+
+    fn drop_payload(&self, id: &str) {
+        if let Ok(mut map) = self.payloads.lock() {
+            map.remove(id);
+        }
+    }
+
+    fn payloads_for_monitor(&self, monitor_index: u32) -> Vec<OverlayPayload> {
+        self.payloads
+            .lock()
+            .map(|map| {
+                self.overlays
+                    .lock()
+                    .map(|list| {
+                        list.iter()
+                            .filter(|o| o.monitor_index == monitor_index)
+                            .filter_map(|o| map.get(&o.id).cloned())
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
     }
 
     fn bump_dismiss_generation(&self, id: &str) -> u64 {
@@ -124,6 +156,9 @@ pub fn clear_all_overlays(app: &AppHandle, manager: &OverlayManager) {
     if let Ok(mut overlays) = manager.overlays.lock() {
         overlays.clear();
     }
+    if let Ok(mut payloads) = manager.payloads.lock() {
+        payloads.clear();
+    }
     if let Ok(mut gens) = manager.dismiss_generations.lock() {
         gens.clear();
     }
@@ -168,6 +203,7 @@ pub fn show_overlay(
             if let Some(removed) = overlays.first().cloned() {
                 emit_hide(&app, &removed.id, removed.monitor_index);
                 manager.clear_dismiss_generation(&removed.id);
+                manager.drop_payload(&removed.id);
                 overlays.remove(0);
             }
         }
@@ -181,6 +217,8 @@ pub fn show_overlay(
         });
     }
 
+    manager.store_payload(&payload);
+
     let dismiss_gen = manager.bump_dismiss_generation(&id);
 
     show_overlay_surface(&app, payload.monitor_index)?;
@@ -190,6 +228,9 @@ pub fn show_overlay(
         .get_webview_window(&label)
         .ok_or_else(|| "overlay window not available".to_string())?;
 
+    // Emit the show event. The overlay webview also pulls active overlays on
+    // mount (sync_overlays_for_monitor), so a freshly created window that
+    // misses this emit will still render via the pull path.
     window
         .emit("overlay:show", &payload)
         .map_err(|e| e.to_string())?;
@@ -232,9 +273,30 @@ fn hide_overlay_internal(
 
     if let Some(manager) = app.try_state::<OverlayManager>() {
         manager.clear_dismiss_generation(&id);
+        manager.drop_payload(&id);
         if let Ok(mut overlays) = manager.overlays.lock() {
             overlays.retain(|o| o.id != id);
         }
+    }
+    Ok(())
+}
+
+/// Re-emit all active overlays for a monitor. Called by the overlay webview
+/// when it mounts, so a freshly created window receives its content even if
+/// the original `overlay:show` event was emitted before the listener was ready.
+#[tauri::command]
+pub fn sync_overlays_for_monitor(
+    app: AppHandle,
+    monitor_index: u32,
+    manager: State<'_, OverlayManager>,
+) -> Result<(), String> {
+    let payloads = manager.payloads_for_monitor(monitor_index);
+    let label = overlay_label(monitor_index);
+    let Some(window) = app.get_webview_window(&label) else {
+        return Ok(());
+    };
+    for payload in payloads {
+        let _ = window.emit("overlay:show", &payload);
     }
     Ok(())
 }

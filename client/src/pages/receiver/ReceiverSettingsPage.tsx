@@ -7,6 +7,7 @@ import { clearMediaCache } from '../../services/mediaCache';
 import { clearLocalSession } from '../../services/session';
 import { getServerUrl, setServerUrl } from '../../services/serverConfig';
 import { useAuthStore } from '../../stores/authStore';
+import { isTauriRuntime } from '../../lib/platform';
 
 interface AppSettings {
   autostart: boolean;
@@ -19,20 +20,52 @@ interface AppSettings {
   selected_monitor: string;
 }
 
+const DEFAULT_SETTINGS: AppSettings = {
+  autostart: false,
+  default_duration_ms: 5000,
+  default_volume: 0.8,
+  default_animation: 'fade',
+  cache_limit_mb: 500,
+  panic_hotkey: 'Ctrl+Shift+Escape',
+  server_url: getServerUrl(),
+  selected_monitor: 'primary',
+};
+
 /** Tauri receiver — server URL, cache, autostart, overlay defaults. */
 export function ReceiverSettingsPage() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
 
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      setLoadError(
+        'Receiver settings are only available inside the desktop app. Run "npm run tauri:dev" (or the installed app), not in a browser.',
+      );
+      setSettings(DEFAULT_SETTINGS);
+      return;
+    }
+    let cancelled = false;
     invoke<AppSettings>('get_settings')
-      .then(setSettings)
-      .catch(() => setSettings(null));
+      .then((s) => {
+        if (!cancelled) {
+          setSettings(s);
+          setLoadError('');
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setLoadError(`Could not load settings: ${e instanceof Error ? e.message : String(e)}`);
+        setSettings(DEFAULT_SETTINGS);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated]);
 
   const save = async () => {
@@ -49,7 +82,9 @@ export function ReceiverSettingsPage() {
       }
 
       const nextSettings = { ...settings, server_url: normalized };
-      await invoke('save_settings', { settings: nextSettings });
+      if (isTauriRuntime()) {
+        await invoke('save_settings', { settings: nextSettings });
+      }
       setServerUrl(normalized);
       setSettings(nextSettings);
 
@@ -100,6 +135,11 @@ export function ReceiverSettingsPage() {
         </p>
       </div>
 
+      {loadError && (
+        <Card className="border-raid-warning/40 bg-raid-warning/10">
+          <p className="text-sm text-raid-text">{loadError}</p>
+        </Card>
+      )}
       {error && (
         <Card className="border-raid-danger/40 bg-raid-danger/10">
           <p className="text-sm text-raid-danger">{error}</p>
