@@ -27,6 +27,7 @@ pub async fn spawn_app() -> TestApp {
         cors_origins: vec![],
         admin_usernames: std::collections::HashSet::new(),
         allow_self_prank: false,
+        static_path: std::path::PathBuf::from("/nonexistent-no-web-in-tests"),
     };
 
     let connect_options = SqliteConnectOptions::new()

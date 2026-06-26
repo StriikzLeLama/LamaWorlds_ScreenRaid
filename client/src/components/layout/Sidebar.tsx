@@ -37,11 +37,15 @@ export function Sidebar() {
     : baseNavItems;
 
   const handlePanic = async () => {
-    if (isReceiverApp()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('panic_hide_all');
+    try {
+      if (isReceiverApp()) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('panic_hide_all');
+      }
+      await pause();
+    } catch {
+      // best-effort: panic should never block the UI
     }
-    await pause();
   };
 
   const handleLogout = () => {

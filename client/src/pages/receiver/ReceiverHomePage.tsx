@@ -15,35 +15,59 @@ export function ReceiverHomePage() {
   const wsConnected = useWsConnection();
   const { globalConsent, isPaused, grant, revoke, resume, pause } = useConsentStore();
   const [webUrl, setWebUrl] = useState(getServerUrl());
+  const [statusMsg, setStatusMsg] = useState('');
 
   useEffect(() => {
     setWebUrl(getServerUrl());
   }, []);
 
   const handlePanic = async () => {
-    await invoke('panic_hide_all');
-    await pause();
+    setStatusMsg('');
+    try {
+      await invoke('panic_hide_all');
+      await pause();
+      setStatusMsg('Panic triggered — all overlays hidden.');
+    } catch (e) {
+      setStatusMsg(`Panic failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    }
+  };
+
+  const handleConsent = async (action: 'grant' | 'revoke' | 'resume') => {
+    setStatusMsg('');
+    try {
+      if (action === 'grant') await grant();
+      if (action === 'revoke') await revoke();
+      if (action === 'resume') await resume();
+    } catch (e) {
+      setStatusMsg(`Consent update failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    }
   };
 
   const handleTestOverlay = async () => {
-    await invoke('show_overlay', {
-      payload: {
-        id: 'test-overlay',
-        overlay_type: 'text',
-        media_url: null,
-        local_path: null,
-        text: 'ScreenRaid test — overlays work!',
-        duration_ms: 5000,
-        animation: 'fade',
-        sender_name: 'Test',
-        monitor_index: 0,
-        position_x: 0.5,
-        position_y: 0.5,
-        scale: 1,
-        opacity: 1,
-        volume: 0.8,
-      },
-    });
+    setStatusMsg('');
+    try {
+      await invoke('show_overlay', {
+        payload: {
+          id: 'test-overlay',
+          overlay_type: 'text',
+          media_url: null,
+          local_path: null,
+          text: 'ScreenRaid test — overlays work!',
+          duration_ms: 5000,
+          animation: 'fade',
+          sender_name: 'Test',
+          monitor_index: 0,
+          position_x: 0.5,
+          position_y: 0.5,
+          scale: 1,
+          opacity: 1,
+          volume: 0.8,
+        },
+      });
+      setStatusMsg('Test overlay sent — check your screen.');
+    } catch (e) {
+      setStatusMsg(`Test overlay failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    }
   };
 
   return (
@@ -89,16 +113,16 @@ export function ReceiverHomePage() {
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {!globalConsent ? (
-              <Button className="text-xs" onClick={() => void grant()}>
+              <Button className="text-xs" onClick={() => void handleConsent('grant')}>
                 Grant consent
               </Button>
             ) : (
-              <Button variant="secondary" className="text-xs" onClick={() => void revoke()}>
+              <Button variant="secondary" className="text-xs" onClick={() => void handleConsent('revoke')}>
                 Revoke
               </Button>
             )}
             {isPaused && (
-              <Button variant="secondary" className="text-xs" onClick={() => void resume()}>
+              <Button variant="secondary" className="text-xs" onClick={() => void handleConsent('resume')}>
                 Resume
               </Button>
             )}
@@ -114,12 +138,18 @@ export function ReceiverHomePage() {
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <code className="rounded-lg bg-raid-surface px-2 py-1 text-sm text-raid-accent">{webUrl}</code>
-          <Button variant="secondary" onClick={() => void open(webUrl)}>
+          <Button variant="secondary" onClick={() => void open(webUrl).catch(() => undefined)}>
             <ExternalLink size={16} />
             Open dashboard
           </Button>
         </div>
       </Card>
+
+      {statusMsg && (
+        <p className="rounded-xl border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text-secondary">
+          {statusMsg}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Button variant="danger" onClick={() => void handlePanic()}>

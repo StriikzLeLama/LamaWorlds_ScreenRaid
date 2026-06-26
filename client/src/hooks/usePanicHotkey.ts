@@ -8,8 +8,16 @@ export function usePanicHotkey() {
 
   useEffect(() => {
     const unlisten = listen('panic:triggered', async () => {
-      await invoke('panic_hide_all');
-      await pause();
+      try {
+        await invoke('panic_hide_all');
+      } catch {
+        // overlay clear is best-effort
+      }
+      try {
+        await pause();
+      } catch {
+        // consent pause is best-effort; panic must never throw
+      }
     });
     return () => {
       unlisten.then((fn) => fn());
