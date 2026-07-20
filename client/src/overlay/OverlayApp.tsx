@@ -21,6 +21,7 @@ export function OverlayApp() {
   const [overlays, setOverlays] = useState<ActiveOverlay[]>([]);
   const exitingCountRef = useRef(0);
   const monitorIndexRef = useRef(0);
+  const readyRef = useRef(false);
 
   log.info('OverlayApp mounting');
 
@@ -43,67 +44,98 @@ export function OverlayApp() {
   }, []);
 
   useEffect(() => {
-    if (overlays.length === 0) {
+    if (overlays.length === 0 && readyRef.current) {
       requestSurfaceIdle();
     }
   }, [overlays.length, requestSurfaceIdle]);
 
   useEffect(() => {
-    const unsubs: Array<Promise<() => void>> = [];
+    let cancelled = false;
+    const unlisteners: Array<() => void> = [];
 
-    unsubs.push(
-      listen<OverlayShowPayload>('overlay:show', (event) => {
-        const payload = event.payload;
-        log.info('overlay:show received', payload.id, payload.overlay_type);
+    const onShow = (payload: OverlayShowPayload) => {
+      log.info('overlay:show received', payload.id, payload.overlay_type);
+      setOverlays((prev) => {
+        const next = prev.filter((o) => o.id !== payload.id);
+        const item: ActiveOverlay = { ...payload, visible: true, exiting: false };
+        return [...next, item].slice(-MAX_STACK);
+      });
+    };
+
+    const onHide = (id: string) => {
+      log.info('overlay:hide received', id);
+      exitingCountRef.current += 1;
+      setOverlays((prev) => prev.map((o) => (o.id === id ? { ...o, exiting: true } : o)));
+      window.setTimeout(() => {
+        exitingCountRef.current = Math.max(0, exitingCountRef.current - 1);
         setOverlays((prev) => {
-          const next = prev.filter((o) => o.id !== payload.id);
-          const item: ActiveOverlay = { ...payload, visible: true, exiting: false };
-          const merged = [...next, item];
-          return merged.slice(-MAX_STACK);
+          const next = prev.filter((o) => o.id !== id);
+          if (next.length === 0 && exitingCountRef.current === 0) {
+            requestSurfaceIdle();
+          }
+          return next;
         });
-      }),
-    );
+      }, exitDurationMs());
+    };
 
-    unsubs.push(
-      listen<string>('overlay:hide', (event) => {
-        const id = event.payload;
-        log.info('overlay:hide received', id);
-        exitingCountRef.current += 1;
-        setOverlays((prev) =>
-          prev.map((o) => (o.id === id ? { ...o, exiting: true } : o)),
-        );
+    (async () => {
+      try {
+        // Await every listener BEFORE sync — otherwise the first overlay:show
+        // (and the sync re-emit) are dropped and nothing paints on screen.
+        const showUnsub = await listen<OverlayShowPayload>('overlay:show', (event) => {
+          onShow(event.payload);
+        });
+        if (cancelled) {
+          showUnsub();
+          return;
+        }
+        unlisteners.push(showUnsub);
+
+        const hideUnsub = await listen<string>('overlay:hide', (event) => {
+          onHide(event.payload);
+        });
+        if (cancelled) {
+          hideUnsub();
+          return;
+        }
+        unlisteners.push(hideUnsub);
+
+        const clearUnsub = await listen('overlay:clear', () => {
+          exitingCountRef.current = 0;
+          setOverlays([]);
+          requestSurfaceIdle();
+        });
+        if (cancelled) {
+          clearUnsub();
+          return;
+        }
+        unlisteners.push(clearUnsub);
+
+        readyRef.current = true;
+        log.info('OverlayApp listeners ready, syncing monitor', monitorIndexRef.current);
+
+        await invoke('sync_overlays_for_monitor', {
+          monitorIndex: monitorIndexRef.current,
+        });
+        log.info('OverlayApp sync done');
+
+        // Second pull shortly after — covers payloads stored while the first
+        // sync raced with window show / click-through re-apply.
         window.setTimeout(() => {
-          exitingCountRef.current = Math.max(0, exitingCountRef.current - 1);
-          setOverlays((prev) => {
-            const next = prev.filter((o) => o.id !== id);
-            if (next.length === 0 && exitingCountRef.current === 0) {
-              requestSurfaceIdle();
-            }
-            return next;
-          });
-        }, exitDurationMs());
-      }),
-    );
-
-    unsubs.push(
-      listen('overlay:clear', () => {
-        exitingCountRef.current = 0;
-        setOverlays([]);
-        requestSurfaceIdle();
-      }),
-    );
-
-    // Pull any overlays that were shown before this webview mounted its
-    // listeners (race when the overlay window is created fresh).
-    log.info('OverlayApp syncing overlays for monitor', monitorIndexRef.current);
-    void invoke('sync_overlays_for_monitor', {
-      monitorIndex: monitorIndexRef.current,
-    })
-      .then(() => log.info('OverlayApp sync done'))
-      .catch((e) => log.error('sync_overlays_for_monitor failed', e));
+          if (cancelled) return;
+          void invoke('sync_overlays_for_monitor', {
+            monitorIndex: monitorIndexRef.current,
+          }).catch((e) => log.warn('OverlayApp delayed sync failed', e));
+        }, 400);
+      } catch (e) {
+        log.error('OverlayApp listener setup failed', e);
+      }
+    })();
 
     return () => {
-      unsubs.forEach((p) => p.then((fn) => fn()));
+      cancelled = true;
+      readyRef.current = false;
+      unlisteners.forEach((fn) => fn());
     };
   }, [requestSurfaceIdle]);
 

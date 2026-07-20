@@ -112,6 +112,7 @@ export async function resolveMediaForPrank(
     extension: ext,
   });
 
+  // Cache index is best-effort — never block rendering if SQL execute fails.
   await recordCacheEntry(
     media.id,
     remoteUrl,
@@ -119,7 +120,7 @@ export async function resolveMediaForPrank(
     media.mime_type,
     buffer.byteLength,
     media.hash_sha256 || null,
-  );
+  ).catch(() => undefined);
 
   return { mediaUrl: convertFileSrc(localPath), localPath };
 }

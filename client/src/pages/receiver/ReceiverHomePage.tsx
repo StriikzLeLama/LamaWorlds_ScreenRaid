@@ -62,29 +62,39 @@ export function ReceiverHomePage() {
     setStatusMsg('');
     log.info('test overlay button clicked, inTauri=', inTauri);
     try {
+      // Ensure consent is on so a follow-up real prank also works.
+      if (!globalConsent) {
+        await grant().catch(() => undefined);
+      }
+      if (isPaused) {
+        await resume().catch(() => undefined);
+      }
+
       await invoke('show_overlay', {
         payload: {
-          id: 'test-overlay',
+          id: `test-overlay-${Date.now()}`,
           overlay_type: 'text',
           media_url: null,
           local_path: null,
-          text: 'ScreenRaid test — overlays work!',
-          duration_ms: 5000,
-          animation: 'fade',
+          text: 'ScreenRaid OK — overlays work!',
+          duration_ms: 8000,
+          animation: 'bounce',
           sender_name: 'Test',
           monitor_index: 0,
           position_x: 0.5,
           position_y: 0.5,
-          scale: 1,
+          scale: 1.15,
           opacity: 1,
           volume: 0.8,
         },
       });
       log.info('test overlay invoke ok');
-      setStatusMsg('Test overlay sent — check your screen.');
+      setStatusMsg(
+        'Test overlay sent for 8s — look at the center of your primary screen. If nothing appears, check the tauri:dev terminal for [overlay] / [SR] logs.',
+      );
     } catch (e) {
       log.error('test overlay invoke failed', e);
-      setStatusMsg(`Test overlay failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+      setStatusMsg(`Test overlay failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 

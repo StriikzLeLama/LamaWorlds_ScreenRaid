@@ -235,9 +235,9 @@ pub fn show_overlay(
             "overlay window not available".to_string()
         })?;
 
-    // Emit the show event. The overlay webview also pulls active overlays on
-    // mount (sync_overlays_for_monitor), so a freshly created window that
-    // misses this emit will still render via the pull path.
+    // Emit immediately, then re-emit a few times. Fresh WebView2 windows often
+    // miss the first event while React mounts its listeners; OverlayApp also
+    // pulls via sync_overlays_for_monitor, but delayed emits cover both races.
     window
         .emit("overlay:show", &payload)
         .map_err(|e| {
@@ -245,6 +245,34 @@ pub fn show_overlay(
             e.to_string()
         })?;
     log::info!("[overlay] emitted overlay:show to {label}");
+
+    let app_for_retry = app.clone();
+    let retry_label = label.clone();
+    let retry_payload = payload.clone();
+    let retry_id = id.clone();
+    tauri::async_runtime::spawn(async move {
+        for delay_ms in [150u64, 400, 800] {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            let still_active = app_for_retry
+                .try_state::<OverlayManager>()
+                .map(|m| {
+                    m.overlays
+                        .lock()
+                        .map(|list| list.iter().any(|o| o.id == retry_id))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false);
+            if !still_active {
+                return;
+            }
+            if let Some(win) = app_for_retry.get_webview_window(&retry_label) {
+                let _ = win.emit("overlay:show", &retry_payload);
+                log::info!(
+                    "[overlay] re-emitted overlay:show to {retry_label} after {delay_ms}ms"
+                );
+            }
+        }
+    });
 
     // Re-apply click-through shortly after show. On Windows/WebView2 the first
     // set_ignore_cursor_events (called during window creation, before the
@@ -255,6 +283,7 @@ pub fn show_overlay(
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(250)).await;
         if let Some(win) = app_for_cursor.get_webview_window(&cursor_label) {
+            let _ = win.set_always_on_top(true);
             match win.set_ignore_cursor_events(true) {
                 Ok(()) => log::info!("[overlay] re-applied ignore-cursor-events on {cursor_label}"),
                 Err(e) => log::warn!("[overlay] ignore-cursor-events re-apply failed on {cursor_label}: {e}"),

@@ -1,0 +1,73 @@
+Adding capabilities in tauri v2 beta for my custom plugin #8813
+  URL: https://github.com/orgs/tauri-apps/discussions/8813
+  I've added capabilities file (in src-tauri/capabilities) to allow all built-in plugins, to allow my own plugin to work.. commands are denied … ...
+  Category: github
+
+Permissions
+  URL: https://v2.tauri.app/security/permissions/
+  # Permissions
+define them for your own commands.
+
+## Configuration Files
+```
+tauri-plugin
+
+├── README.md
+
+├── src
+
+│  └── lib.rs
+
+├── build.rs
+
+├── Cargo.toml
+
+├── permissions
+
+│  └── <identifier>.json/toml
+
+│  └── default.json/toml
+```
+
+## Examples
+```
+[[permission]]
+
+identifier = "allow-mkdir"
+
+description = "This enables the mkdir command."
+
+commands.allow = [\
+\
+    "mkdir"\
+\
+]
+```
+
+Capabilities
+  URL: https://v2.tauri.app/security/capabilities/
+  # Capabilities
+```
+fn main() {
+
+    tauri_build::try_build(
+
+        tauri_build::Attributes::new()
+
+            .app_manifest(tauri_build::AppManifest::new().commands(&["your_command"])),
+
+    )
+
+    .unwrap();
+
+}
+```
+
+Core Permissions
+  URL: https://v2.tauri.app/reference/acl/core-permissions/
+  A list of all permissions that can be used with the core of the Tauri framework. If you are looking for permissions to specific Tauri plugins, please refer to ...
+
+[bug] Android tauri-plugin capabilities disallowed · Issue #9502
+  URL: https://github.com/tauri-apps/tauri/issues/9502
+  In the last two beta releases of 2.0 tauri + tauri-plugin, I have been running into an issue where capability permissions won't allow my plugin to function.
+  Category: github

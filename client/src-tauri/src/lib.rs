@@ -7,6 +7,7 @@ use commands::overlay::{
     show_overlay, sync_overlays_for_monitor, OverlayManager,
 };
 use commands::settings::{get_settings, save_settings, SettingsStore};
+use commands::window::preload_overlay_windows;
 use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -91,6 +92,13 @@ pub fn run() {
                     log::warn!("panic hotkey still unavailable after retry: {retry_err}");
                 }
             }
+
+            // Warm overlay webviews so the first prank does not race a cold load.
+            let preload_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                preload_overlay_windows(&preload_handle);
+            });
 
             Ok(())
         })

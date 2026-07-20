@@ -1,4 +1,6 @@
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
+};
 
 pub fn overlay_url() -> WebviewUrl {
     if cfg!(debug_assertions) {
@@ -40,6 +42,8 @@ pub fn ensure_overlay_window(app: &AppHandle, monitor_index: u32) -> Result<(), 
         size.width, size.height, pos.x, pos.y
     );
 
+    // Use physical pixels for both create and resize — monitor APIs return
+    // physical values; treating them as logical breaks DPI-scaled displays.
     let window = WebviewWindowBuilder::new(app, &label, overlay_url())
         .title("ScreenRaid Overlay")
         .transparent(true)
@@ -50,13 +54,20 @@ pub fn ensure_overlay_window(app: &AppHandle, monitor_index: u32) -> Result<(), 
         .visible(false)
         .focused(false)
         .resizable(false)
-        .position(pos.x as f64, pos.y as f64)
+        .shadow(false)
+        .background_color(tauri::window::Color(0, 0, 0, 0))
         .inner_size(size.width as f64, size.height as f64)
+        .position(pos.x as f64, pos.y as f64)
         .build()
         .map_err(|e| {
             log::error!("[overlay] window build failed: {e}");
             e.to_string()
         })?;
+
+    // Force physical geometry immediately after create (builder position/size
+    // are logical on some platforms; this makes DPI placement reliable).
+    let _ = window.set_position(PhysicalPosition::new(pos.x, pos.y));
+    let _ = window.set_size(PhysicalSize::new(size.width, size.height));
 
     log::info!("[overlay] window {label} built, setting ignore-cursor-events");
     window.set_ignore_cursor_events(true).map_err(|e| {
@@ -74,6 +85,7 @@ pub fn show_overlay_surface(app: &AppHandle, monitor_index: u32) -> Result<(), S
         return Ok(());
     };
     window.show().map_err(|e| e.to_string())?;
+    let _ = window.set_always_on_top(true);
     let _ = window.set_ignore_cursor_events(true);
     Ok(())
 }
@@ -120,5 +132,21 @@ pub fn overlay_label(monitor_index: u32) -> String {
 pub fn hide_all_overlay_surfaces(app: &AppHandle, max_monitors: u32) {
     for i in 0..max_monitors {
         let _ = hide_overlay_surface(app, i);
+    }
+}
+
+/// Warm-create overlay webviews for every attached monitor so the first prank
+/// does not race a cold WebView2 load.
+pub fn preload_overlay_windows(app: &AppHandle) {
+    let count = app
+        .available_monitors()
+        .map(|m| m.len().min(8) as u32)
+        .unwrap_or(1)
+        .max(1);
+    log::info!("[overlay] preloading {count} overlay window(s)");
+    for i in 0..count {
+        if let Err(e) = ensure_overlay_window(app, i) {
+            log::warn!("[overlay] preload overlay-{i} failed: {e}");
+        }
     }
 }

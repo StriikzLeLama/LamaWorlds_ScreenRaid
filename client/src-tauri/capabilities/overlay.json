@@ -12,5 +12,10 @@
     "overlay-6",
     "overlay-7"
   ],
-  "permissions": ["core:default", "core:event:default"]
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:event:allow-listen",
+    "core:window:allow-set-ignore-cursor-events"
+  ]
 }

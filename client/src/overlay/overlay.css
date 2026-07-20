@@ -5,10 +5,12 @@ body,
   overflow: hidden;
 }
 
-/* Isolate overlay repaints from the rest of the desktop compositor. */
+/* Isolate overlay repaints without size containment (size can collapse to 0). */
 .overlay-root {
-  contain: strict;
+  contain: layout style paint;
   pointer-events: none;
+  width: 100vw;
+  height: 100vh;
 }
 
 .overlay-item {

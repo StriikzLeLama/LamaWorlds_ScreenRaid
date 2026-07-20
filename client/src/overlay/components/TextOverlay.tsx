@@ -16,16 +16,24 @@ export function TextOverlay({ overlay }: Props) {
   return (
     <div className={animClass}>
       <div
-        className="overlay-media pointer-events-none max-w-[80vw] rounded-2xl border border-raid-border bg-raid-card/95 px-8 py-6 text-center"
+        className="overlay-media pointer-events-none max-w-[80vw] rounded-2xl px-10 py-8 text-center"
         style={{
           transform: `scale3d(${overlay.scale}, ${overlay.scale}, 1)`,
           opacity: overlay.opacity,
+          background: 'rgba(20, 20, 22, 0.94)',
+          border: '2px solid #f97316',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.55)',
         }}
       >
-        <p className="text-xs font-medium uppercase tracking-wide text-raid-accent">
+        <p
+          className="text-xs font-medium uppercase tracking-wide"
+          style={{ color: '#f97316' }}
+        >
           {overlay.sender_name}
         </p>
-        <p className="mt-2 text-3xl font-bold text-raid-text">{overlay.text}</p>
+        <p className="mt-2 text-3xl font-bold" style={{ color: '#f5f5f5' }}>
+          {overlay.text}
+        </p>
       </div>
     </div>
   );

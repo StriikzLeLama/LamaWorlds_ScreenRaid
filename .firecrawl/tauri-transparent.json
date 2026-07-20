@@ -1,0 +1,115 @@
+[bug] Transparent attribute on child window is not taking effect #12450
+  URL: https://github.com/tauri-apps/tauri/issues/12450
+  I've managed to make the tauri spawn a child window in the bevy window, but the WebviewWindowBuilder::transparent does not correctly make the it transparent.
+  Category: github
+
+Window Customization
+  URL: https://v2.tauri.app/learn/window-customization/
+  # Window Customization
+## Usage
+### (macOS) Transparent Titlebar with Custom Window Background Color
+```
+"tauri": {
+
+  "windows": [\
+\
+    {\
+\
+      "title": "Transparent Titlebar Window",\
+\
+      "width": 800,\
+\
+      "height": 600\
+\
+    }\
+\
+  ],
+
+}
+```
+
+```
+[target."cfg(target_os = \"macos\")".dependencies]
+
+objc2-app-kit = { version = "0.3.2", features = ["NSColor", "NSWindow", "objc2-core-foundation"] }
+```
+
+```
+use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+
+pub fn run() {
+
+  tauri::Builder::default()
+
+    .setup(|app| {
+
+      let win_builder =
+
+        WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+
+          .title("Transparent Titlebar Window")
+
+          .inner_size(800.0, 600.0);
+
+      // set transparent title bar only when building for macOS
+
+      #[cfg(target_os = "macos")]
+
+      let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
+
+      let window = win_builder.build().unwrap();
+
+      // set background color only when building for macOS
+
+      #[cfg(target_os = "macos")]
+
+      {
+
+        use objc2_app_kit::{NSColor, NSWindow};
+
+        let ns_window_ptr = window.ns_window().unwrap() as *mut NSWindow;
+
+        let ns_window = unsafe { &*ns_window_ptr };
+
+        let bg_color = NSColor::colorWithRed_green_blue_alpha(
+
+          50.0 / 255.0,
+
+          158.0 / 255.0,
+
+          163.5 / 255.0,
+
+          1.0,
+
+        );
+
+        ns_window.setBackgroundColor(Some(&bg_color));
+
+      }
+
+      Ok(())
+
+    })
+
+    .run(tauri::generate_context!())
+
+    .expect("error while running tauri application");
+
+}
+```
+
+Tauri v2 Window Transparency [Beta]
+  URL: https://www.youtube.com/watch?v=J0ElA3iXZBA
+  What if your webview was transparent? We have teased around the edges of this feature in previous streams. Let's dive directly in this week ...
+
+WebviewWindowBuilder in tauri::webview - Rust
+  URL: https://docs.rs/tauri/latest/tauri/webview/struct.WebviewWindowBuilder.html
+  # Struct WebviewWindowBuilderCopy item path
+## Implementations [§](https://docs.rs/tauri/latest/tauri/webview/struct.WebviewWindowBuilder.html#implementations)
+### impl<'a, R: [Runtime](https://docs.rs/tauri/latest/tauri/trait.Runtime.html), M: [Manager](https://docs.rs/tauri/latest/tauri/trait.Manager.html) <R>> [WebviewWindowBuilder](https://docs.rs/tauri/latest/tauri/webview/struct.WebviewWindowBuilder.html) <'a, R, M>
+#### pub fn [always_on_top](https://docs.rs/tauri/latest/tauri/webview/struct.WebviewWindowBuilder.html#method.always_on_top)(self, always_on_top: [bool](https://doc.rust-lang.org/nightly/std/primitive.bool.html)) -> Self
+Whether the window should always be on top of other windows.
+
+How to allow user interaction with another window through a ...
+  URL: https://stackoverflow.com/questions/76750116/how-to-allow-user-interaction-with-another-window-through-a-transparent-tauri-ap
+  I would like to allow the user to click on another window that is positioned below the transparent Tauri app if the click is not on the image.
