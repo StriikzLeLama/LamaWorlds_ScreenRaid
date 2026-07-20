@@ -1,0 +1,47 @@
+MrBartusek/gif-picker-react: Tenor, Giphy and Klipy ...
+  URL: https://github.com/MrBartusek/gif-picker-react
+  # Gif Picker React | [Live Demo](https://dokurno.dev/gif-picker-react/)
+## GIF Providers
+### Klipy
+```
+import { GifPicker } from 'gif-picker-react';
+import { Klipy } from 'gif-picker-react/providers/klipy';
+
+<GifPicker provider={Klipy("YOUR_APP_KEY")} />
+```
+
+#### Configuration
+| Option | Type | Default | Description |
+|-|-|-|-|
+| quality | `KlipyQuality` | `KlipyQuality.MD` | Which size tier is passed to `onGifClick`. If you are using Typescript you can use the `KlipyQuality` enum. Possible values are `hd`, `md`, `sm` and `xs`. |
+| previewQuality | `KlipyQuality` | `KlipyQuality.SM` | Which size tier is used for the preview gifs rendered in the picker grid. If you are using Typescript you can use the `KlipyQuality` enum. Possible values are `hd`, `md`, `sm` and `xs`. |
+  Category: github
+
+Build Your Own GIF Search Engine | KLIPY API Full Tutorial
+  URL: https://www.youtube.com/watch?v=LHUREP6vN_I
+  Want to build your own GIF search app like GIPHY? In this video, I show you how to use the KLIPY API to search, display, and share GIFs ...
+
+Exploring the KLIPY API
+  URL: https://dev.to/zuplo/exploring-the-klipy-api-29po
+  ### **Search Endpoint**
+```
+GET https://api.klipy.com/api/v1/API_KEY/gifs/search
+```
+
+### **Trending Endpoint**
+```
+GET
+https://api.klipy.com/api/v1/API_KEY/gifs/SLUG
+```
+
+## Adjusting Request Parameters
+### **Accessing GIF URLs**
+- **KLIPY**: Access via **`files`** in each result object.
+
+Get GIF Items | KLIPY API Docs
+  URL: https://mindcloud.co/docs/universal/rest/klipy/latest/actions/get-gif-items
+  Retrieves GIFs from KLIPY by ID or slug. Use the KLIPY Universal API action in MindCloud with endpoint details, arguments, and response controls.
+
+Displaying GIF image from URL retrived as JSON array response
+  URL: https://stackoverflow.com/questions/56344509/displaying-gif-image-from-url-retrived-as-json-array-response
+  I got the actual GIF image URL by getting the complete JSON response details. To display it simply calling the complete URL for the image, <div class="gifs-card-container"

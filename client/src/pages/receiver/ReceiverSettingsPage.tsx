@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { Card, Button, Input } from '../../components/ui';
+import { ReceiveRaidsToggle } from '../../components/ReceiveRaidsToggle';
 import { checkServerHealth } from '../../services/api';
 import { clearMediaCache } from '../../services/mediaCache';
 import { clearLocalSession } from '../../services/session';
 import { getServerUrl, setServerUrl } from '../../services/serverConfig';
 import { useAuthStore } from '../../stores/authStore';
+import { useConsentStore } from '../../stores/consentStore';
 import { isTauriRuntime } from '../../lib/platform';
 import { log } from '../../lib/log';
+import { ANIMATION_OPTIONS, type Animation } from '../../services/pranks';
 
 interface AppSettings {
   autostart: boolean;
@@ -36,6 +39,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 export function ReceiverSettingsPage() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const loadConsent = useConsentStore((s) => s.loadFromServer);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loadError, setLoadError] = useState('');
   const [message, setMessage] = useState('');
@@ -45,6 +49,9 @@ export function ReceiverSettingsPage() {
 
   useEffect(() => {
     log.info('ReceiverSettingsPage mount, isTauriRuntime=', isTauriRuntime());
+    if (isAuthenticated) {
+      loadConsent().catch(() => undefined);
+    }
     if (!isTauriRuntime()) {
       log.warn('ReceiverSettingsPage: not in Tauri runtime');
       setLoadError(
@@ -72,7 +79,7 @@ export function ReceiverSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadConsent]);
 
   const save = async () => {
     if (!settings) return;
@@ -159,6 +166,11 @@ export function ReceiverSettingsPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
+          <h2 className="mb-4 text-lg font-semibold text-raid-text">Raids</h2>
+          <ReceiveRaidsToggle />
+        </Card>
+
+        <Card>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">Server</h2>
           <Input
             label="Server URL"
@@ -192,6 +204,25 @@ export function ReceiverSettingsPage() {
                 setSettings({ ...settings, default_volume: Number(e.target.value) })
               }
             />
+            <div>
+              <label className="mb-1 block text-xs text-raid-text-secondary">Default animation</label>
+              <select
+                className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                value={settings.default_animation}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    default_animation: e.target.value as Animation,
+                  })
+                }
+              >
+                {ANIMATION_OPTIONS.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </Card>
 

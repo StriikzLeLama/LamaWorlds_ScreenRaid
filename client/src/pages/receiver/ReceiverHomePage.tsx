@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, ExternalLink, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
 import { Card, Button, Badge } from '../../components/ui';
+import { ReceiveRaidsToggle } from '../../components/ReceiveRaidsToggle';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
 import { getServerUrl } from '../../services/serverConfig';
@@ -15,10 +16,11 @@ export function ReceiverHomePage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const wsConnected = useWsConnection();
-  const { globalConsent, isPaused, grant, revoke, resume, pause } = useConsentStore();
+  const { globalConsent, isPaused, grant, resume, pause } = useConsentStore();
   const [webUrl, setWebUrl] = useState(getServerUrl());
   const [statusMsg, setStatusMsg] = useState('');
   const inTauri = isTauriRuntime();
+  const receiving = globalConsent && !isPaused;
 
   useEffect(() => {
     setWebUrl(getServerUrl());
@@ -38,23 +40,10 @@ export function ReceiverHomePage() {
       await invoke('panic_hide_all');
       log.info('panic_hide_all ok');
       await pause();
-      setStatusMsg('Panic triggered — all overlays hidden.');
+      setStatusMsg('Panic triggered — all overlays hidden. Turn Receive raids On to resume.');
     } catch (e) {
       log.error('panic_hide_all failed', e);
       setStatusMsg(`Panic failed: ${e instanceof Error ? e.message : 'unknown error'}`);
-    }
-  };
-
-  const handleConsent = async (action: 'grant' | 'revoke' | 'resume') => {
-    setStatusMsg('');
-    log.info('consent action', action);
-    try {
-      if (action === 'grant') await grant();
-      if (action === 'revoke') await revoke();
-      if (action === 'resume') await resume();
-    } catch (e) {
-      log.error('consent failed', e);
-      setStatusMsg(`Consent update failed: ${e instanceof Error ? e.message : 'unknown error'}`);
     }
   };
 
@@ -140,30 +129,12 @@ export function ReceiverHomePage() {
         </Card>
 
         <Card>
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-raid-text-secondary">Receiving overlays</p>
-              <p className="mt-1 text-lg font-semibold text-raid-text">
-                {isPaused ? 'Paused' : globalConsent ? 'Active' : 'Not consented'}
-              </p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="mb-3 text-sm text-raid-text-secondary">Receiving overlays</p>
+              <ReceiveRaidsToggle compact />
             </div>
-            <Activity className="text-raid-accent" size={24} />
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {!globalConsent ? (
-              <Button className="text-xs" onClick={() => void handleConsent('grant')}>
-                Grant consent
-              </Button>
-            ) : (
-              <Button variant="secondary" className="text-xs" onClick={() => void handleConsent('revoke')}>
-                Revoke
-              </Button>
-            )}
-            {isPaused && (
-              <Button variant="secondary" className="text-xs" onClick={() => void handleConsent('resume')}>
-                Resume
-              </Button>
-            )}
+            <Activity className="shrink-0 text-raid-accent" size={24} />
           </div>
         </Card>
       </div>
@@ -204,7 +175,7 @@ export function ReceiverHomePage() {
 
       <div className="flex gap-2">
         {wsConnected ? <Badge variant="success">Live</Badge> : <Badge variant="warning">WS offline</Badge>}
-        {globalConsent && !isPaused ? (
+        {receiving ? (
           <Badge variant="success">Ready to receive</Badge>
         ) : (
           <Badge variant="neutral">Not receiving</Badge>

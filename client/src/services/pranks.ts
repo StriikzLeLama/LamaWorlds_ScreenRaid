@@ -2,7 +2,33 @@ import { apiFetch } from './api';
 import { ackPrankWs, isWebSocketConnected } from './websocket';
 
 export type OverlayType = 'image' | 'gif' | 'video' | 'text' | 'sound';
-export type Animation = 'fade' | 'zoom' | 'bounce' | 'none';
+
+/** Must stay in sync with `Animation` in crates/screenraid-types. */
+export type Animation =
+  | 'fade'
+  | 'zoom'
+  | 'bounce'
+  | 'slide_left'
+  | 'slide_right'
+  | 'slide_up'
+  | 'slide_down'
+  | 'shake'
+  | 'pop'
+  | 'none';
+
+/** Human-readable labels for the prank composer select. */
+export const ANIMATION_OPTIONS: { value: Animation; label: string }[] = [
+  { value: 'fade', label: 'Fade' },
+  { value: 'zoom', label: 'Zoom' },
+  { value: 'bounce', label: 'Bounce' },
+  { value: 'slide_left', label: 'Slide left' },
+  { value: 'slide_right', label: 'Slide right' },
+  { value: 'slide_up', label: 'Slide up' },
+  { value: 'slide_down', label: 'Slide down' },
+  { value: 'shake', label: 'Shake' },
+  { value: 'pop', label: 'Pop' },
+  { value: 'none', label: 'None' },
+];
 
 export interface OverlayConfig {
   animation: Animation;

@@ -2,6 +2,7 @@ pub mod admin;
 pub mod auth;
 pub mod consent;
 pub mod friends;
+pub mod gifs;
 pub mod health;
 pub mod media;
 pub mod monitors;
@@ -18,6 +19,7 @@ pub use friends::{
     accept_request, block_friend, decline_request, list_friends, list_requests, remove_friend,
     send_request,
 };
+pub use gifs::{import_gif, search_gifs};
 pub use health::{health, ready};
 pub use media::{delete_media, download_media, list_media, list_room_media, upload_media};
 pub use monitors::{get_my_monitors, get_user_monitors, update_my_monitors};

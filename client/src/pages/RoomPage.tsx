@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Copy, LogOut, Send, Trash2, Users } from 'lucide-react';
 import { Card, Button, Badge, Input } from '../components/ui';
+import { GifPicker } from '../components/GifPicker';
 import { ApiError } from '../services/api';
 import { listMedia, type Media } from '../services/media';
 import {
+  ANIMATION_OPTIONS,
   defaultOverlayConfig,
   listPrankHistory,
   sendPrank,
@@ -23,7 +25,6 @@ import type { RoomDetail, RoomMember } from '../types/room';
 import type { MediaType } from '../types';
 
 const OVERLAY_TYPES: OverlayType[] = ['text', 'image', 'gif', 'video', 'sound'];
-const ANIMATIONS: Animation[] = ['fade', 'zoom', 'bounce', 'none'];
 
 function mediaForOverlay(type: OverlayType, items: Media[]): Media[] {
   const map: Partial<Record<OverlayType, MediaType>> = {
@@ -34,6 +35,10 @@ function mediaForOverlay(type: OverlayType, items: Media[]): Media[] {
   };
   const wanted = map[type];
   if (!wanted) return [];
+  // KLIPY sometimes serves animated webp → stored as image; still usable as gif raids.
+  if (type === 'gif') {
+    return items.filter((m) => m.media_type === 'gif' || m.media_type === 'image');
+  }
   return items.filter((m) => m.media_type === wanted);
 }
 
@@ -58,6 +63,7 @@ export function RoomPage() {
   const [history, setHistory] = useState<PrankHistoryItem[]>([]);
   const [sending, setSending] = useState(false);
 
+  // Composer state — kept local so sending one room doesn't affect another.
   const [overlayType, setOverlayType] = useState<OverlayType>('text');
   const [targetId, setTargetId] = useState<string>('');
   const [textContent, setTextContent] = useState('');
@@ -78,12 +84,18 @@ export function RoomPage() {
     listPrankHistory(id).then(setHistory).catch(() => undefined);
   };
 
+  const refreshMedia = () => {
+    listMedia({ page: 1, limit: 50 })
+      .then((r) => setMediaItems(r.items))
+      .catch(() => undefined);
+  };
+
   useEffect(() => {
     if (!id) return;
     getRoom(id)
       .then(setRoom)
       .catch((e) => setError(e instanceof ApiError ? e.message : 'Failed to load room'));
-    listMedia({ page: 1, limit: 50 }).then((r) => setMediaItems(r.items)).catch(() => undefined);
+    refreshMedia();
     listPrankHistory(id).then(setHistory).catch(() => undefined);
     subscribeRoom(id);
 
@@ -93,7 +105,7 @@ export function RoomPage() {
         const reason = detail.payload?.reason ?? 'CONSENT_REQUIRED';
         setError(
           reason.includes('CONSENT')
-            ? 'Prank blocked: target has not granted consent (Settings → Grant consent).'
+            ? 'Prank blocked: target has Receive raids turned Off.'
             : `Prank blocked: ${reason}`,
         );
       }
@@ -239,8 +251,8 @@ export function RoomPage() {
       {canSend && (!wsConnected || !globalConsent || isPaused) && (
         <p className="rounded-xl border border-raid-warning/40 bg-raid-warning/10 px-3 py-2 text-sm text-raid-text">
           {!wsConnected && 'Live connection offline — pranks will not display until WebSocket reconnects. '}
-          {!globalConsent && 'Grant consent in Settings to receive overlays. '}
-          {globalConsent && isPaused && 'Receiving is paused — resume in Settings.'}
+          {!globalConsent && 'Turn on Receive raids in Settings to get overlays. '}
+          {globalConsent && isPaused && 'Receiving is paused — turn Receive raids On again in Settings.'}
         </p>
       )}
 
@@ -274,7 +286,7 @@ export function RoomPage() {
               {isSoloRoom && (
                 <p className="rounded-xl border border-raid-accent/30 bg-raid-accent/10 px-3 py-2 text-xs text-raid-text-secondary">
                   Solo room: you can prank yourself (target <strong>Yourself</strong> or{' '}
-                  <strong>Everyone</strong>). Grant consent in Settings first.
+                  <strong>Everyone</strong>). Enable Receive raids first.
                 </p>
               )}
               <div>
@@ -319,25 +331,43 @@ export function RoomPage() {
                   placeholder="Overlay text…"
                 />
               ) : (
-                <div>
-                  <label className="mb-1 block text-xs text-raid-text-secondary">Media</label>
-                  <select
-                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                    value={mediaId}
-                    onChange={(e) => setMediaId(e.target.value)}
-                  >
-                    <option value="">Select from library…</option>
-                    {selectableMedia.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.original_name}
-                      </option>
-                    ))}
-                  </select>
-                  {selectableMedia.length === 0 && (
-                    <p className="mt-1 text-xs text-raid-text-secondary">
-                      Upload {overlayType} media in the Media library first.
-                    </p>
+                <div className="space-y-3">
+                  {overlayType === 'gif' && (
+                    <GifPicker
+                      roomId={id}
+                      selectedMediaId={mediaId}
+                      onPicked={(media) => {
+                        setMediaItems((prev) =>
+                          prev.some((m) => m.id === media.id) ? prev : [media, ...prev],
+                        );
+                        setMediaId(media.id);
+                        refreshMedia();
+                      }}
+                    />
                   )}
+
+                  <div>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">
+                      {overlayType === 'gif' ? 'Or pick from library' : 'Media'}
+                    </label>
+                    <select
+                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                      value={mediaId}
+                      onChange={(e) => setMediaId(e.target.value)}
+                    >
+                      <option value="">Select from library…</option>
+                      {selectableMedia.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.original_name}
+                        </option>
+                      ))}
+                    </select>
+                    {selectableMedia.length === 0 && overlayType !== 'gif' && (
+                      <p className="mt-1 text-xs text-raid-text-secondary">
+                        Upload {overlayType} media in the Media library first.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -349,9 +379,9 @@ export function RoomPage() {
                   onChange={(e) => setAnimation(e.target.value as Animation)}
                   disabled={isSoundOnly}
                 >
-                  {ANIMATIONS.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
+                  {ANIMATION_OPTIONS.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {a.label}
                     </option>
                   ))}
                 </select>

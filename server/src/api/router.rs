@@ -76,6 +76,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/{id}/file", get(handlers::download_media))
         .route("/{id}", delete(handlers::delete_media));
 
+    // KLIPY-backed GIF search — key stays on the server.
+    let gif_routes = Router::new()
+        .route("/search", get(handlers::search_gifs))
+        .route("/import", post(handlers::import_gif));
+
     let admin_routes = Router::new()
         .route("/users", get(handlers::list_admin_users))
         .route("/users/{id}", delete(handlers::deactivate_user))
@@ -95,6 +100,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/v1/friends", friend_routes)
         .nest("/v1/consent", consent_routes)
         .nest("/v1/media", media_routes)
+        .nest("/v1/gifs", gif_routes)
         .nest("/v1/admin", admin_routes)
         .route("/v1/rooms/{id}/media", get(handlers::list_room_media))
         .route("/v1/rooms/{id}/pranks/{prank_id}/ack", post(handlers::ack_prank))

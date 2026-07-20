@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button } from '../components/ui';
+import { ReceiveRaidsToggle } from '../components/ReceiveRaidsToggle';
 import { getMe } from '../services/auth';
 import { clearLocalSession } from '../services/session';
 import { logout as logoutApi } from '../services/auth';
 import { useConsentStore } from '../stores/consentStore';
 import { useAuthStore } from '../stores/authStore';
 
-/** Web dashboard settings — account, consent, sign out. */
+/** Web dashboard settings — account, receive-raids toggle, sign out. */
 export function WebSettingsPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -16,7 +17,7 @@ export function WebSettingsPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { globalConsent, isPaused, grant, revoke, resume, loadFromServer } = useConsentStore();
+  const { loadFromServer } = useConsentStore();
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -57,7 +58,7 @@ export function WebSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-raid-text">Settings</h1>
         <p className="text-sm text-raid-text-secondary">
-          Account and consent for the web dashboard. Install the desktop receiver to display overlays.
+          Account and raid receiving for the web dashboard. Install the desktop receiver to display overlays.
         </p>
       </div>
 
@@ -101,25 +102,8 @@ export function WebSettingsPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Consent</h2>
-          <p className="mb-4 text-sm text-raid-text-secondary">
-            Consent is shared with the desktop receiver. Grant it here or in the receiver app before
-            overlays can appear on your screen.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {!globalConsent ? (
-              <Button onClick={() => void grant()}>Grant Consent</Button>
-            ) : (
-              <Button variant="secondary" onClick={() => void revoke()}>
-                Revoke Consent
-              </Button>
-            )}
-            {isPaused && (
-              <Button variant="secondary" onClick={() => void resume()}>
-                Resume Receiving
-              </Button>
-            )}
-          </div>
+          <h2 className="mb-4 text-lg font-semibold text-raid-text">Raids</h2>
+          <ReceiveRaidsToggle />
         </Card>
 
         <Card className="lg:col-span-2" accentHeader>
@@ -127,7 +111,7 @@ export function WebSettingsPage() {
           <p className="text-sm text-raid-text-secondary">
             Overlays are rendered by the ScreenRaid desktop app (Tauri). This website manages rooms,
             friends, media, and sending pranks. Run <code className="text-raid-accent">npm run tauri:dev</code>{' '}
-            on your PC, sign in with the same account, and grant consent in the receiver.
+            on your PC, sign in with the same account, and turn on Receive raids in the receiver.
           </p>
         </Card>
       </div>

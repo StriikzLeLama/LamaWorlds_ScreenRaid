@@ -14,12 +14,22 @@ pub enum OverlayType {
     Sound,
 }
 
+/// Entrance animation for a visual overlay.
+///
+/// Serialized as snake_case (`slide_left`, `pop`, …). Existing lowercase
+/// values (`fade`, `zoom`, `bounce`, `none`) stay compatible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum Animation {
     Fade,
     Zoom,
     Bounce,
+    SlideLeft,
+    SlideRight,
+    SlideUp,
+    SlideDown,
+    Shake,
+    Pop,
     None,
 }
 

@@ -9,8 +9,8 @@ use crate::repository::{
     RoomRepository, UserRepository,
 };
 use crate::service::{
-    AuthService, ConsentService, FriendService, MediaService, MonitorService, PrankService,
-    RoomService,
+    AuthService, ConsentService, FriendService, GifService, MediaService, MonitorService,
+    PrankService, RoomService,
 };
 use crate::websocket::WsHub;
 
@@ -23,6 +23,7 @@ pub struct AppState {
     pub friends: Arc<FriendService>,
     pub consent: Arc<ConsentService>,
     pub media: Arc<MediaService>,
+    pub gifs: Arc<GifService>,
     pub pranks: Arc<PrankService>,
     pub monitors: Arc<MonitorService>,
     pub ws_hub: Arc<WsHub>,
@@ -70,6 +71,8 @@ impl AppState {
             config.clone(),
         ));
 
+        let gifs = Arc::new(GifService::new(config.clone(), media.clone()));
+
         let pranks = Arc::new(PrankService::new(
             PrankRepository::new(db.clone()),
             RoomRepository::new(db.clone()),
@@ -94,6 +97,7 @@ impl AppState {
             friends,
             consent,
             media,
+            gifs,
             pranks,
             monitors,
             ws_hub,

@@ -15,6 +15,9 @@ pub struct Config {
     pub allow_self_prank: bool,
     /// Directory with built web UI (`index.html` + assets). Served at `/` when present.
     pub static_path: PathBuf,
+    /// KLIPY partner API key — proxied server-side so the browser never sees it.
+    /// Empty = GIF search disabled (UI shows a setup hint).
+    pub klipy_api_key: String,
 }
 
 impl Config {
@@ -51,11 +54,16 @@ impl Config {
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
                 .unwrap_or(false),
             static_path,
+            klipy_api_key: env::var("KLIPY_API_KEY").unwrap_or_default().trim().to_string(),
         }
     }
 
     pub fn addr(&self) -> String {
         format!("{}:{}", self.host, self.port)
+    }
+
+    pub fn klipy_enabled(&self) -> bool {
+        !self.klipy_api_key.is_empty()
     }
 }
 
