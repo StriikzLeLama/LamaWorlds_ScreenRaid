@@ -1,4 +1,4 @@
-//! Authenticated GIF search / import endpoints (KLIPY-backed).
+//! Authenticated KLIPY search / import endpoints (gifs, stickers, memes).
 
 use axum::{
     extract::{Query, State},
@@ -16,10 +16,17 @@ use crate::state::AppState;
 #[derive(Debug, Deserialize)]
 pub struct GifSearchQuery {
     pub q: Option<String>,
+    /// `gifs` | `stickers` | `memes`
+    #[serde(default = "default_kind")]
+    pub kind: String,
     #[serde(default = "default_page")]
     pub page: u32,
     #[serde(default = "default_per_page")]
     pub per_page: u32,
+}
+
+fn default_kind() -> String {
+    "gifs".into()
 }
 
 fn default_page() -> u32 {
@@ -36,6 +43,7 @@ pub struct ImportGifRequest {
     pub title: Option<String>,
     pub slug: Option<String>,
     pub room_id: Option<Uuid>,
+    pub kind: Option<String>,
 }
 
 pub async fn search_gifs(
@@ -46,7 +54,12 @@ pub async fn search_gifs(
     Ok(Json(
         state
             .gifs
-            .search(query.q.as_deref(), query.page, query.per_page)
+            .search(
+                &query.kind,
+                query.q.as_deref(),
+                query.page,
+                query.per_page,
+            )
             .await?,
     ))
 }
@@ -64,6 +77,7 @@ pub async fn import_gif(
             &body.url,
             body.title.as_deref(),
             body.slug.as_deref(),
+            body.kind.as_deref(),
         )
         .await?;
     Ok((StatusCode::CREATED, Json(media)))

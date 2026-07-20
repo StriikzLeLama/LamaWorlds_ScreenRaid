@@ -84,6 +84,22 @@ pub struct OverlayConfig {
     pub scale: f32,
     pub opacity: f32,
     pub volume: f32,
+    /// Optional entrance SFX: `none` | `pop` | `whoosh`.
+    #[serde(default = "default_sfx")]
+    pub sfx: String,
+    /// Optional text theme (text overlays).
+    #[serde(default)]
+    pub text_color: Option<String>,
+    #[serde(default)]
+    pub bg_color: Option<String>,
+    #[serde(default)]
+    pub accent_color: Option<String>,
+    #[serde(default)]
+    pub font_family: Option<String>,
+}
+
+fn default_sfx() -> String {
+    "none".into()
 }
 
 impl Default for OverlayConfig {
@@ -99,6 +115,11 @@ impl Default for OverlayConfig {
             scale: 1.0,
             opacity: 1.0,
             volume: 0.8,
+            sfx: default_sfx(),
+            text_color: None,
+            bg_color: None,
+            accent_color: None,
+            font_family: None,
         }
     }
 }

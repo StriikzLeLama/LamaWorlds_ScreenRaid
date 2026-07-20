@@ -15,6 +15,15 @@ pub struct AppSettings {
     pub panic_hotkey: String,
     pub server_url: String,
     pub selected_monitor: String,
+    /// Soft mode caps overlay opacity so raids stay subtle.
+    #[serde(default)]
+    pub soft_mode: bool,
+    #[serde(default = "default_max_opacity")]
+    pub max_opacity: f32,
+}
+
+fn default_max_opacity() -> f32 {
+    0.55
 }
 
 impl Default for AppSettings {
@@ -28,6 +37,8 @@ impl Default for AppSettings {
             panic_hotkey: "Ctrl+Shift+Escape".into(),
             server_url: "http://localhost:8080".into(),
             selected_monitor: "primary".into(),
+            soft_mode: false,
+            max_opacity: default_max_opacity(),
         }
     }
 }

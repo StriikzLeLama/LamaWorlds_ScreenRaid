@@ -11,7 +11,7 @@ use super::window::{
     resize_overlay_monitor, show_overlay_surface,
 };
 
-const MAX_ACTIVE_OVERLAYS: usize = 4;
+const MAX_ACTIVE_OVERLAYS: usize = 8;
 pub const MAX_MONITOR_WINDOWS: u32 = 8;
 
 static DISMISS_GEN: AtomicU64 = AtomicU64::new(1);
@@ -38,6 +38,16 @@ pub struct OverlayPayload {
     pub opacity: f32,
     #[serde(default = "default_volume")]
     pub volume: f32,
+    #[serde(default = "default_sfx")]
+    pub sfx: String,
+    #[serde(default)]
+    pub text_color: Option<String>,
+    #[serde(default)]
+    pub bg_color: Option<String>,
+    #[serde(default)]
+    pub accent_color: Option<String>,
+    #[serde(default)]
+    pub font_family: Option<String>,
 }
 
 fn default_pos() -> f32 {
@@ -54,6 +64,10 @@ fn default_opacity() -> f32 {
 
 fn default_volume() -> f32 {
     0.8
+}
+
+fn default_sfx() -> String {
+    "none".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

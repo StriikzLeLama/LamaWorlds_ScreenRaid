@@ -1,7 +1,7 @@
-//! KLIPY GIF search proxy + remote GIF import.
+//! KLIPY content proxy (GIFs / stickers / memes) + remote import.
 //!
-//! Docs: https://docs.klipy.com/gifs-api
-//! Base: `GET https://api.klipy.com/api/v1/{key}/gifs/search?q=...`
+//! Docs: https://docs.klipy.com
+//! Base: `GET https://api.klipy.com/api/v1/{key}/{kind}/search?q=...`
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,7 +17,7 @@ use crate::service::MediaService;
 const KLIPY_BASE: &str = "https://api.klipy.com/api/v1";
 const MAX_IMPORT_BYTES: usize = 15 * 1024 * 1024;
 
-/// Normalized GIF card for the web composer (never leaks the API key).
+/// Normalized card for the web composer (never leaks the API key).
 #[derive(Debug, Clone, Serialize)]
 pub struct GifSearchItem {
     pub id: String,
@@ -27,6 +27,7 @@ pub struct GifSearchItem {
     pub gif_url: String,
     pub width: u32,
     pub height: u32,
+    pub kind: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -37,6 +38,7 @@ pub struct GifSearchResponse {
     pub per_page: u32,
     pub has_next: bool,
     pub attribution: String,
+    pub kind: String,
 }
 
 #[derive(Clone)]
@@ -60,13 +62,15 @@ impl GifService {
         self.config.klipy_enabled()
     }
 
-    /// Search KLIPY (or return trending when `q` is empty).
+    /// Search / trending for `gifs`, `stickers`, or `memes`.
     pub async fn search(
         &self,
+        kind: &str,
         q: Option<&str>,
         page: u32,
         per_page: u32,
     ) -> Result<GifSearchResponse, AppError> {
+        let kind = normalize_kind(kind);
         let page = page.max(1);
         let per_page = per_page.clamp(8, 48);
 
@@ -78,13 +82,14 @@ impl GifService {
                 per_page,
                 has_next: false,
                 attribution: "Powered by KLIPY".into(),
+                kind: kind.to_string(),
             });
         }
 
         let key = &self.config.klipy_api_key;
         let endpoint = match q.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(_) => format!("{KLIPY_BASE}/{key}/gifs/search"),
-            None => format!("{KLIPY_BASE}/{key}/gifs/trending"),
+            Some(_) => format!("{KLIPY_BASE}/{key}/{kind}/search"),
+            None => format!("{KLIPY_BASE}/{key}/{kind}/trending"),
         };
 
         let mut req = self
@@ -103,10 +108,8 @@ impl GifService {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            tracing::warn!(%status, %body, "klipy search failed");
-            return Err(AppError::Internal(format!(
-                "klipy returned {status}"
-            )));
+            tracing::warn!(%status, %body, %kind, "klipy search failed");
+            return Err(AppError::Internal(format!("klipy returned {status}")));
         }
 
         let raw: Value = response
@@ -114,7 +117,11 @@ impl GifService {
             .await
             .map_err(|e| AppError::Internal(format!("klipy json: {e}")))?;
 
-        let (items, has_next) = parse_klipy_page(&raw);
+        let (mut items, has_next) = parse_klipy_page(&raw, kind);
+        for item in &mut items {
+            item.kind = kind.to_string();
+        }
+
         Ok(GifSearchResponse {
             enabled: true,
             items,
@@ -122,10 +129,11 @@ impl GifService {
             per_page,
             has_next,
             attribution: "Powered by KLIPY".into(),
+            kind: kind.to_string(),
         })
     }
 
-    /// Download a remote GIF URL and store it in the user's media library.
+    /// Download a remote media URL and store it in the user's media library.
     pub async fn import_url(
         &self,
         user_id: Uuid,
@@ -133,12 +141,12 @@ impl GifService {
         url: &str,
         title: Option<&str>,
         slug: Option<&str>,
+        kind: Option<&str>,
     ) -> Result<screenraid_types::Media, AppError> {
         let url = url.trim();
         if !(url.starts_with("https://") || url.starts_with("http://")) {
             return Err(AppError::Validation("gif url must be http(s)".into()));
         }
-        // Only allow known KLIPY CDN hosts (avoid SSRF via arbitrary URLs).
         if !is_allowed_gif_host(url) {
             return Err(AppError::Validation(
                 "gif url host not allowed (expected static.klipy.com)".into(),
@@ -171,7 +179,6 @@ impl GifService {
             )));
         }
 
-        // Trust magic bytes — KLIPY URLs may say .gif while serving webp.
         let mime = screenraid_validation::detect_mime_from_bytes(&bytes)
             .unwrap_or("image/gif")
             .to_string();
@@ -202,20 +209,28 @@ impl GifService {
             .upload(user_id, room_id, &name, &mime, &bytes)
             .await?;
 
-        // Best-effort analytics ping so KLIPY can attribute shares.
         if let Some(slug) = slug.map(str::trim).filter(|s| !s.is_empty()) {
             if self.enabled() {
                 let key = self.config.klipy_api_key.clone();
                 let client = self.http.clone();
                 let slug = slug.to_string();
+                let kind = normalize_kind(kind.unwrap_or("gifs")).to_string();
                 tokio::spawn(async move {
-                    let url = format!("{KLIPY_BASE}/{key}/gifs/share/{slug}");
+                    let url = format!("{KLIPY_BASE}/{key}/{kind}/share/{slug}");
                     let _ = client.post(url).send().await;
                 });
             }
         }
 
         Ok(media)
+    }
+}
+
+fn normalize_kind(kind: &str) -> &'static str {
+    match kind.trim().to_ascii_lowercase().as_str() {
+        "sticker" | "stickers" => "stickers",
+        "meme" | "memes" => "memes",
+        _ => "gifs",
     }
 }
 
@@ -244,8 +259,7 @@ struct KlipyRendition {
     height: Option<u32>,
 }
 
-fn parse_klipy_page(raw: &Value) -> (Vec<GifSearchItem>, bool) {
-    // Response shape: { result, data: { data: [...], has_next, ... } }
+fn parse_klipy_page(raw: &Value, kind: &str) -> (Vec<GifSearchItem>, bool) {
     let page = raw.get("data").unwrap_or(raw);
     let list = page
         .get("data")
@@ -259,7 +273,8 @@ fn parse_klipy_page(raw: &Value) -> (Vec<GifSearchItem>, bool) {
 
     let mut items = Vec::with_capacity(list.len());
     for entry in list {
-        if let Some(item) = map_klipy_item(&entry) {
+        if let Some(mut item) = map_klipy_item(&entry) {
+            item.kind = kind.to_string();
             items.push(item);
         }
     }
@@ -278,16 +293,19 @@ fn map_klipy_item(entry: &Value) -> Option<GifSearchItem> {
         .unwrap_or("")
         .to_string();
 
-    // Prefer `file` (official SDK); fall back to `files` if present.
     let file = entry.get("file").or_else(|| entry.get("files"))?;
-
     let preview = pick_rendition(file, &["sm", "xs", "md", "hd"]);
     let full = pick_rendition(file, &["md", "hd", "sm", "xs"]);
 
     let preview_url = preview
         .as_ref()
         .and_then(|r| r.url.clone())
-        .or_else(|| entry.get("blur_preview").and_then(|v| v.as_str()).map(str::to_string))?;
+        .or_else(|| {
+            entry
+                .get("blur_preview")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })?;
     let gif_url = full
         .as_ref()
         .and_then(|r| r.url.clone())
@@ -301,14 +319,14 @@ fn map_klipy_item(entry: &Value) -> Option<GifSearchItem> {
         gif_url,
         width: full.as_ref().and_then(|r| r.width).unwrap_or(0),
         height: full.as_ref().and_then(|r| r.height).unwrap_or(0),
+        kind: "gifs".into(),
     })
 }
 
 fn pick_rendition(file: &Value, sizes: &[&str]) -> Option<KlipyRendition> {
     for size in sizes {
         let bucket = file.get(size)?;
-        // Prefer animated gif, then webp.
-        for fmt in ["gif", "webp"] {
+        for fmt in ["gif", "webp", "png"] {
             if let Some(r) = bucket.get(fmt) {
                 let parsed: KlipyRendition = serde_json::from_value(r.clone()).ok()?;
                 if parsed.url.as_ref().is_some_and(|u| !u.is_empty()) {

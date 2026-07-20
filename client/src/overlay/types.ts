@@ -13,6 +13,11 @@ export interface OverlayShowPayload {
   scale: number;
   opacity: number;
   volume: number;
+  sfx?: string;
+  text_color?: string | null;
+  bg_color?: string | null;
+  accent_color?: string | null;
+  font_family?: string | null;
 }
 
 export interface ActiveOverlay extends OverlayShowPayload {

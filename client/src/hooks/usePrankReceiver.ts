@@ -5,6 +5,7 @@ import { useConsentStore } from '../stores/consentStore';
 import { enforceCacheLimit, resolveMediaForPrank } from '../services/mediaCache';
 import { ackPrank, type PrankIncomingPayload } from '../services/pranks';
 import { onWsMessage } from '../services/websocket';
+import { playEntranceSfx } from '../lib/sfx';
 import { log } from '../lib/log';
 
 async function playSoundPrank(
@@ -92,6 +93,26 @@ export function usePrankReceiver() {
           return;
         }
 
+        // Soft mode: cap opacity from receiver settings.
+        let opacity = prank.config.opacity ?? 1;
+        try {
+          const settings = await invoke<{
+            soft_mode?: boolean;
+            max_opacity?: number;
+          }>('get_settings');
+          if (settings.soft_mode) {
+            const cap = settings.max_opacity ?? 0.55;
+            opacity = Math.min(opacity, cap);
+          }
+        } catch {
+          // settings optional
+        }
+
+        const sfx = prank.config.sfx ?? 'none';
+        if (sfx && sfx !== 'none') {
+          playEntranceSfx(sfx, prank.config.volume ?? 0.35);
+        }
+
         log.info('prank invoking show_overlay', prank.prank_id);
         await invoke('show_overlay', {
           payload: {
@@ -107,8 +128,13 @@ export function usePrankReceiver() {
             position_y: prank.config.position.y,
             monitor_index: prank.config.position.monitor_index ?? 0,
             scale: prank.config.scale,
-            opacity: prank.config.opacity,
+            opacity,
             volume: prank.config.volume,
+            sfx,
+            text_color: prank.config.text_color ?? null,
+            bg_color: prank.config.bg_color ?? null,
+            accent_color: prank.config.accent_color ?? null,
+            font_family: prank.config.font_family ?? null,
           },
         });
         log.info('prank show_overlay ok', prank.prank_id);

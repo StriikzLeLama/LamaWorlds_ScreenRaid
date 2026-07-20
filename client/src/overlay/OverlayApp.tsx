@@ -4,9 +4,10 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { OverlayCanvas } from './components/OverlayCanvas';
 import { log } from '../lib/log';
+import { playEntranceSfx } from '../lib/sfx';
 import type { ActiveOverlay, OverlayShowPayload } from './types';
 
-const MAX_STACK = 4;
+const MAX_STACK = 8;
 
 function exitDurationMs(): number {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 50 : 350;
@@ -55,6 +56,9 @@ export function OverlayApp() {
 
     const onShow = (payload: OverlayShowPayload) => {
       log.info('overlay:show received', payload.id, payload.overlay_type);
+      if (payload.sfx && payload.sfx !== 'none') {
+        playEntranceSfx(payload.sfx, payload.volume ?? 0.35);
+      }
       setOverlays((prev) => {
         const next = prev.filter((o) => o.id !== payload.id);
         const item: ActiveOverlay = { ...payload, visible: true, exiting: false };

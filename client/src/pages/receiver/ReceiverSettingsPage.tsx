@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { Card, Button, Input } from '../../components/ui';
+import { Card, Button, Input, Toggle } from '../../components/ui';
 import { ReceiveRaidsToggle } from '../../components/ReceiveRaidsToggle';
 import { checkServerHealth } from '../../services/api';
 import { clearMediaCache } from '../../services/mediaCache';
@@ -22,6 +22,8 @@ interface AppSettings {
   panic_hotkey: string;
   server_url: string;
   selected_monitor: string;
+  soft_mode: boolean;
+  max_opacity: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -33,6 +35,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   panic_hotkey: 'Ctrl+Shift+Escape',
   server_url: getServerUrl(),
   selected_monitor: 'primary',
+  soft_mode: false,
+  max_opacity: 0.55,
 };
 
 /** Tauri receiver — server URL, cache, autostart, overlay defaults. */
@@ -66,7 +70,7 @@ export function ReceiverSettingsPage() {
       .then((s) => {
         log.info('ReceiverSettingsPage: get_settings ok', s);
         if (!cancelled) {
-          setSettings(s);
+          setSettings({ ...DEFAULT_SETTINGS, ...s });
           setLoadError('');
         }
       })
@@ -168,6 +172,30 @@ export function ReceiverSettingsPage() {
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">Raids</h2>
           <ReceiveRaidsToggle />
+          <div className="mt-4 space-y-3 border-t border-raid-border pt-4">
+            <Toggle
+              checked={settings.soft_mode}
+              onChange={(v) => setSettings({ ...settings, soft_mode: v })}
+              label="Mode soft"
+              description="Plafonne l’opacité des overlays pour des raids plus discrets."
+            />
+            {settings.soft_mode && (
+              <Input
+                label={`Opacité max (${Math.round(settings.max_opacity * 100)}%)`}
+                type="number"
+                min={0.2}
+                max={1}
+                step={0.05}
+                value={settings.max_opacity}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    max_opacity: Math.min(1, Math.max(0.2, Number(e.target.value))),
+                  })
+                }
+              />
+            )}
+          </div>
         </Card>
 
         <Card>

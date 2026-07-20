@@ -41,6 +41,11 @@ export interface OverlayConfig {
   scale: number;
   opacity: number;
   volume: number;
+  sfx?: 'none' | 'pop' | 'whoosh';
+  text_color?: string | null;
+  bg_color?: string | null;
+  accent_color?: string | null;
+  font_family?: string | null;
 }
 
 export interface SendPrankRequest {
@@ -130,4 +135,9 @@ export const defaultOverlayConfig = (): OverlayConfig => ({
   scale: 1.0,
   opacity: 1.0,
   volume: 0.8,
+  sfx: 'none',
+  text_color: null,
+  bg_color: null,
+  accent_color: null,
+  font_family: null,
 });

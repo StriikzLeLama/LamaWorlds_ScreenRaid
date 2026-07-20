@@ -19,6 +19,7 @@ export function ReceiverHomePage() {
   const { globalConsent, isPaused, grant, resume, pause } = useConsentStore();
   const [webUrl, setWebUrl] = useState(getServerUrl());
   const [statusMsg, setStatusMsg] = useState('');
+  const [queueCount, setQueueCount] = useState(0);
   const inTauri = isTauriRuntime();
   const receiving = globalConsent && !isPaused;
 
@@ -32,6 +33,25 @@ export function ReceiverHomePage() {
       serverUrl: getServerUrl(),
     });
   }, []);
+
+  // Poll active overlay queue (stacked raids on screen).
+  useEffect(() => {
+    if (!inTauri) return;
+    let cancelled = false;
+    const tick = () => {
+      void invoke<{ id: string }[]>('get_active_overlays')
+        .then((list) => {
+          if (!cancelled) setQueueCount(list.length);
+        })
+        .catch(() => undefined);
+    };
+    tick();
+    const id = window.setInterval(tick, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [inTauri]);
 
   const handlePanic = async () => {
     setStatusMsg('');
@@ -126,6 +146,19 @@ export function ReceiverHomePage() {
               Check server URL in Settings, then sign out and sign in again.
             </p>
           )}
+        </Card>
+
+        <Card>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm text-raid-text-secondary">Queue overlays</p>
+              <p className="mt-1 text-lg font-semibold text-raid-text">
+                {queueCount} actif{queueCount === 1 ? '' : 's'}
+              </p>
+              <p className="mt-1 text-xs text-raid-text-muted">Max 8 empilés à l’écran</p>
+            </div>
+            <Activity className="text-raid-accent" size={24} />
+          </div>
         </Card>
 
         <Card>

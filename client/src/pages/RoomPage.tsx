@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Copy, LogOut, Send, Trash2, Users } from 'lucide-react';
 import { Card, Button, Badge, Input } from '../components/ui';
-import { GifPicker } from '../components/GifPicker';
+import { GifSelector } from '../components/GifSelector';
+import { AnimationPreview } from '../components/AnimationPreview';
 import { ApiError } from '../services/api';
-import { listMedia, type Media } from '../services/media';
+import { listMedia, mediaFileUrl, type Media } from '../services/media';
 import {
   ANIMATION_OPTIONS,
   defaultOverlayConfig,
   listPrankHistory,
   sendPrank,
   type Animation,
+  type OverlayConfig,
   type OverlayType,
   type PrankHistoryItem,
 } from '../services/pranks';
@@ -18,6 +20,7 @@ import { deleteRoom, getRoom, leaveRoom } from '../services/rooms';
 import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
+import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { useWsConnection } from '../hooks/useWsConnection';
@@ -25,6 +28,48 @@ import type { RoomDetail, RoomMember } from '../types/room';
 import type { MediaType } from '../types';
 
 const OVERLAY_TYPES: OverlayType[] = ['text', 'image', 'gif', 'video', 'sound'];
+
+type SfxOption = NonNullable<OverlayConfig['sfx']>;
+
+const SFX_OPTIONS: { value: SfxOption; label: string }[] = [
+  { value: 'none', label: 'Aucun' },
+  { value: 'pop', label: 'Pop' },
+  { value: 'whoosh', label: 'Whoosh' },
+];
+
+const TEXT_COLOR_PRESETS = [
+  { value: '#f5f5f5', label: 'Blanc' },
+  { value: '#ffffff', label: 'Blanc pur' },
+  { value: '#f97316', label: 'Orange' },
+  { value: '#22c55e', label: 'Vert' },
+  { value: '#ef4444', label: 'Rouge' },
+  { value: '#38bdf8', label: 'Cyan' },
+];
+
+const BG_COLOR_PRESETS = [
+  { value: 'rgba(20,20,22,0.94)', label: 'Sombre' },
+  { value: 'rgba(0,0,0,0.85)', label: 'Noir' },
+  { value: 'rgba(249,115,22,0.92)', label: 'Orange' },
+  { value: 'rgba(30,58,138,0.92)', label: 'Bleu' },
+  { value: 'rgba(22,101,52,0.92)', label: 'Vert' },
+];
+
+const ACCENT_COLOR_PRESETS = [
+  { value: '#f97316', label: 'Orange' },
+  { value: '#eab308', label: 'Jaune' },
+  { value: '#22c55e', label: 'Vert' },
+  { value: '#38bdf8', label: 'Cyan' },
+  { value: '#a855f7', label: 'Violet' },
+  { value: '#ef4444', label: 'Rouge' },
+];
+
+const FONT_FAMILY_PRESETS = [
+  { value: 'system-ui, sans-serif', label: 'Système' },
+  { value: 'Georgia, serif', label: 'Serif' },
+  { value: 'ui-monospace, monospace', label: 'Mono' },
+  { value: '"Segoe UI", sans-serif', label: 'Segoe' },
+  { value: 'Impact, sans-serif', label: 'Impact' },
+];
 
 function mediaForOverlay(type: OverlayType, items: Media[]): Media[] {
   const map: Partial<Record<OverlayType, MediaType>> = {
@@ -50,6 +95,19 @@ function previewLabel(type: OverlayType): string {
   return 'IMG';
 }
 
+function randomBombCoord(): number {
+  return 0.2 + Math.random() * 0.6;
+}
+
+function countByStatus(history: PrankHistoryItem[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of history) {
+    const key = item.status || 'unknown';
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
 export function RoomPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -62,6 +120,7 @@ export function RoomPage() {
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
   const [history, setHistory] = useState<PrankHistoryItem[]>([]);
   const [sending, setSending] = useState(false);
+  const [gifSelectorOpen, setGifSelectorOpen] = useState(false);
 
   // Composer state — kept local so sending one room doesn't affect another.
   const [overlayType, setOverlayType] = useState<OverlayType>('text');
@@ -71,6 +130,13 @@ export function RoomPage() {
   const [durationMs, setDurationMs] = useState(5000);
   const [animation, setAnimation] = useState<Animation>('fade');
   const [volume, setVolume] = useState(0.8);
+  const [sfx, setSfx] = useState<SfxOption>('none');
+  const [opacity, setOpacity] = useState(1);
+  const [raidBomb, setRaidBomb] = useState(false);
+  const [textColor, setTextColor] = useState(TEXT_COLOR_PRESETS[0].value);
+  const [bgColor, setBgColor] = useState(BG_COLOR_PRESETS[0].value);
+  const [accentColor, setAccentColor] = useState(ACCENT_COLOR_PRESETS[0].value);
+  const [fontFamily, setFontFamily] = useState(FONT_FAMILY_PRESETS[0].value);
   const [placement, setPlacement] = useState<PlacementPosition>({
     monitor_index: 0,
     x: 0.5,
@@ -167,45 +233,100 @@ export function RoomPage() {
     }
   };
 
+  const buildConfig = (pos?: { x: number; y: number }): OverlayConfig => {
+    const config = defaultOverlayConfig();
+    config.animation = animation;
+    config.volume = volume;
+    config.opacity = opacity;
+    config.sfx = sfx;
+    config.text_color = textColor;
+    config.bg_color = bgColor;
+    config.accent_color = accentColor;
+    config.font_family = fontFamily;
+    config.position = {
+      monitor_index: placement.monitor_index,
+      x: pos?.x ?? placement.x,
+      y: pos?.y ?? placement.y,
+      preset: 'exact',
+    };
+    return config;
+  };
+
+  const buildRequest = (pos?: { x: number; y: number }) => ({
+    target_id: targetId || null,
+    media_id: overlayType === 'text' ? null : mediaId || null,
+    overlay_type: overlayType,
+    text_content: overlayType === 'text' ? textContent : null,
+    duration_ms: durationMs,
+    config: buildConfig(pos),
+  });
+
+  const handleSendError = (e: unknown) => {
+    const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Send failed';
+    if (msg.toLowerCase().includes('cannot prank yourself')) {
+      setError(
+        'Cannot prank yourself while others are in the room. Pick another target, or set ALLOW_SELF_PRANK=true on the server.',
+      );
+    } else if (msg.toLowerCase().includes('no valid targets')) {
+      setError('No valid targets. In a solo room, use Yourself or Everyone in room.');
+    } else {
+      setError(msg);
+    }
+  };
+
   const handleSend = async () => {
     if (!id) return;
     setSending(true);
     setError('');
     try {
-      const config = defaultOverlayConfig();
-      config.animation = animation;
-      config.volume = volume;
-      config.position = {
-        monitor_index: placement.monitor_index,
-        x: placement.x,
-        y: placement.y,
-        preset: 'exact',
-      };
-      await sendPrank(id, {
-        target_id: targetId || null,
-        media_id: overlayType === 'text' ? null : mediaId || null,
-        overlay_type: overlayType,
-        text_content: overlayType === 'text' ? textContent : null,
-        duration_ms: durationMs,
-        config,
-      });
+      if (raidBomb) {
+        // Five independent pranks → five server ids, random placements in the soft zone.
+        const shots = Array.from({ length: 5 }, () =>
+          sendPrank(id, buildRequest({ x: randomBombCoord(), y: randomBombCoord() })),
+        );
+        const results = await Promise.allSettled(shots);
+        const failed = results.find((r) => r.status === 'rejected');
+        if (failed && failed.status === 'rejected') {
+          handleSendError(failed.reason);
+        }
+      } else {
+        await sendPrank(id, buildRequest());
+      }
       setTextContent('');
       listPrankHistory(id).then(setHistory).catch(() => undefined);
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : 'Send failed';
-      if (msg.toLowerCase().includes('cannot prank yourself')) {
-        setError(
-          'Cannot prank yourself while others are in the room. Pick another target, or set ALLOW_SELF_PRANK=true on the server.',
-        );
-      } else if (msg.toLowerCase().includes('no valid targets')) {
-        setError('No valid targets. In a solo room, use Yourself or Everyone in room.');
-      } else {
-        setError(msg);
-      }
+      handleSendError(e);
     } finally {
       setSending(false);
     }
   };
+
+  const applyPack = (pack: RaidPack) => {
+    setOverlayType(pack.overlayType);
+    setAnimation(pack.animation);
+    setDurationMs(pack.durationMs);
+    setSfx(pack.sfx);
+    setRaidBomb(Boolean(pack.bomb));
+    if (pack.text) setTextContent(pack.text);
+    if (pack.overlayType !== 'text' && pack.overlayType !== 'gif' && pack.overlayType !== 'image') {
+      setMediaId('');
+    }
+    if (pack.needsGif) {
+      setGifSelectorOpen(true);
+    }
+  };
+
+  const statusCounts = countByStatus(history);
+  const selectedMedia = mediaItems.find((m) => m.id === mediaId) ?? null;
+  const selectableMedia = mediaForOverlay(overlayType, mediaItems);
+  const needsMedia = overlayType !== 'text';
+  const isSoundOnly = overlayType === 'sound';
+  const showPlacement = Boolean(targetId) && !isSoundOnly;
+  const showGifSelector = overlayType === 'gif' || overlayType === 'image';
+  const previewText =
+    overlayType === 'text'
+      ? textContent.trim() || 'Aperçu'
+      : selectedMedia?.original_name || previewLabel(overlayType);
 
   if (!room) {
     return <Card><p className="text-sm text-raid-text-secondary">{error || 'Loading room…'}</p></Card>;
@@ -216,10 +337,6 @@ export function RoomPage() {
   const canSend = myRole !== 'guest';
   const otherMembers = room.members.filter((m) => m.user_id !== currentUserId);
   const isSoloRoom = room.members.length === 1;
-  const selectableMedia = mediaForOverlay(overlayType, mediaItems);
-  const needsMedia = overlayType !== 'text';
-  const isSoundOnly = overlayType === 'sound';
-  const showPlacement = Boolean(targetId) && !isSoundOnly;
 
   return (
     <div className="space-y-6">
@@ -289,6 +406,7 @@ export function RoomPage() {
                   <strong>Everyone</strong>). Enable Receive raids first.
                 </p>
               )}
+
               <div>
                 <label className="mb-1 block text-xs text-raid-text-secondary">Target</label>
                 <select
@@ -306,6 +424,26 @@ export function RoomPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-medium text-raid-text-secondary">Packs</p>
+                <div className="flex flex-wrap gap-2">
+                  {RAID_PACKS.map((pack) => (
+                    <Button
+                      key={pack.id}
+                      variant="secondary"
+                      className="!h-auto flex-col items-start gap-0.5 !px-3 !py-2 text-left"
+                      onClick={() => applyPack(pack)}
+                      title={pack.description}
+                    >
+                      <span className="text-sm font-medium">{pack.label}</span>
+                      <span className="text-[10px] font-normal text-raid-text-secondary">
+                        {pack.description}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -332,23 +470,34 @@ export function RoomPage() {
                 />
               ) : (
                 <div className="space-y-3">
-                  {overlayType === 'gif' && (
-                    <GifPicker
-                      roomId={id}
-                      selectedMediaId={mediaId}
-                      onPicked={(media) => {
-                        setMediaItems((prev) =>
-                          prev.some((m) => m.id === media.id) ? prev : [media, ...prev],
-                        );
-                        setMediaId(media.id);
-                        refreshMedia();
-                      }}
-                    />
+                  {showGifSelector && (
+                    <div className="space-y-2">
+                      <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
+                        Ouvrir le sélecteur GIF
+                      </Button>
+                      {selectedMedia && (
+                        <div className="flex items-center gap-3 rounded-xl border border-raid-border bg-raid-bg/60 p-2">
+                          <img
+                            src={mediaFileUrl(selectedMedia)}
+                            alt={selectedMedia.original_name}
+                            className="h-14 w-14 rounded-lg object-cover"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm text-raid-text">
+                              {selectedMedia.original_name}
+                            </p>
+                            <p className="text-xs text-raid-text-secondary">
+                              {selectedMedia.media_type}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   <div>
                     <label className="mb-1 block text-xs text-raid-text-secondary">
-                      {overlayType === 'gif' ? 'Or pick from library' : 'Media'}
+                      {showGifSelector ? 'Ou choisir dans la bibliothèque' : 'Media'}
                     </label>
                     <select
                       className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
@@ -362,7 +511,7 @@ export function RoomPage() {
                         </option>
                       ))}
                     </select>
-                    {selectableMedia.length === 0 && overlayType !== 'gif' && (
+                    {selectableMedia.length === 0 && !showGifSelector && (
                       <p className="mt-1 text-xs text-raid-text-secondary">
                         Upload {overlayType} media in the Media library first.
                       </p>
@@ -371,21 +520,111 @@ export function RoomPage() {
                 </div>
               )}
 
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">Animation</label>
+                  <select
+                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                    value={animation}
+                    onChange={(e) => setAnimation(e.target.value as Animation)}
+                    disabled={isSoundOnly}
+                  >
+                    {ANIMATION_OPTIONS.map((a) => (
+                      <option key={a.value} value={a.value}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {!isSoundOnly && (
+                  <AnimationPreview
+                    animation={animation}
+                    label={previewText}
+                    textColor={textColor}
+                    bgColor={bgColor}
+                    accentColor={accentColor}
+                  />
+                )}
+              </div>
+
               <div>
-                <label className="mb-1 block text-xs text-raid-text-secondary">Animation</label>
+                <label className="mb-1 block text-xs text-raid-text-secondary">SFX</label>
                 <select
                   className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                  value={animation}
-                  onChange={(e) => setAnimation(e.target.value as Animation)}
-                  disabled={isSoundOnly}
+                  value={sfx}
+                  onChange={(e) => setSfx(e.target.value as SfxOption)}
                 >
-                  {ANIMATION_OPTIONS.map((a) => (
-                    <option key={a.value} value={a.value}>
-                      {a.label}
+                  {SFX_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {overlayType === 'text' && (
+                <div className="space-y-3 rounded-xl border border-raid-border bg-raid-bg/40 p-3">
+                  <p className="text-xs font-medium text-raid-text-secondary">Thème texte</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-raid-text-secondary">Couleur texte</label>
+                      <select
+                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                        value={textColor}
+                        onChange={(e) => setTextColor(e.target.value)}
+                      >
+                        {TEXT_COLOR_PRESETS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-raid-text-secondary">Fond</label>
+                      <select
+                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                        value={bgColor}
+                        onChange={(e) => setBgColor(e.target.value)}
+                      >
+                        {BG_COLOR_PRESETS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-raid-text-secondary">Accent</label>
+                      <select
+                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                        value={accentColor}
+                        onChange={(e) => setAccentColor(e.target.value)}
+                      >
+                        {ACCENT_COLOR_PRESETS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-raid-text-secondary">Police</label>
+                      <select
+                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                        value={fontFamily}
+                        onChange={(e) => setFontFamily(e.target.value)}
+                      >
+                        {FONT_FAMILY_PRESETS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {(overlayType === 'sound' || overlayType === 'video') && (
                 <div>
@@ -399,6 +638,23 @@ export function RoomPage() {
                     step={0.05}
                     value={volume}
                     onChange={(e) => setVolume(Number(e.target.value))}
+                    className="w-full accent-raid-accent"
+                  />
+                </div>
+              )}
+
+              {!isSoundOnly && (
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">
+                    Soft (opacité): {Math.round(opacity * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0.3}
+                    max={1}
+                    step={0.05}
+                    value={opacity}
+                    onChange={(e) => setOpacity(Number(e.target.value))}
                     className="w-full accent-raid-accent"
                   />
                 </div>
@@ -419,6 +675,19 @@ export function RoomPage() {
                 />
               </div>
 
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-raid-text">
+                <input
+                  type="checkbox"
+                  checked={raidBomb}
+                  onChange={(e) => setRaidBomb(e.target.checked)}
+                  className="accent-raid-accent"
+                />
+                Raid bomb
+                <span className="text-xs text-raid-text-secondary">
+                  (5 pranks, positions aléatoires)
+                </span>
+              </label>
+
               {showPlacement && (
                 <div>
                   <label className="mb-2 block text-xs font-medium text-raid-text-secondary">
@@ -430,6 +699,12 @@ export function RoomPage() {
                     onChange={setPlacement}
                     previewLabel={previewLabel(overlayType)}
                   />
+                  {raidBomb && (
+                    <p className="mt-1 text-xs text-raid-text-secondary">
+                      En mode bomb, les positions sont aléatoires (0.2–0.8) ; le placement ci-dessus
+                      sert de référence pour le moniteur.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -449,7 +724,7 @@ export function RoomPage() {
                 onClick={() => void handleSend()}
               >
                 <Send size={16} />
-                {sending ? 'Sending…' : 'Send prank'}
+                {sending ? 'Sending…' : raidBomb ? 'Envoyer bomb (×5)' : 'Send prank'}
               </Button>
             </div>
           )}
@@ -458,13 +733,24 @@ export function RoomPage() {
 
       {history.length > 0 && (
         <Card>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Prank history</h2>
+          <h2 className="mb-3 text-lg font-semibold text-raid-text">Prank history</h2>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {Object.entries(statusCounts).map(([status, count]) => (
+              <Badge key={status} variant={status === 'blocked' ? 'danger' : 'neutral'}>
+                {status}: {count}
+              </Badge>
+            ))}
+            <span className="self-center text-xs text-raid-text-secondary">
+              Total {history.length}
+            </span>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="text-raid-text-secondary">
                   <th className="pb-2 pr-4">Type</th>
                   <th className="pb-2 pr-4">Status</th>
+                  <th className="pb-2 pr-4">Target</th>
                   <th className="pb-2">Time</th>
                 </tr>
               </thead>
@@ -474,6 +760,12 @@ export function RoomPage() {
                     <td className="py-2 pr-4 capitalize text-raid-text">{h.overlay_type}</td>
                     <td className="py-2 pr-4">
                       <Badge>{h.status}</Badge>
+                    </td>
+                    <td className="py-2 pr-4 text-raid-text-secondary">
+                      {h.target_id
+                        ? room.members.find((m) => m.user_id === h.target_id)?.display_name ??
+                          h.target_id.slice(0, 8)
+                        : 'Everyone'}
                     </td>
                     <td className="py-2 text-raid-text-secondary">
                       {new Date(h.created_at).toLocaleString()}
@@ -485,6 +777,20 @@ export function RoomPage() {
           </div>
         </Card>
       )}
+
+      <GifSelector
+        open={gifSelectorOpen}
+        onClose={() => setGifSelectorOpen(false)}
+        roomId={id}
+        onPicked={(media) => {
+          setMediaItems((prev) =>
+            prev.some((m) => m.id === media.id) ? prev : [media, ...prev],
+          );
+          setMediaId(media.id);
+          setOverlayType('gif');
+          refreshMedia();
+        }}
+      />
     </div>
   );
 }

@@ -13,6 +13,11 @@ export function TextOverlay({ overlay }: Props) {
 
   if (!overlay.text) return null;
 
+  const textColor = overlay.text_color || '#f5f5f5';
+  const bgColor = overlay.bg_color || 'rgba(20, 20, 22, 0.94)';
+  const accent = overlay.accent_color || '#f97316';
+  const font = overlay.font_family || 'inherit';
+
   return (
     <div className={animClass}>
       <div
@@ -20,18 +25,19 @@ export function TextOverlay({ overlay }: Props) {
         style={{
           transform: `scale3d(${overlay.scale}, ${overlay.scale}, 1)`,
           opacity: overlay.opacity,
-          background: 'rgba(20, 20, 22, 0.94)',
-          border: '2px solid #f97316',
+          background: bgColor,
+          border: `2px solid ${accent}`,
           boxShadow: '0 12px 40px rgba(0,0,0,0.55)',
+          fontFamily: font,
         }}
       >
         <p
           className="text-xs font-medium uppercase tracking-wide"
-          style={{ color: '#f97316' }}
+          style={{ color: accent }}
         >
           {overlay.sender_name}
         </p>
-        <p className="mt-2 text-3xl font-bold" style={{ color: '#f5f5f5' }}>
+        <p className="mt-2 text-3xl font-bold" style={{ color: textColor }}>
           {overlay.text}
         </p>
       </div>
