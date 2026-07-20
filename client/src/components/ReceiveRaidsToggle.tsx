@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Toggle } from './ui';
+import { unlockAudio } from '../lib/sfx';
 import { useConsentStore } from '../stores/consentStore';
 
 interface Props {
@@ -26,6 +27,7 @@ export function ReceiveRaidsToggle({ className = '', compact = false }: Props) {
     setError('');
     try {
       if (next) {
+        void unlockAudio();
         if (!globalConsent) await grant();
         if (isPaused) await resume();
       } else {

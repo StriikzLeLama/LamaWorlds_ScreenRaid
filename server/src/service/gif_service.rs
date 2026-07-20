@@ -82,7 +82,7 @@ impl GifService {
                 per_page,
                 has_next: false,
                 attribution: "Powered by KLIPY".into(),
-                kind: kind.to_string(),
+                kind: public_kind(kind),
             });
         }
 
@@ -118,8 +118,9 @@ impl GifService {
             .map_err(|e| AppError::Internal(format!("klipy json: {e}")))?;
 
         let (mut items, has_next) = parse_klipy_page(&raw, kind);
+        let pub_kind = public_kind(kind);
         for item in &mut items {
-            item.kind = kind.to_string();
+            item.kind = pub_kind.clone();
         }
 
         Ok(GifSearchResponse {
@@ -129,7 +130,7 @@ impl GifService {
             per_page,
             has_next,
             attribution: "Powered by KLIPY".into(),
-            kind: kind.to_string(),
+            kind: pub_kind,
         })
     }
 
@@ -226,11 +227,21 @@ impl GifService {
     }
 }
 
+/// KLIPY URL path segment (`gifs` | `stickers` | `static-memes`).
 fn normalize_kind(kind: &str) -> &'static str {
     match kind.trim().to_ascii_lowercase().as_str() {
         "sticker" | "stickers" => "stickers",
-        "meme" | "memes" => "memes",
+        // KLIPY uses `/static-memes/*`, not `/memes/*` (404).
+        "meme" | "memes" | "static-memes" | "static_memes" => "static-memes",
         _ => "gifs",
+    }
+}
+
+/// Value returned to clients (`memes` not `static-memes`).
+fn public_kind(api_kind: &str) -> String {
+    match api_kind {
+        "static-memes" => "memes".into(),
+        other => other.to_string(),
     }
 }
 
@@ -271,17 +282,18 @@ fn parse_klipy_page(raw: &Value, kind: &str) -> (Vec<GifSearchItem>, bool) {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let pub_kind = public_kind(kind);
     let mut items = Vec::with_capacity(list.len());
     for entry in list {
-        if let Some(mut item) = map_klipy_item(&entry) {
-            item.kind = kind.to_string();
+        if let Some(mut item) = map_klipy_item(&entry, kind) {
+            item.kind = pub_kind.clone();
             items.push(item);
         }
     }
     (items, has_next)
 }
 
-fn map_klipy_item(entry: &Value) -> Option<GifSearchItem> {
+fn map_klipy_item(entry: &Value, kind: &str) -> Option<GifSearchItem> {
     let slug = entry.get("slug")?.as_str()?.to_string();
     let id = entry
         .get("id")
@@ -293,9 +305,16 @@ fn map_klipy_item(entry: &Value) -> Option<GifSearchItem> {
         .unwrap_or("")
         .to_string();
 
+    // Stickers/memes prefer transparency-friendly formats first.
+    let formats: &[&str] = if kind == "stickers" || kind == "static-memes" {
+        &["webp", "png", "gif", "jpg"]
+    } else {
+        &["gif", "webp", "png", "jpg"]
+    };
+
     let file = entry.get("file").or_else(|| entry.get("files"))?;
-    let preview = pick_rendition(file, &["sm", "xs", "md", "hd"]);
-    let full = pick_rendition(file, &["md", "hd", "sm", "xs"]);
+    let preview = pick_rendition(file, &["sm", "xs", "md", "hd"], formats);
+    let full = pick_rendition(file, &["md", "hd", "sm", "xs"], formats);
 
     let preview_url = preview
         .as_ref()
@@ -319,16 +338,20 @@ fn map_klipy_item(entry: &Value) -> Option<GifSearchItem> {
         gif_url,
         width: full.as_ref().and_then(|r| r.width).unwrap_or(0),
         height: full.as_ref().and_then(|r| r.height).unwrap_or(0),
-        kind: "gifs".into(),
+        kind: public_kind(kind),
     })
 }
 
-fn pick_rendition(file: &Value, sizes: &[&str]) -> Option<KlipyRendition> {
+fn pick_rendition(file: &Value, sizes: &[&str], formats: &[&str]) -> Option<KlipyRendition> {
     for size in sizes {
-        let bucket = file.get(size)?;
-        for fmt in ["gif", "webp", "png"] {
-            if let Some(r) = bucket.get(fmt) {
-                let parsed: KlipyRendition = serde_json::from_value(r.clone()).ok()?;
+        let Some(bucket) = file.get(*size) else {
+            continue;
+        };
+        for fmt in formats {
+            if let Some(r) = bucket.get(*fmt) {
+                let Ok(parsed) = serde_json::from_value::<KlipyRendition>(r.clone()) else {
+                    continue;
+                };
                 if parsed.url.as_ref().is_some_and(|u| !u.is_empty()) {
                     return Some(parsed);
                 }

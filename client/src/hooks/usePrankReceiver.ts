@@ -5,7 +5,7 @@ import { useConsentStore } from '../stores/consentStore';
 import { enforceCacheLimit, resolveMediaForPrank } from '../services/mediaCache';
 import { ackPrank, type PrankIncomingPayload } from '../services/pranks';
 import { onWsMessage } from '../services/websocket';
-import { playEntranceSfx } from '../lib/sfx';
+import { unlockAudio } from '../lib/sfx';
 import { log } from '../lib/log';
 
 async function playSoundPrank(
@@ -108,10 +108,8 @@ export function usePrankReceiver() {
           // settings optional
         }
 
-        const sfx = prank.config.sfx ?? 'none';
-        if (sfx && sfx !== 'none') {
-          playEntranceSfx(sfx, prank.config.volume ?? 0.35);
-        }
+        // Unlock audio on receive path (user may have toggled Receive earlier).
+        void unlockAudio();
 
         log.info('prank invoking show_overlay', prank.prank_id);
         await invoke('show_overlay', {
@@ -130,7 +128,7 @@ export function usePrankReceiver() {
             scale: prank.config.scale,
             opacity,
             volume: prank.config.volume,
-            sfx,
+            sfx: prank.config.sfx ?? 'none',
             text_color: prank.config.text_color ?? null,
             bg_color: prank.config.bg_color ?? null,
             accent_color: prank.config.accent_color ?? null,

@@ -109,20 +109,22 @@ impl OverlayManager {
     }
 
     fn payloads_for_monitor(&self, monitor_index: u32) -> Vec<OverlayPayload> {
-        self.payloads
-            .lock()
-            .map(|map| {
-                self.overlays
-                    .lock()
-                    .map(|list| {
-                        list.iter()
-                            .filter(|o| o.monitor_index == monitor_index)
-                            .filter_map(|o| map.get(&o.id).cloned())
-                            .collect()
-                    })
-                    .unwrap_or_default()
-            })
-            .unwrap_or_default()
+        // Lock order: overlays → payloads (must match show_overlay eviction path).
+        let ids: Vec<String> = match self.overlays.lock() {
+            Ok(list) => list
+                .iter()
+                .filter(|o| o.monitor_index == monitor_index)
+                .map(|o| o.id.clone())
+                .collect(),
+            Err(_) => return Vec::new(),
+        };
+        match self.payloads.lock() {
+            Ok(map) => ids
+                .into_iter()
+                .filter_map(|id| map.get(&id).cloned())
+                .collect(),
+            Err(_) => Vec::new(),
+        }
     }
 
     fn bump_dismiss_generation(&self, id: &str) -> u64 {
@@ -217,12 +219,13 @@ pub fn show_overlay(
     {
         let mut overlays = manager.overlays.lock().map_err(|e| e.to_string())?;
         overlays.retain(|o| o.id != id);
+        let mut evicted_id: Option<String> = None;
         if overlays.len() >= MAX_ACTIVE_OVERLAYS {
             if let Some(removed) = overlays.first().cloned() {
                 emit_hide(&app, &removed.id, removed.monitor_index);
                 manager.clear_dismiss_generation(&removed.id);
-                manager.drop_payload(&removed.id);
                 overlays.remove(0);
+                evicted_id = Some(removed.id);
             }
         }
 
@@ -233,6 +236,10 @@ pub fn show_overlay(
             monitor_index: payload.monitor_index,
             started_at: chrono::Utc::now().to_rfc3339(),
         });
+        drop(overlays);
+        if let Some(eid) = evicted_id {
+            manager.drop_payload(&eid);
+        }
     }
 
     manager.store_payload(&payload);

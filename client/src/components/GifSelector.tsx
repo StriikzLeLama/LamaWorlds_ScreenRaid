@@ -46,13 +46,19 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
   const [hasNext, setHasNext] = useState(false);
   const [hovered, setHovered] = useState<GifSearchItem | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const requestSeq = useRef(0);
+  const openRef = useRef(open);
+  const justOpenedRef = useRef(false);
+  openRef.current = open;
 
   const runSearch = useCallback(
     async (q: string, kind: KlipyKind, pageNum: number, append: boolean) => {
+      const seq = ++requestSeq.current;
       setLoading(true);
       setError('');
       try {
         const res = await searchGifs({ q, kind, page: pageNum, perPage: 30 });
+        if (seq !== requestSeq.current || !openRef.current) return;
         setEnabled(res.enabled);
         setAttribution(res.attribution);
         setHasNext(res.has_next);
@@ -64,64 +70,73 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
           );
         }
       } catch (e) {
+        if (seq !== requestSeq.current || !openRef.current) return;
         setError(e instanceof Error ? e.message : 'Recherche GIF échouée');
         if (!append) setItems([]);
       } finally {
-        setLoading(false);
+        if (seq === requestSeq.current) setLoading(false);
       }
     },
     [],
   );
 
-  // Reset + focus when opening.
+  // Reset composer fields when the modal opens.
   useEffect(() => {
     if (!open) return;
+    justOpenedRef.current = true;
     setFavorites(loadGifFavorites());
     setQuery('');
+    setHovered(null);
     setPage(1);
-    if (tab !== 'favorites') {
-      void runSearch('', tab, 1, false);
-    }
+    setError('');
   }, [open]);
 
-  // Tab change.
+  // Search / trending (skips the stale-query tick right after open).
   useEffect(() => {
     if (!open) return;
+
     if (tab === 'favorites') {
+      setFavorites(loadGifFavorites());
       setItems(loadGifFavorites());
       setHasNext(false);
       setLoading(false);
       setError('');
       return;
     }
-    void runSearch(query, tab, 1, false);
-  }, [tab]);
 
-  // Debounced search.
-  useEffect(() => {
-    if (!open || tab === 'favorites') return;
+    if (justOpenedRef.current && query !== '') {
+      // Wait for the open-reset that clears query.
+      return;
+    }
+    justOpenedRef.current = false;
+
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       void runSearch(query, tab, 1, false);
-    }, 320);
+    }, query ? 320 : 0);
+
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [query, open, tab, runSearch]);
+  }, [open, tab, query, runSearch]);
 
   const pick = async (item: GifSearchItem) => {
     setImportingId(item.id);
     setError('');
     try {
-      const kind = (item.kind as KlipyKind) || (tab === 'favorites' ? 'gifs' : tab);
+      const rawKind = (item.kind || (tab === 'favorites' ? 'gifs' : tab)) as string;
+      const kind: KlipyKind =
+        rawKind === 'stickers' || rawKind === 'memes' || rawKind === 'gifs'
+          ? rawKind
+          : 'gifs';
       const media = await importGif({
         url: item.gif_url,
         title: item.title || item.slug,
         slug: item.slug,
         roomId,
-        kind: kind === 'favorites' ? 'gifs' : kind,
+        kind,
       });
-      onPicked(media, item);
+      onPicked(media, { ...item, kind });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import impossible');
@@ -132,7 +147,10 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
 
   const onToggleFavorite = (item: GifSearchItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    const next = toggleGifFavorite(item);
+    const next = toggleGifFavorite({
+      ...item,
+      kind: item.kind || (tab === 'favorites' ? 'gifs' : tab),
+    });
     setFavorites(next);
     if (tab === 'favorites') setItems(next);
   };

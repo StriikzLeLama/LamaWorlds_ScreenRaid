@@ -54,10 +54,18 @@ export function OverlayApp() {
     let cancelled = false;
     const unlisteners: Array<() => void> = [];
 
+    const playedSfxRef = useRef(new Set<string>());
+
     const onShow = (payload: OverlayShowPayload) => {
       log.info('overlay:show received', payload.id, payload.overlay_type);
-      if (payload.sfx && payload.sfx !== 'none') {
-        playEntranceSfx(payload.sfx, payload.volume ?? 0.35);
+      // Play entrance SFX once per overlay id (retries/sync re-emit overlay:show).
+      if (
+        payload.sfx &&
+        payload.sfx !== 'none' &&
+        !playedSfxRef.current.has(payload.id)
+      ) {
+        playedSfxRef.current.add(payload.id);
+        playEntranceSfx(payload.sfx, 0.35);
       }
       setOverlays((prev) => {
         const next = prev.filter((o) => o.id !== payload.id);
@@ -68,6 +76,7 @@ export function OverlayApp() {
 
     const onHide = (id: string) => {
       log.info('overlay:hide received', id);
+      playedSfxRef.current.delete(id);
       exitingCountRef.current += 1;
       setOverlays((prev) => prev.map((o) => (o.id === id ? { ...o, exiting: true } : o)));
       window.setTimeout(() => {
@@ -106,6 +115,7 @@ export function OverlayApp() {
 
         const clearUnsub = await listen('overlay:clear', () => {
           exitingCountRef.current = 0;
+          playedSfxRef.current.clear();
           setOverlays([]);
           requestSurfaceIdle();
         });

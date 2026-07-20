@@ -276,23 +276,47 @@ export function RoomPage() {
 
   const handleSend = async () => {
     if (!id) return;
+    if (needsMedia && !mediaId) {
+      setError(
+        showGifSelector
+          ? 'Choisis un GIF (sélecteur) ou un media de la bibliothèque.'
+          : 'Choisis un media avant d’envoyer.',
+      );
+      return;
+    }
+    if (overlayType === 'text' && !textContent.trim()) {
+      setError('Écris un message texte.');
+      return;
+    }
     setSending(true);
     setError('');
     try {
       if (raidBomb) {
-        // Five independent pranks → five server ids, random placements in the soft zone.
         const shots = Array.from({ length: 5 }, () =>
           sendPrank(id, buildRequest({ x: randomBombCoord(), y: randomBombCoord() })),
         );
         const results = await Promise.allSettled(shots);
-        const failed = results.find((r) => r.status === 'rejected');
-        if (failed && failed.status === 'rejected') {
-          handleSendError(failed.reason);
+        const failed = results.filter((r) => r.status === 'rejected');
+        const ok = results.length - failed.length;
+        if (failed.length > 0) {
+          const first = failed[0];
+          const reason =
+            first.status === 'rejected'
+              ? first.reason
+              : new Error(`${failed.length}/${results.length} raids ont échoué`);
+          handleSendError(reason);
+          setError((prev) =>
+            prev
+              ? `${prev} (${ok}/${results.length} OK)`
+              : `Raid bomb partiel: ${ok}/${results.length} OK`,
+          );
+        } else {
+          setTextContent('');
         }
       } else {
         await sendPrank(id, buildRequest());
+        setTextContent('');
       }
-      setTextContent('');
       listPrankHistory(id).then(setHistory).catch(() => undefined);
     } catch (e) {
       handleSendError(e);
@@ -308,9 +332,8 @@ export function RoomPage() {
     setSfx(pack.sfx);
     setRaidBomb(Boolean(pack.bomb));
     if (pack.text) setTextContent(pack.text);
-    if (pack.overlayType !== 'text' && pack.overlayType !== 'gif' && pack.overlayType !== 'image') {
-      setMediaId('');
-    }
+    // Always clear media when switching packs — avoids sending a video as a "gif".
+    setMediaId('');
     if (pack.needsGif) {
       setGifSelectorOpen(true);
     }
@@ -543,6 +566,7 @@ export function RoomPage() {
                     textColor={textColor}
                     bgColor={bgColor}
                     accentColor={accentColor}
+                    fontFamily={fontFamily}
                   />
                 )}
               </div>
@@ -787,7 +811,8 @@ export function RoomPage() {
             prev.some((m) => m.id === media.id) ? prev : [media, ...prev],
           );
           setMediaId(media.id);
-          setOverlayType('gif');
+          // Keep image if user was composing an image raid; otherwise use gif.
+          setOverlayType((prev) => (prev === 'image' ? 'image' : 'gif'));
           refreshMedia();
         }}
       />

@@ -79,6 +79,16 @@ export function ReceiverHomePage() {
         await resume().catch(() => undefined);
       }
 
+      let opacity = 1;
+      try {
+        const settings = await invoke<{ soft_mode?: boolean; max_opacity?: number }>('get_settings');
+        if (settings.soft_mode) {
+          opacity = Math.min(1, settings.max_opacity ?? 0.55);
+        }
+      } catch {
+        // optional
+      }
+
       await invoke('show_overlay', {
         payload: {
           id: `test-overlay-${Date.now()}`,
@@ -93,8 +103,9 @@ export function ReceiverHomePage() {
           position_x: 0.5,
           position_y: 0.5,
           scale: 1.15,
-          opacity: 1,
+          opacity,
           volume: 0.8,
+          sfx: 'pop',
         },
       });
       log.info('test overlay invoke ok');
