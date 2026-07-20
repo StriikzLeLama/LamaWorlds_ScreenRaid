@@ -1,5 +1,6 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Minus, Square, X } from 'lucide-react';
+import { BrandLogo } from '../BrandLogo';
 
 function windowAction(action: () => Promise<void>): void {
   void action().catch((err) => {
@@ -11,15 +12,12 @@ export function TitleBar() {
   const appWindow = getCurrentWindow();
 
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between border-b border-raid-border bg-raid-surface px-4">
+    <div className="flex h-10 shrink-0 items-center justify-between border-b border-raid-border bg-raid-surface px-3">
       <div
         data-tauri-drag-region
         className="flex min-w-0 flex-1 items-center gap-2"
       >
-        <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-raid-accent" />
-        <span className="truncate text-sm font-semibold text-raid-text">
-          ScreenRaid Receiver
-        </span>
+        <BrandLogo size={22} withWordmark subtitle="Receiver" />
       </div>
       {/* Must stay outside drag region or clicks are swallowed */}
       <div

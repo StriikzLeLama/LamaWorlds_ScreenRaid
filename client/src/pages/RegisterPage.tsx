@@ -58,9 +58,18 @@ export function RegisterPage() {
     <div className="flex min-h-full w-full items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <div className="mb-6 text-center">
+          <img
+            src="/logo.png"
+            alt="LamaWorlds"
+            className="mx-auto mb-4 h-16 w-16 rounded-2xl object-cover shadow-lg shadow-black/40"
+            draggable={false}
+          />
           <h1 className="text-2xl font-bold text-raid-text">Create account</h1>
           <p className="mt-1 text-sm text-raid-text-secondary">
             Join the consent-based prank platform
+          </p>
+          <p className="mt-1 text-[11px] uppercase tracking-wide text-raid-text-secondary/80">
+            LamaWorlds
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

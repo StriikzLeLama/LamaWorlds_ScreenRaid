@@ -49,9 +49,12 @@ export function LoginPage() {
     <div className="flex min-h-full w-full items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-raid-accent/15">
-            <div className="h-4 w-4 rounded-full bg-raid-accent" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="LamaWorlds"
+            className="mx-auto mb-4 h-16 w-16 rounded-2xl object-cover shadow-lg shadow-black/40"
+            draggable={false}
+          />
           <h1 className="text-2xl font-bold text-raid-text">
             {isReceiverApp() ? 'ScreenRaid Receiver' : 'Welcome to ScreenRaid'}
           </h1>
@@ -59,6 +62,9 @@ export function LoginPage() {
             {isReceiverApp()
               ? 'Sign in to receive overlays on this PC'
               : 'Sign in to your prank dashboard'}
+          </p>
+          <p className="mt-1 text-[11px] uppercase tracking-wide text-raid-text-secondary/80">
+            LamaWorlds
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

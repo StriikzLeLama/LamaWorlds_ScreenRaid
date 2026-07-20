@@ -10,6 +10,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { BrandLogo } from '../BrandLogo';
 import { useAuthStore } from '../../stores/authStore';
 import { useConsentStore } from '../../stores/consentStore';
 import { isReceiverApp } from '../../lib/platform';
@@ -60,6 +61,10 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-raid-border bg-raid-surface">
+      <div className="border-b border-raid-border px-4 py-3">
+        <BrandLogo size={36} withWordmark subtitle="Dashboard" />
+      </div>
+
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
@@ -83,9 +88,12 @@ export function Sidebar() {
       <div className="space-y-3 border-t border-raid-border p-3">
         {user && (
           <div className="flex items-center gap-3 rounded-xl bg-raid-card px-3 py-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-raid-surface text-xs font-medium text-raid-text-secondary">
-              {user.display_name.charAt(0).toUpperCase()}
-            </div>
+            <img
+              src="/logo-64.png"
+              alt=""
+              className="h-8 w-8 rounded-full object-cover"
+              draggable={false}
+            />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-raid-text">{user.display_name}</p>
               <p className="truncate text-xs text-raid-text-secondary">
