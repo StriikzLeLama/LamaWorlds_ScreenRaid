@@ -23,6 +23,9 @@ export function OverlayApp() {
   const exitingCountRef = useRef(0);
   const monitorIndexRef = useRef(0);
   const readyRef = useRef(false);
+  // Must stay at component top-level — a useRef inside useEffect is an invalid
+  // hook call and aborts listener setup (blank always-on-top surface).
+  const playedSfxRef = useRef(new Set<string>());
 
   log.info('OverlayApp mounting');
 
@@ -53,8 +56,6 @@ export function OverlayApp() {
   useEffect(() => {
     let cancelled = false;
     const unlisteners: Array<() => void> = [];
-
-    const playedSfxRef = useRef(new Set<string>());
 
     const onShow = (payload: OverlayShowPayload) => {
       log.info('overlay:show received', payload.id, payload.overlay_type);

@@ -4,8 +4,10 @@ import { Copy, LogOut, Send, Trash2, Users } from 'lucide-react';
 import { Card, Button, Badge, Input } from '../components/ui';
 import { GifSelector } from '../components/GifSelector';
 import { AnimationPreview } from '../components/AnimationPreview';
+import { MediaPicker } from '../components/MediaPicker';
+import { MediaThumb } from '../components/MediaThumb';
 import { ApiError } from '../services/api';
-import { listMedia, mediaFileUrl, type Media } from '../services/media';
+import { listMedia, type Media } from '../services/media';
 import {
   ANIMATION_OPTIONS,
   defaultOverlayConfig,
@@ -494,52 +496,41 @@ export function RoomPage() {
               ) : (
                 <div className="space-y-3">
                   {showGifSelector && (
-                    <div className="space-y-2">
-                      <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
-                        Ouvrir le sélecteur GIF
-                      </Button>
-                      {selectedMedia && (
-                        <div className="flex items-center gap-3 rounded-xl border border-raid-border bg-raid-bg/60 p-2">
-                          <img
-                            src={mediaFileUrl(selectedMedia)}
-                            alt={selectedMedia.original_name}
-                            className="h-14 w-14 rounded-lg object-cover"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm text-raid-text">
-                              {selectedMedia.original_name}
-                            </p>
-                            <p className="text-xs text-raid-text-secondary">
-                              {selectedMedia.media_type}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
+                      Ouvrir le sélecteur GIF
+                    </Button>
                   )}
 
                   <div>
                     <label className="mb-1 block text-xs text-raid-text-secondary">
                       {showGifSelector ? 'Ou choisir dans la bibliothèque' : 'Media'}
                     </label>
-                    <select
-                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                    <MediaPicker
+                      items={selectableMedia}
                       value={mediaId}
-                      onChange={(e) => setMediaId(e.target.value)}
-                    >
-                      <option value="">Select from library…</option>
-                      {selectableMedia.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.original_name}
-                        </option>
-                      ))}
-                    </select>
-                    {selectableMedia.length === 0 && !showGifSelector && (
-                      <p className="mt-1 text-xs text-raid-text-secondary">
-                        Upload {overlayType} media in the Media library first.
-                      </p>
-                    )}
+                      onChange={setMediaId}
+                      emptyHint={
+                        showGifSelector
+                          ? 'Bibliothèque vide — utilise le sélecteur GIF ou upload dans Media.'
+                          : `Upload ${overlayType} media in the Media library first.`
+                      }
+                    />
                   </div>
+
+                  {selectedMedia && (
+                    <div className="flex items-center gap-3 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
+                      <MediaThumb media={selectedMedia} sizeClass="h-16 w-16" />
+                      <div className="min-w-0">
+                        <p className="text-xs uppercase tracking-wide text-raid-accent">Sélectionné</p>
+                        <p className="truncate text-sm text-raid-text">
+                          {selectedMedia.original_name}
+                        </p>
+                        <p className="text-xs text-raid-text-secondary">
+                          {selectedMedia.media_type}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

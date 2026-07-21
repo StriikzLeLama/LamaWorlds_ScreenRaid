@@ -1,7 +1,8 @@
 html,
 body,
 #root {
-  /* Shell chrome is set in overlay.html — keep this file import-safe for web preview. */
+  /* Shell chrome is set in overlay.html — keep this file import-safe for web preview
+     (AnimationPreview also imports these keyframes on RoomPage). */
 }
 
 /* Isolate overlay repaints without size containment (size can collapse to 0). */

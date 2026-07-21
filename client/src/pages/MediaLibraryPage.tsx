@@ -1,25 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image, Music, Trash2, Upload, Video } from 'lucide-react';
+import { Trash2, Upload } from 'lucide-react';
 import { Card, Button, Badge } from '../components/ui';
+import { MediaThumb } from '../components/MediaThumb';
 import {
   deleteMedia,
   formatBytes,
   listMedia,
-  mediaFileUrl,
   uploadMedia,
   type Media,
 } from '../services/media';
-
-function MediaIcon({ type }: { type: Media['media_type'] }) {
-  switch (type) {
-    case 'video':
-      return <Video size={20} className="text-raid-accent" />;
-    case 'audio':
-      return <Music size={20} className="text-raid-accent" />;
-    default:
-      return <Image size={20} className="text-raid-accent" />;
-  }
-}
+import { revokeMediaPreview } from '../services/mediaPreview';
 
 export function MediaLibraryPage() {
   const [items, setItems] = useState<Media[]>([]);
@@ -67,6 +57,7 @@ export function MediaLibraryPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteMedia(id);
+      revokeMediaPreview(id);
       setItems((prev) => prev.filter((m) => m.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
@@ -133,17 +124,7 @@ export function MediaLibraryPage() {
           {items.map((item) => (
             <Card key={item.id} className="overflow-hidden">
               <div className="flex items-start gap-3">
-                {item.media_type === 'image' || item.media_type === 'gif' ? (
-                  <img
-                    src={mediaFileUrl(item)}
-                    alt={item.original_name}
-                    className="h-16 w-16 rounded-lg object-cover bg-raid-surface"
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-raid-surface">
-                    <MediaIcon type={item.media_type} />
-                  </div>
-                )}
+                <MediaThumb media={item} sizeClass="h-16 w-16" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-raid-text">
                     {item.original_name}
