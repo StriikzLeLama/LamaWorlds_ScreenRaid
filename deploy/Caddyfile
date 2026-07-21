@@ -1,0 +1,23 @@
+# Example Caddy reverse proxy for ScreenRaid (without Cloudflare Tunnel).
+# TLS is handled by Caddy + Let's Encrypt when using a public domain.
+# WebSocket auth uses a first-message JWT — no ?token= in the URL.
+
+screenraid.example.com {
+    encode gzip
+
+    handle /v1/* {
+        reverse_proxy server:8080
+    }
+
+    handle /health* {
+        reverse_proxy server:8080
+    }
+
+    handle /v1/ws* {
+        reverse_proxy server:8080
+    }
+
+    handle {
+        reverse_proxy server:8080
+    }
+}

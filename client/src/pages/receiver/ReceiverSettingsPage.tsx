@@ -11,6 +11,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { useConsentStore } from '../../stores/consentStore';
 import { isTauriRuntime } from '../../lib/platform';
 import { log } from '../../lib/log';
+import { getMySecurityPrefs, updateMySecurityPrefs } from '../../services/security';
+import type { UserSecurityPrefs } from '../../types/security';
 import { ANIMATION_OPTIONS, type Animation } from '../../services/pranks';
 
 interface AppSettings {
@@ -43,7 +45,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 export function ReceiverSettingsPage() {
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const loadConsent = useConsentStore((s) => s.loadFromServer);
+  const [securityPrefs, setSecurityPrefs] = useState<UserSecurityPrefs | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loadError, setLoadError] = useState('');
   const [message, setMessage] = useState('');
@@ -55,6 +59,11 @@ export function ReceiverSettingsPage() {
     log.info('ReceiverSettingsPage mount, isTauriRuntime=', isTauriRuntime());
     if (isAuthenticated) {
       loadConsent().catch(() => undefined);
+      if (accessToken) {
+        getMySecurityPrefs(accessToken)
+          .then(setSecurityPrefs)
+          .catch(() => undefined);
+      }
     }
     if (!isTauriRuntime()) {
       log.warn('ReceiverSettingsPage: not in Tauri runtime');
@@ -83,7 +92,7 @@ export function ReceiverSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, loadConsent]);
+  }, [isAuthenticated, loadConsent, accessToken]);
 
   const save = async () => {
     if (!settings) return;
@@ -197,6 +206,62 @@ export function ReceiverSettingsPage() {
             )}
           </div>
         </Card>
+
+        {securityPrefs && accessToken && (
+          <Card>
+            <h2 className="mb-4 text-lg font-semibold text-raid-text">Raid filters</h2>
+            <p className="mb-4 text-xs text-raid-text-secondary">
+              Synced with your account. Preset: {securityPrefs.preset}
+            </p>
+            <div className="space-y-3">
+              <Toggle
+                checked={securityPrefs.allow_sound}
+                onChange={(v) => setSecurityPrefs({ ...securityPrefs, allow_sound: v })}
+                label="Accept sound raids"
+              />
+              <Toggle
+                checked={securityPrefs.allow_video}
+                onChange={(v) => setSecurityPrefs({ ...securityPrefs, allow_video: v })}
+                label="Accept video raids"
+              />
+              <Toggle
+                checked={securityPrefs.allow_fullscreen}
+                onChange={(v) => setSecurityPrefs({ ...securityPrefs, allow_fullscreen: v })}
+                label="Accept fullscreen raids"
+              />
+              <Input
+                label="Local cooldown (ms)"
+                type="number"
+                min={0}
+                max={30000}
+                value={securityPrefs.local_cooldown_ms}
+                onChange={(e) =>
+                  setSecurityPrefs({
+                    ...securityPrefs,
+                    local_cooldown_ms: Number(e.target.value),
+                  })
+                }
+              />
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  void updateMySecurityPrefs(accessToken, {
+                    preset: 'custom',
+                    allow_sound: securityPrefs.allow_sound,
+                    allow_video: securityPrefs.allow_video,
+                    allow_fullscreen: securityPrefs.allow_fullscreen,
+                    local_cooldown_ms: securityPrefs.local_cooldown_ms,
+                  }).then((next) => {
+                    setSecurityPrefs(next);
+                    setMessage('Raid filters saved.');
+                  })
+                }
+              >
+                Save raid filters
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">Server</h2>

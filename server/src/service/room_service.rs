@@ -35,6 +35,10 @@ impl RoomService {
         }
     }
 
+    pub async fn is_member(&self, room_id: Uuid, user_id: Uuid) -> Result<bool, AppError> {
+        Ok(self.rooms.is_member(room_id, user_id).await?.is_some())
+    }
+
     pub async fn create(&self, user_id: Uuid, req: CreateRoomRequest) -> Result<RoomSummary, AppError> {
         if req.name.is_empty() || req.name.len() > 64 {
             return Err(AppError::Validation("room name must be 1-64 characters".into()));

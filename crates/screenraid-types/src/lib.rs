@@ -7,6 +7,7 @@ pub mod monitor;
 pub mod prank;
 pub mod roles;
 pub mod room;
+pub mod security;
 pub mod user;
 pub mod websocket;
 
@@ -19,5 +20,6 @@ pub use monitor::*;
 pub use prank::*;
 pub use roles::*;
 pub use room::*;
+pub use security::*;
 pub use user::*;
 pub use websocket::*;

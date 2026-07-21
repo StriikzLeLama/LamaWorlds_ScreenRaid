@@ -29,6 +29,9 @@ pub async fn spawn_app() -> TestApp {
         allow_self_prank: false,
         static_path: std::path::PathBuf::from("/nonexistent-no-web-in-tests"),
         klipy_api_key: String::new(),
+        turnstile_site_key: String::new(),
+        turnstile_secret_key: String::new(),
+        turnstile_login_failures: 3,
     };
 
     let connect_options = SqliteConnectOptions::new()

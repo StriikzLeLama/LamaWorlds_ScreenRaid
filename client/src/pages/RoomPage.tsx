@@ -23,6 +23,7 @@ import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
+import { RoomSecurityPanel } from '../components/settings/RoomSecurityPanel';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { useWsConnection } from '../hooks/useWsConnection';
@@ -114,6 +115,7 @@ export function RoomPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const { globalConsent, isPaused } = useConsentStore();
   const wsConnected = useWsConnection();
   const [room, setRoom] = useState<RoomDetail | null>(null);
@@ -359,6 +361,7 @@ export function RoomPage() {
 
   const myRole = room.members.find((m) => m.user_id === currentUserId)?.role;
   const isOwner = myRole === 'owner';
+  const canModerate = isOwner || myRole === 'admin';
   const canSend = myRole !== 'guest';
   const otherMembers = room.members.filter((m) => m.user_id !== currentUserId);
   const isSoloRoom = room.members.length === 1;
@@ -418,6 +421,15 @@ export function RoomPage() {
             ))}
           </div>
         </Card>
+
+        {accessToken && id && (
+          <RoomSecurityPanel
+            accessToken={accessToken}
+            roomId={id}
+            members={room.members}
+            canModerate={canModerate}
+          />
+        )}
 
         <Card accentHeader>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">Prank composer</h2>

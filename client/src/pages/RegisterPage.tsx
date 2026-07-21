@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
+import { TurnstileWidget } from '../components/auth/TurnstileWidget';
 import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
 import { useAuthStore } from '../stores/authStore';
 import { register as registerApi, getMe } from '../services/auth';
+import { getSecurityPolicy } from '../services/security';
 import { ApiError } from '../services/api';
 import { getServerUrl } from '../services/serverConfig';
 import { isReceiverApp, isWebApp } from '../lib/platform';
@@ -30,10 +32,30 @@ export function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
+  const [turnstileRequired, setTurnstileRequired] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSecurityPolicy()
+      .then((policy) => {
+        setTurnstileSiteKey(policy.turnstile_site_key);
+        setTurnstileRequired(policy.turnstile_required_on_register);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const onTurnstileToken = useCallback((token: string | null) => {
+    setTurnstileToken(token);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (turnstileRequired && !turnstileToken) {
+      setError('Complete the captcha verification.');
+      return;
+    }
     setLoading(true);
     try {
       await ensureServerUrl(isWebApp() ? getServerUrl() : serverUrl);
@@ -42,6 +64,7 @@ export function RegisterPage() {
         email: form.email,
         display_name: form.display_name || form.username,
         password: form.password,
+        turnstile_token: turnstileToken ?? undefined,
       });
       login({ access: res.access_token, refresh: res.refresh_token }, res.user);
       const profile = await getMe(res.access_token);
@@ -110,6 +133,9 @@ export function RegisterPage() {
           <p className="text-xs text-raid-text-secondary">
             Au moins 10 caractères, une lettre et un chiffre. Évite les mots de passe trop courants.
           </p>
+          {turnstileRequired && turnstileSiteKey && (
+            <TurnstileWidget siteKey={turnstileSiteKey} onToken={onTurnstileToken} />
+          )}
           {error && (
             <p className="rounded-xl border border-raid-danger/30 bg-raid-danger/10 px-3 py-2 text-sm text-raid-danger">
               {error}

@@ -175,3 +175,104 @@ async fn change_password_username_and_display_name() {
     .await;
     assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn security_policy_and_sessions() {
+    let mut app = spawn_app().await;
+
+    let (status, body) = request(&mut app.router, "GET", "/v1/auth/security-policy", None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let policy: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(policy["turnstile_required_on_register"], false);
+
+    let register_body = format!(
+        r#"{{
+        "username": "sessuser",
+        "email": "sess@example.com",
+        "password": "{STRONG_PASSWORD}",
+        "display_name": "Sess"
+    }}"#
+    );
+    let (status, body) = request(
+        &mut app.router,
+        "POST",
+        "/v1/auth/register",
+        Some(&register_body),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let auth: Value = serde_json::from_str(&body).unwrap();
+    let access = auth["access_token"].as_str().unwrap();
+
+    let (status, body) = request(
+        &mut app.router,
+        "GET",
+        "/v1/auth/sessions",
+        None,
+        Some(access),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let sessions: Value = serde_json::from_str(&body).unwrap();
+    assert!(sessions["sessions"].as_array().unwrap().len() >= 1);
+
+    let (status, body) = request(
+        &mut app.router,
+        "GET",
+        "/v1/users/me/security",
+        None,
+        Some(access),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let prefs: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(prefs["preset"], "friends");
+
+    let (status, body) = request(
+        &mut app.router,
+        "GET",
+        "/v1/audit/me?page=1&limit=5",
+        None,
+        Some(access),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let audit: Value = serde_json::from_str(&body).unwrap();
+    assert!(audit["items"].is_array());
+}
+
+#[tokio::test]
+async fn login_returns_flat_auth_fields() {
+    let mut app = spawn_app().await;
+    let register_body = format!(
+        r#"{{
+        "username": "flatlogin",
+        "email": "flat@example.com",
+        "password": "{STRONG_PASSWORD}",
+        "display_name": "Flat"
+    }}"#
+    );
+    request(
+        &mut app.router,
+        "POST",
+        "/v1/auth/register",
+        Some(&register_body),
+        None,
+    )
+    .await;
+
+    let login_body = format!(r#"{{"username":"flatlogin","password":"{STRONG_PASSWORD}"}}"#);
+    let (status, body) = request(
+        &mut app.router,
+        "POST",
+        "/v1/auth/login",
+        Some(&login_body),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let login: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(login["requires_2fa"], false);
+    assert!(login["access_token"].is_string());
+}

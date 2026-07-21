@@ -120,6 +120,36 @@ impl PrankRepository {
         Ok(row.0)
     }
 
+    pub async fn ms_since_last_to_target(
+        &self,
+        sender_id: Uuid,
+        target_id: Uuid,
+        room_id: Uuid,
+    ) -> Result<Option<i64>, AppError> {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT created_at FROM pranks
+             WHERE sender_id = ? AND target_id = ? AND room_id = ?
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(sender_id.to_string())
+        .bind(target_id.to_string())
+        .bind(room_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some((created_at,)) = row else {
+            return Ok(None);
+        };
+        let created = chrono::DateTime::parse_from_rfc3339(&created_at)
+            .map(|d| d.with_timezone(&Utc))
+            .or_else(|_| {
+                chrono::NaiveDateTime::parse_from_str(&created_at, "%Y-%m-%d %H:%M:%S")
+                    .map(|n| n.and_utc())
+            })
+            .unwrap_or_else(|_| Utc::now());
+        let ms = (Utc::now() - created).num_milliseconds();
+        Ok(Some(ms.max(0)))
+    }
+
     pub async fn list_by_room(&self, room_id: Uuid, limit: u32) -> Result<Vec<PrankRow>, AppError> {
         let rows = sqlx::query_as::<_, PrankRow>(
             "SELECT * FROM pranks WHERE room_id = ? ORDER BY created_at DESC LIMIT ?",

@@ -5,13 +5,13 @@ use screenraid_types::{
     MediaRef, OverlayType, PrankIncomingPayload, PrankResponse, PrankStatus, SendPrankRequest,
     UserSummary,
 };
-use screenraid_validation::MAX_PRANKS_PER_MINUTE;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::repository::{
-    media_repo::row_to_media, MediaRepository, PrankRepository, RoomRepository, UserRepository,
+    media_repo::row_to_media, AuditRepository, MediaRepository, PrankRepository, RoomRepository,
+    SecurityRepository, UserRepository,
 };
 use crate::service::ConsentService;
 use crate::websocket::WsHub;
@@ -22,6 +22,8 @@ pub struct PrankService {
     rooms: RoomRepository,
     users: UserRepository,
     media: MediaRepository,
+    security: SecurityRepository,
+    audit: AuditRepository,
     consent: ConsentService,
     hub: Arc<WsHub>,
     allow_self_prank: bool,
@@ -33,6 +35,8 @@ impl PrankService {
         rooms: RoomRepository,
         users: UserRepository,
         media: MediaRepository,
+        security: SecurityRepository,
+        audit: AuditRepository,
         consent: ConsentService,
         hub: Arc<WsHub>,
         allow_self_prank: bool,
@@ -42,6 +46,8 @@ impl PrankService {
             rooms,
             users,
             media,
+            security,
+            audit,
             consent,
             hub,
             allow_self_prank,
@@ -54,8 +60,16 @@ impl PrankService {
         sender_id: Uuid,
         req: SendPrankRequest,
     ) -> Result<PrankResponse, AppError> {
+        let room_security = self.security.get_room_security(room_id).await?;
+        if room_security.muted_senders.contains(&sender_id) {
+            return Err(AppError::Forbidden);
+        }
+
+        let user_prefs = self.security.get_user_prefs(sender_id).await?;
+        let limits = SecurityRepository::resolve_limits(&room_security, &user_prefs);
+
         let recent = self.pranks.count_recent_by_sender(sender_id).await?;
-        if recent >= MAX_PRANKS_PER_MINUTE as i64 {
+        if recent >= limits.max_pranks_per_minute as i64 {
             return Err(AppError::RateLimited);
         }
 
@@ -108,6 +122,18 @@ impl PrankService {
             return Err(AppError::Validation("no valid targets".into()));
         }
 
+        for target_id in &targets {
+            if let Some(ms) = self
+                .pranks
+                .ms_since_last_to_target(sender_id, *target_id, room_id)
+                .await?
+            {
+                if ms < limits.target_cooldown_ms as i64 {
+                    return Err(AppError::RateLimited);
+                }
+            }
+        }
+
         let mut deliverable = Vec::new();
         let mut blocked_count = 0u32;
 
@@ -121,9 +147,13 @@ impl PrankService {
 
         let prank_id = Uuid::new_v4();
         let now = Utc::now();
-        let duration = req.duration_ms.clamp(1000, 60_000);
+        let duration = req
+            .duration_ms
+            .clamp(1000, limits.max_duration_ms as i32);
+        let mut config = req.config.clone();
+        config.volume = config.volume.min(limits.max_volume);
         let expires_at = now + Duration::milliseconds(duration as i64 + 30_000);
-        let config_json = serde_json::to_string(&req.config)
+        let config_json = serde_json::to_string(&config)
             .map_err(|e| AppError::Internal(e.to_string()))?;
         let overlay_type_str = overlay_type_str(req.overlay_type);
 
@@ -190,7 +220,7 @@ impl PrankService {
             media: media_ref.clone(),
             text_content: req.text_content.clone(),
             duration_ms: duration,
-            config: req.config.clone(),
+            config: config.clone(),
             expires_at,
         };
 
@@ -201,6 +231,37 @@ impl PrankService {
                     "prank:incoming",
                     serde_json::to_value(&incoming).unwrap_or_default(),
                 );
+            let _ = self
+                .audit
+                .insert(
+                    Some(sender_id),
+                    "prank_sent",
+                    Some("prank"),
+                    Some(&prank_id.to_string()),
+                    Some(json!({
+                        "target_id": target_id,
+                        "room_id": room_id,
+                        "overlay_type": overlay_type_str,
+                    })),
+                    None,
+                )
+                .await;
+            let _ = self
+                .audit
+                .insert(
+                    Some(*target_id),
+                    "prank_received",
+                    Some("prank"),
+                    Some(&prank_id.to_string()),
+                    Some(json!({
+                        "sender_id": sender_id,
+                        "sender_name": sender.display_name,
+                        "room_id": room_id,
+                        "overlay_type": overlay_type_str,
+                    })),
+                    None,
+                )
+                .await;
         }
 
         let online = deliverable

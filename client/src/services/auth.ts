@@ -5,7 +5,9 @@ import type {
   ChangePasswordPayload,
   ChangeUsernamePayload,
   LoginPayload,
+  LoginResponse,
   RegisterPayload,
+  TotpVerifyPayload,
   UserProfile,
 } from '../types/auth';
 
@@ -16,8 +18,15 @@ export async function register(payload: RegisterPayload): Promise<AuthResponse> 
   });
 }
 
-export async function login(payload: LoginPayload): Promise<AuthResponse> {
-  return apiFetch<AuthResponse>('/v1/auth/login', {
+export async function login(payload: LoginPayload): Promise<LoginResponse> {
+  return apiFetch<LoginResponse>('/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function verify2faLogin(payload: TotpVerifyPayload): Promise<AuthResponse> {
+  return apiFetch<AuthResponse>('/v1/auth/2fa/verify', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

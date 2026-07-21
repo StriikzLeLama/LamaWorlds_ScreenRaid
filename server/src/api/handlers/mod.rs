@@ -11,8 +11,9 @@ pub mod rooms;
 
 pub use admin::{deactivate_user, delete_media_admin, list_admin_media, list_admin_users};
 pub use auth::{
-    change_display_name, change_password, change_username, login, logout, logout_all, me, refresh,
-    register,
+    change_display_name, change_password, change_username, disable_2fa, enable_2fa, get_my_security_prefs,
+    get_room_security, list_my_audit, list_sessions, login, logout, logout_all, me, refresh, register,
+    revoke_session, security_policy, setup_2fa, update_my_security_prefs, update_room_security, verify_2fa,
 };
 pub use consent::{
     check_can_receive, get_consent, grant_consent, pause_consent, resume_consent, revoke_consent,

@@ -1,4 +1,4 @@
-import { getServerUrl, onServerUrlChange } from './serverConfig';
+import { getWebSocketUrl, onServerUrlChange } from './serverConfig';
 import { useAuthStore } from '../stores/authStore';
 import { log } from '../lib/log';
 
@@ -12,6 +12,7 @@ let connectedServerBase: string | null = null;
 /** Access token used for the active (or last attempted) connection. */
 let connectedToken: string | null = null;
 let wsConnected = false;
+let wsAuthenticated = false;
 const handlers = new Set<MessageHandler>();
 const connectionListeners = new Set<(connected: boolean) => void>();
 
@@ -33,9 +34,19 @@ export function onWebSocketConnectionChange(
   return () => connectionListeners.delete(listener);
 }
 
-function wsUrl(token: string): string {
-  const base = getServerUrl().replace(/^http/, 'ws');
-  return `${base}/v1/ws?token=${encodeURIComponent(token)}`;
+function wsUrl(): string {
+  return `${getWebSocketUrl()}/v1/ws`;
+}
+
+function sendAuth(token: string): void {
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  socket.send(
+    JSON.stringify({
+      type: 'auth',
+      payload: { token },
+      timestamp: new Date().toISOString(),
+    }),
+  );
 }
 
 export function onWsMessage(handler: MessageHandler): () => void {
@@ -50,11 +61,12 @@ export function connectWebSocket(): void {
     return;
   }
 
-  const base = getServerUrl();
+  const base = getWebSocketUrl();
   if (
     socket?.readyState === WebSocket.OPEN &&
     connectedServerBase === base &&
-    connectedToken === token
+    connectedToken === token &&
+    wsAuthenticated
   ) {
     log.info('connectWebSocket: already open to', base);
     return;
@@ -64,15 +76,16 @@ export function connectWebSocket(): void {
   disconnectWebSocket(false);
   connectedServerBase = base;
   connectedToken = token;
+  wsAuthenticated = false;
 
-  const url = wsUrl(token);
-  log.info('connectWebSocket: ws url', url.replace(/token=[^&]+/, 'token=***'));
+  const url = wsUrl();
+  log.info('connectWebSocket: ws url', url);
   socket = new WebSocket(url);
 
   socket.onopen = () => {
-    log.info('WS open');
+    log.info('WS open, sending auth message');
     backoff = 1000;
-    setWsConnected(true);
+    sendAuth(token);
   };
 
   socket.onerror = (event) => {
@@ -83,6 +96,10 @@ export function connectWebSocket(): void {
     try {
       const msg = JSON.parse(event.data as string) as { type: string; payload: unknown };
       log.info('WS msg', msg.type);
+      if (msg.type === 'connected') {
+        wsAuthenticated = true;
+        setWsConnected(true);
+      }
       handlers.forEach((h) => h(msg.type, msg.payload));
     } catch (e) {
       log.warn('WS malformed message', e);
@@ -94,6 +111,7 @@ export function connectWebSocket(): void {
     socket = null;
     connectedServerBase = null;
     connectedToken = null;
+    wsAuthenticated = false;
     setWsConnected(false);
     if (useAuthStore.getState().isAuthenticated) {
       reconnectTimer = setTimeout(() => {
@@ -122,6 +140,7 @@ export function disconnectWebSocket(clearBackoff = true): void {
   socket = null;
   connectedServerBase = null;
   connectedToken = null;
+  wsAuthenticated = false;
   setWsConnected(false);
   if (s) {
     s.onopen = null;

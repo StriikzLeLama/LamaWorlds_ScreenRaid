@@ -200,18 +200,87 @@ impl UserRepository {
         user_id: Uuid,
         token_hash: &str,
         expires_at: DateTime<Utc>,
+        user_agent: Option<&str>,
+        ip_address: Option<&str>,
+        label: Option<&str>,
     ) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
         sqlx::query(
-            "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, user_agent, ip_address, label, last_seen_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(id.to_string())
         .bind(user_id.to_string())
         .bind(token_hash)
         .bind(expires_at.to_rfc3339())
+        .bind(user_agent)
+        .bind(ip_address)
+        .bind(label)
+        .bind(&now)
+        .bind(&now)
         .execute(&self.pool)
         .await?;
-
         Ok(())
+    }
+
+    pub async fn touch_refresh_token(&self, token_hash: &str) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "UPDATE refresh_tokens SET last_seen_at = ? WHERE token_hash = ? AND revoked_at IS NULL",
+        )
+        .bind(&now)
+        .bind(token_hash)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_sessions(&self, user_id: Uuid) -> Result<Vec<screenraid_types::SessionInfo>, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: String,
+            label: Option<String>,
+            user_agent: Option<String>,
+            ip_address: Option<String>,
+            created_at: String,
+            last_seen_at: Option<String>,
+            expires_at: String,
+        }
+        let rows = sqlx::query_as::<_, Row>(
+            "SELECT id, label, user_agent, ip_address, created_at, last_seen_at, expires_at
+             FROM refresh_tokens
+             WHERE user_id = ? AND revoked_at IS NULL AND expires_at > datetime('now')
+             ORDER BY COALESCE(last_seen_at, created_at) DESC",
+        )
+        .bind(user_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| screenraid_types::SessionInfo {
+                id: Uuid::parse_str(&r.id).unwrap_or_default(),
+                label: r.label,
+                user_agent: r.user_agent,
+                ip_address: r.ip_address,
+                created_at: r.created_at,
+                last_seen_at: r.last_seen_at,
+                expires_at: r.expires_at,
+                is_current: false,
+            })
+            .collect())
+    }
+
+    pub async fn revoke_session(&self, user_id: Uuid, session_id: Uuid) -> Result<bool, AppError> {
+        let now = Utc::now().to_rfc3339();
+        let result = sqlx::query(
+            "UPDATE refresh_tokens SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
+        )
+        .bind(&now)
+        .bind(session_id.to_string())
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn find_refresh_token(
@@ -304,5 +373,135 @@ impl UserRepository {
         .await?;
 
         Ok((rows.into_iter().map(Into::into).collect(), total.0))
+    }
+
+    pub async fn get_totp_secret(&self, user_id: Uuid) -> Result<Option<(String, bool)>, AppError> {
+        let row: Option<(String, i64)> = sqlx::query_as(
+            "SELECT secret_encrypted, enabled FROM user_totp WHERE user_id = ?",
+        )
+        .bind(user_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(s, e)| (s, e != 0)))
+    }
+
+    pub async fn upsert_totp_secret(&self, user_id: Uuid, secret_encrypted: &str) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "INSERT INTO user_totp (user_id, secret_encrypted, enabled, recovery_hashes, created_at, updated_at)
+             VALUES (?, ?, 0, '[]', ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET secret_encrypted = excluded.secret_encrypted, enabled = 0, recovery_hashes = '[]', updated_at = excluded.updated_at",
+        )
+        .bind(user_id.to_string())
+        .bind(secret_encrypted)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn enable_totp(
+        &self,
+        user_id: Uuid,
+        recovery_hashes: &str,
+    ) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "UPDATE user_totp SET enabled = 1, recovery_hashes = ?, updated_at = ? WHERE user_id = ?",
+        )
+        .bind(recovery_hashes)
+        .bind(&now)
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn disable_totp(&self, user_id: Uuid) -> Result<(), AppError> {
+        sqlx::query("DELETE FROM user_totp WHERE user_id = ?")
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_recovery_hashes(&self, user_id: Uuid) -> Result<Vec<String>, AppError> {
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT recovery_hashes FROM user_totp WHERE user_id = ?")
+                .bind(user_id.to_string())
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row
+            .and_then(|(s,)| serde_json::from_str(&s).ok())
+            .unwrap_or_default())
+    }
+
+    pub async fn set_recovery_hashes(
+        &self,
+        user_id: Uuid,
+        recovery_hashes: &str,
+    ) -> Result<(), AppError> {
+        sqlx::query("UPDATE user_totp SET recovery_hashes = ? WHERE user_id = ?")
+            .bind(recovery_hashes)
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn store_pending_2fa(
+        &self,
+        token_hash: &str,
+        user_id: Uuid,
+        refresh_token: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "INSERT INTO pending_2fa (token_hash, user_id, refresh_token, expires_at) VALUES (?, ?, ?, ?)",
+        )
+        .bind(token_hash)
+        .bind(user_id.to_string())
+        .bind(refresh_token)
+        .bind(expires_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn take_pending_2fa(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<(Uuid, String)>, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            user_id: String,
+            refresh_token: String,
+            expires_at: String,
+        }
+        let row = sqlx::query_as::<_, Row>(
+            "SELECT user_id, refresh_token, expires_at FROM pending_2fa WHERE token_hash = ?",
+        )
+        .bind(token_hash)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        if parse_dt(&row.expires_at) < Utc::now() {
+            sqlx::query("DELETE FROM pending_2fa WHERE token_hash = ?")
+                .bind(token_hash)
+                .execute(&self.pool)
+                .await?;
+            return Ok(None);
+        }
+        sqlx::query("DELETE FROM pending_2fa WHERE token_hash = ?")
+            .bind(token_hash)
+            .execute(&self.pool)
+            .await?;
+        Ok(Some((
+            Uuid::parse_str(&row.user_id).unwrap_or_default(),
+            row.refresh_token,
+        )))
     }
 }

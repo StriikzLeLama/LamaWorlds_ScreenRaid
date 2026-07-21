@@ -196,7 +196,9 @@ Create `deploy/Caddyfile` as described in [Section 4](#4-reverse-proxy--proxy-in
 
 ## 4. Reverse Proxy / Proxy inverse
 
-The ScreenRaid server serves both REST (`/v1/*`) and WebSocket (`/v1/ws`) on the same port. The reverse proxy **must** support HTTP/1.1 WebSocket upgrade and forward the `Authorization` header (REST) or pass through the `token` query parameter (WebSocket).
+The ScreenRaid server serves both REST (`/v1/*`) and WebSocket (`/v1/ws`) on the same port. The reverse proxy **must** support HTTP/1.1 WebSocket upgrade and forward `Authorization` (REST) and `X-Forwarded-For` / `X-Forwarded-Proto` (audit + rate limits).
+
+**WebSocket auth:** clients connect to `wss://your-domain/v1/ws` **without** a token in the URL. The first message after connect is `{ "type": "auth", "payload": { "token": "<access_jwt>" } }`. Legacy `?token=` is still accepted but deprecated.
 
 ### 4.1 Caddy (recommended)
 
@@ -230,7 +232,7 @@ screenraid.example.com {
 **WebSocket notes:**
 
 - Caddy 2 performs WebSocket upgrade transparently when the upstream responds with `101 Switching Protocols`.
-- Client connects to `wss://screenraid.example.com/v1/ws?token=<access_token>`.
+- Client connects to `wss://screenraid.example.com/v1/ws` and sends an `auth` message with the access JWT (see [WEBSOCKET.md](./WEBSOCKET.md)).
 - Ensure idle timeouts on the proxy are ≥ 60 s (client pings every 30 s per [WEBSOCKET.md](./WEBSOCKET.md)).
 
 ### 4.2 nginx
@@ -314,6 +316,18 @@ Update `CORS_ORIGINS` if the client is served from a web origin (Tauri uses `tau
 
 ## 5. HTTPS & Certificates / Certificats
 
+### 5.0 Cloudflare Tunnel (recommended for homelab / potes)
+
+When the server runs behind **Cloudflare Tunnel**, Cloudflare terminates TLS (`https://` / `wss://`) at the edge. The origin can stay plain HTTP on `localhost:8080` — no Let's Encrypt on the origin required.
+
+1. Point a public hostname (e.g. `screenraid.example.com`) to your tunnel.
+2. Route traffic to `http://127.0.0.1:8080` (or the Docker service).
+3. Set `CORS_ORIGINS` to your public HTTPS origin if needed (Tauri still uses `tauri://localhost`).
+4. Set a strong `JWT_SECRET` in the server `.env`.
+5. Configure the Tauri receiver `server_url` / `VITE_SERVER_URL` to `https://screenraid.example.com` (client auto-uses `wss://` for WebSocket).
+
+Optional: enable **Cloudflare Turnstile** with `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` (see [Section 6](#6-environment-variables--variables-denvironnement)).
+
 ### 5.1 Caddy + Let's Encrypt (automatic)
 
 Caddy obtains and renews certificates when:
@@ -369,6 +383,9 @@ Canonical reference: [`.env.example`](../.env.example) and `server/src/config.rs
 | `CORS_ORIGINS` | No | `http://localhost:1420,tauri://localhost` | Comma-separated allowed origins (Tauri receiver + optional extra web origins) |
 | `ADMIN_USERNAMES` | No | — | Comma-separated usernames with admin panel access |
 | `ALLOW_SELF_PRANK` | No | `false` | Solo testing: allow pranking yourself |
+| `TURNSTILE_SITE_KEY` | No | — | Cloudflare Turnstile site key (empty = disabled) |
+| `TURNSTILE_SECRET_KEY` | No | — | Turnstile secret key (empty = disabled) |
+| `TURNSTILE_LOGIN_FAILURES` | No | `3` | Require Turnstile on login after N failures per IP/user |
 | `RUST_LOG` | No | `screenraid_server=info` | Tracing filter (`tower_http=info` for HTTP traces) |
 
 ### 6.2 Client Variables (build-time)

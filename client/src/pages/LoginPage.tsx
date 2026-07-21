@@ -1,9 +1,16 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
+import { TurnstileWidget } from '../components/auth/TurnstileWidget';
 import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
 import { useAuthStore } from '../stores/authStore';
-import { login as loginApi, getMe } from '../services/auth';
+import {
+  getMe,
+  login as loginApi,
+  verify2faLogin,
+} from '../services/auth';
+import { loginResponseToAuth } from '../types/auth';
+import { getSecurityPolicy } from '../services/security';
 import { ApiError } from '../services/api';
 import { getServerUrl } from '../services/serverConfig';
 import { isReceiverApp, isWebApp } from '../lib/platform';
@@ -26,6 +33,33 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [showTurnstile, setShowTurnstile] = useState(false);
+  const [requires2fa, setRequires2fa] = useState(false);
+  const [tempToken, setTempToken] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+
+  useEffect(() => {
+    getSecurityPolicy()
+      .then((policy) => setTurnstileSiteKey(policy.turnstile_site_key))
+      .catch(() => undefined);
+  }, []);
+
+  const finishLogin = async (accessToken: string, refreshToken: string) => {
+    const profile = await getMe(accessToken);
+    login(
+      { access: accessToken, refresh: refreshToken },
+      {
+        id: profile.id,
+        username: profile.username,
+        display_name: profile.display_name,
+        avatar_url: profile.avatar_url,
+      },
+    );
+    setIsAdmin(Boolean(profile.is_admin));
+    navigate('/', { replace: true });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,17 +67,43 @@ export function LoginPage() {
     setLoading(true);
     try {
       await ensureServerUrl(isWebApp() ? getServerUrl() : serverUrl);
-      const res = await loginApi({ username, password });
-      login({ access: res.access_token, refresh: res.refresh_token }, res.user);
-      const profile = await getMe(res.access_token);
-      setIsAdmin(Boolean(profile.is_admin));
-      navigate('/', { replace: true });
+      if (requires2fa) {
+        const auth = await verify2faLogin({ temp_token: tempToken, code: totpCode.trim() });
+        await finishLogin(auth.access_token, auth.refresh_token);
+        return;
+      }
+      if (showTurnstile && turnstileSiteKey && !turnstileToken) {
+        setError('Complete the captcha verification.');
+        return;
+      }
+      const res = await loginApi({
+        username,
+        password,
+        turnstile_token: turnstileToken ?? undefined,
+      });
+      if (res.requires_2fa && res.temp_token) {
+        setRequires2fa(true);
+        setTempToken(res.temp_token);
+        setTotpCode('');
+        return;
+      }
+      const auth = loginResponseToAuth(res);
+      if (!auth) {
+        setError('Login failed — invalid server response.');
+        return;
+      }
+      await finishLogin(auth.access_token, auth.refresh_token);
     } catch (err) {
+      if (turnstileSiteKey) setShowTurnstile(true);
       setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
+
+  const onTurnstileToken = useCallback((token: string | null) => {
+    setTurnstileToken(token);
+  }, []);
 
   return (
     <div className="flex min-h-full w-full items-center justify-center p-6">
@@ -69,31 +129,66 @@ export function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           {isReceiverApp() && <ServerUrlField onChange={setServerUrl} />}
-          <Input
-            label="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="prankster42"
-            required
-            autoComplete="username"
-          />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            autoComplete="current-password"
-          />
+          {!requires2fa ? (
+            <>
+              <Input
+                label="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="prankster42"
+                required
+                autoComplete="username"
+              />
+              <Input
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-raid-text-secondary">
+                Entre le code de ton app d’authentification ou un code de récupération.
+              </p>
+              <Input
+                label="Code 2FA"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value)}
+                placeholder="123456"
+                required
+                autoComplete="one-time-code"
+              />
+            </>
+          )}
+          {showTurnstile && turnstileSiteKey && !requires2fa && (
+            <TurnstileWidget siteKey={turnstileSiteKey} onToken={onTurnstileToken} />
+          )}
           {error && (
             <p className="rounded-xl border border-raid-danger/30 bg-raid-danger/10 px-3 py-2 text-sm text-raid-danger">
               {error}
             </p>
           )}
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Signing in…' : requires2fa ? 'Verify 2FA' : 'Sign in'}
           </Button>
+          {requires2fa && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setRequires2fa(false);
+                setTempToken('');
+                setTotpCode('');
+              }}
+            >
+              Back to password
+            </Button>
+          )}
         </form>
         <p className="mt-4 text-center text-sm text-raid-text-secondary">
           No account?{' '}

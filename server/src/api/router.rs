@@ -35,12 +35,19 @@ pub fn create_router(state: AppState) -> Router {
     };
 
     let auth_routes = Router::new()
+        .route("/security-policy", get(handlers::security_policy))
         .route("/register", post(handlers::register))
         .route("/login", post(handlers::login))
+        .route("/2fa/verify", post(handlers::verify_2fa))
         .route("/refresh", post(handlers::refresh))
         .route("/logout", post(handlers::logout))
         .route("/logout-all", post(handlers::logout_all))
         .route("/me", get(handlers::me))
+        .route("/sessions", get(handlers::list_sessions))
+        .route("/sessions/{id}", delete(handlers::revoke_session))
+        .route("/2fa/setup", post(handlers::setup_2fa))
+        .route("/2fa/enable", post(handlers::enable_2fa))
+        .route("/2fa/disable", post(handlers::disable_2fa))
         .route("/change-password", post(handlers::change_password))
         .route("/change-username", post(handlers::change_username))
         .route("/change-display-name", post(handlers::change_display_name));
@@ -54,6 +61,7 @@ pub fn create_router(state: AppState) -> Router {
             "/{id}/members/{user_id}",
             delete(handlers::kick_member).patch(handlers::change_member_role),
         )
+        .route("/{id}/security", get(handlers::get_room_security).patch(handlers::update_room_security))
         .route("/{id}/pranks", post(handlers::send_prank).get(handlers::list_pranks));
 
     let friend_routes = Router::new()
@@ -109,6 +117,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/rooms/{id}/media", get(handlers::list_room_media))
         .route("/v1/rooms/{id}/pranks/{prank_id}/ack", post(handlers::ack_prank))
         .route("/v1/users/me/monitors", get(handlers::get_my_monitors).put(handlers::update_my_monitors))
+        .route("/v1/users/me/security", get(handlers::get_my_security_prefs).patch(handlers::update_my_security_prefs))
+        .route("/v1/audit/me", get(handlers::list_my_audit))
         .route("/v1/users/{id}/monitors", get(handlers::get_user_monitors))
         .layer(TraceLayer::new_for_http())
         .layer(cors)

@@ -36,6 +36,25 @@ export function setServerUrl(url: string): void {
   }
 }
 
+/** Derive WebSocket base URL from HTTP(S) server URL. */
+export function toWebSocketBase(httpBase: string): string {
+  const trimmed = httpBase.trim().replace(/\/$/, '');
+  if (trimmed.startsWith('https://')) {
+    return trimmed.replace(/^https:\/\//, 'wss://');
+  }
+  if (trimmed.startsWith('http://')) {
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+      throw new Error('Cannot use ws:// from an HTTPS page — set server URL to https://');
+    }
+    return trimmed.replace(/^http:\/\//, 'ws://');
+  }
+  throw new Error('Server URL must start with http:// or https://');
+}
+
+export function getWebSocketUrl(): string {
+  return toWebSocketBase(getServerUrl());
+}
+
 export function normalizeServerUrl(
   url: string,
   options?: { allowEmpty?: boolean },

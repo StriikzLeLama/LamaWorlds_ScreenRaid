@@ -7,12 +7,12 @@ use crate::api::middleware::rate_limit::{
 };
 use crate::config::Config;
 use crate::repository::{
-    ConsentRepository, FriendRepository, MediaRepository, MonitorRepository, PrankRepository,
-    RoomRepository, UserRepository,
+    AuditRepository, ConsentRepository, FriendRepository, MediaRepository, MonitorRepository,
+    PrankRepository, RoomRepository, SecurityRepository, UserRepository,
 };
 use crate::service::{
     AuthService, ConsentService, FriendService, GifService, MediaService, MonitorService,
-    PrankService, RoomService,
+    PrankService, RoomService, SecurityService,
 };
 use crate::websocket::WsHub;
 
@@ -21,6 +21,7 @@ pub struct AppState {
     pub db: SqlitePool,
     pub config: Arc<Config>,
     pub auth: Arc<AuthService>,
+    pub security: Arc<SecurityService>,
     pub rooms: Arc<RoomService>,
     pub friends: Arc<FriendService>,
     pub consent: Arc<ConsentService>,
@@ -43,6 +44,8 @@ impl AppState {
         let consent_repo = ConsentRepository::new(db.clone());
         let rooms_repo = RoomRepository::new(db.clone());
         let friends_repo = FriendRepository::new(db.clone());
+        let audit_repo = AuditRepository::new(db.clone());
+        let security_repo = SecurityRepository::new(db.clone());
 
         let consent = Arc::new(ConsentService::new(
             consent_repo,
@@ -52,9 +55,12 @@ impl AppState {
 
         let auth = Arc::new(AuthService::new(
             UserRepository::new(db.clone()),
-            Arc::new(config.jwt_secret.clone()),
-            Arc::new(config.admin_usernames.clone()),
+            security_repo.clone(),
+            audit_repo.clone(),
+            &config,
         ));
+
+        let security = Arc::new(SecurityService::new(security_repo.clone(), audit_repo.clone()));
 
         let rooms = Arc::new(RoomService::new(
             rooms_repo,
@@ -82,6 +88,8 @@ impl AppState {
             RoomRepository::new(db.clone()),
             UserRepository::new(db.clone()),
             MediaRepository::new(db.clone()),
+            security_repo.clone(),
+            audit_repo.clone(),
             (*consent).clone(),
             ws_hub.clone(),
             config.allow_self_prank,
@@ -97,6 +105,7 @@ impl AppState {
             db,
             config,
             auth,
+            security,
             rooms,
             friends,
             consent,

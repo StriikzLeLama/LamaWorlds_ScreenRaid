@@ -4,17 +4,21 @@ use uuid::Uuid;
 use crate::UserSummary;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+    #[serde(default)]
+    pub turnstile_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterRequest {
     pub username: String,
     pub email: String,
     pub password: String,
     pub display_name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoginRequest {
-    pub username: String,
-    pub password: String,
+    #[serde(default)]
+    pub turnstile_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

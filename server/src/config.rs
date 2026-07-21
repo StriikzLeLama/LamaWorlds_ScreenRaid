@@ -18,6 +18,9 @@ pub struct Config {
     /// KLIPY partner API key — proxied server-side so the browser never sees it.
     /// Empty = GIF search disabled (UI shows a setup hint).
     pub klipy_api_key: String,
+    pub turnstile_site_key: String,
+    pub turnstile_secret_key: String,
+    pub turnstile_login_failures: u32,
 }
 
 impl Config {
@@ -55,6 +58,12 @@ impl Config {
                 .unwrap_or(false),
             static_path,
             klipy_api_key: env::var("KLIPY_API_KEY").unwrap_or_default().trim().to_string(),
+            turnstile_site_key: env::var("TURNSTILE_SITE_KEY").unwrap_or_default(),
+            turnstile_secret_key: env::var("TURNSTILE_SECRET_KEY").unwrap_or_default(),
+            turnstile_login_failures: env::var("TURNSTILE_LOGIN_FAILURES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3),
         }
     }
 
@@ -64,6 +73,10 @@ impl Config {
 
     pub fn klipy_enabled(&self) -> bool {
         !self.klipy_api_key.is_empty()
+    }
+
+    pub fn turnstile_enabled(&self) -> bool {
+        !self.turnstile_secret_key.is_empty()
     }
 }
 

@@ -14,6 +14,7 @@ import {
 import { clearLocalSession } from '../services/session';
 import { useConsentStore } from '../stores/consentStore';
 import { useAuthStore } from '../stores/authStore';
+import { SecuritySettingsPanels } from '../components/settings/SecuritySettingsPanels';
 
 function errMsg(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -319,6 +320,14 @@ export function WebSettingsPage() {
             on your PC, sign in with the same account, and turn on Receive raids in the receiver.
           </p>
         </Card>
+
+        {accessToken && (
+          <SecuritySettingsPanels
+            accessToken={accessToken}
+            onMessage={setMessage}
+            onError={setError}
+          />
+        )}
       </div>
     </div>
   );
