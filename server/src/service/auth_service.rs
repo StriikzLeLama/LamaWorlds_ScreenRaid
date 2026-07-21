@@ -9,8 +9,8 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rand::Rng;
 use screenraid_types::{
-    AuthResponse, JwtClaims, LoginRequest, RefreshRequest, RegisterRequest, UserProfile,
-    UserSummary,
+    AuthResponse, ChangeDisplayNameRequest, ChangePasswordRequest, ChangeUsernameRequest,
+    JwtClaims, LoginRequest, RefreshRequest, RegisterRequest, UserProfile, UserSummary,
 };
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -102,6 +102,112 @@ impl AuthService {
     pub async fn logout(&self, refresh_token: &str) -> Result<(), AppError> {
         let token_hash = hash_token(refresh_token);
         self.users.revoke_refresh_token(&token_hash).await
+    }
+
+    /// Revoke every refresh token for this user (other devices must re-login).
+    pub async fn logout_all(&self, user_id: Uuid) -> Result<(), AppError> {
+        self.users.revoke_all_user_tokens(user_id).await
+    }
+
+    pub async fn change_password(
+        &self,
+        user_id: Uuid,
+        req: ChangePasswordRequest,
+    ) -> Result<AuthResponse, AppError> {
+        validate_password_strength(&req.new_password, None)?;
+        if req.new_password == req.current_password {
+            return Err(AppError::Validation(
+                "new password must differ from the current password".into(),
+            ));
+        }
+
+        let user = self
+            .users
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("user".into()))?;
+
+        if !user.is_active {
+            return Err(AppError::Forbidden);
+        }
+
+        verify_password(&req.current_password, &user.password_hash)?;
+        validate_password_strength(&req.new_password, Some(&user.username))?;
+
+        let password_hash = hash_password(&req.new_password)?;
+        self.users
+            .update_password_hash(user_id, &password_hash)
+            .await?;
+        // Kill every session — including stolen refresh tokens — then re-issue
+        // for the caller so they stay signed in on this device only.
+        self.users.revoke_all_user_tokens(user_id).await?;
+
+        let user = self
+            .users
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("user".into()))?;
+        self.issue_tokens(&user).await
+    }
+
+    pub async fn change_username(
+        &self,
+        user_id: Uuid,
+        req: ChangeUsernameRequest,
+    ) -> Result<UserProfile, AppError> {
+        validate_username(&req.new_username)?;
+
+        let user = self
+            .users
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("user".into()))?;
+
+        if !user.is_active {
+            return Err(AppError::Forbidden);
+        }
+
+        verify_password(&req.current_password, &user.password_hash)?;
+
+        if user.username.eq_ignore_ascii_case(&req.new_username) {
+            // Same name ignoring case — allow only exact case tweak, or no-op.
+            if user.username == req.new_username {
+                return self.me(user_id).await;
+            }
+        } else if let Some(existing) = self.users.find_by_username(&req.new_username).await? {
+            if existing.id != user_id {
+                return Err(AppError::Conflict("username already taken".into()));
+            }
+        }
+
+        self.users
+            .update_username(user_id, &req.new_username)
+            .await?;
+        self.me(user_id).await
+    }
+
+    pub async fn change_display_name(
+        &self,
+        user_id: Uuid,
+        req: ChangeDisplayNameRequest,
+    ) -> Result<UserProfile, AppError> {
+        validate_display_name(&req.new_display_name)?;
+
+        let user = self
+            .users
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("user".into()))?;
+
+        if !user.is_active {
+            return Err(AppError::Forbidden);
+        }
+
+        verify_password(&req.current_password, &user.password_hash)?;
+        self.users
+            .update_display_name(user_id, req.new_display_name.trim())
+            .await?;
+        self.me(user_id).await
     }
 
     pub async fn deactivate_user(&self, user_id: Uuid) -> Result<bool, AppError> {
@@ -210,13 +316,22 @@ impl AuthService {
 }
 
 fn validate_register(req: &RegisterRequest) -> Result<(), AppError> {
-    if req.username.len() < 3 || req.username.len() > 32 {
+    validate_username(&req.username)?;
+    validate_password_strength(&req.password, Some(&req.username))?;
+    validate_display_name(&req.display_name)?;
+    if !req.email.contains('@') || req.email.len() > 255 {
+        return Err(AppError::Validation("invalid email".into()));
+    }
+    Ok(())
+}
+
+fn validate_username(username: &str) -> Result<(), AppError> {
+    if username.len() < 3 || username.len() > 32 {
         return Err(AppError::Validation(
             "username must be 3-32 characters".into(),
         ));
     }
-    if !req
-        .username
+    if !username
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_')
     {
@@ -224,18 +339,61 @@ fn validate_register(req: &RegisterRequest) -> Result<(), AppError> {
             "username may only contain letters, numbers, and underscores".into(),
         ));
     }
-    if req.password.len() < 8 {
-        return Err(AppError::Validation(
-            "password must be at least 8 characters".into(),
-        ));
-    }
-    if req.display_name.is_empty() || req.display_name.len() > 64 {
+    Ok(())
+}
+
+fn validate_display_name(display_name: &str) -> Result<(), AppError> {
+    let trimmed = display_name.trim();
+    if trimmed.is_empty() || trimmed.len() > 64 {
         return Err(AppError::Validation(
             "display name must be 1-64 characters".into(),
         ));
     }
-    if !req.email.contains('@') || req.email.len() > 255 {
-        return Err(AppError::Validation("invalid email".into()));
+    Ok(())
+}
+
+/// Stronger password policy: length bounds, letter+digit, no username reuse,
+/// reject a short list of common passwords.
+fn validate_password_strength(password: &str, username: Option<&str>) -> Result<(), AppError> {
+    if password.len() < 10 {
+        return Err(AppError::Validation(
+            "password must be at least 10 characters".into(),
+        ));
+    }
+    if password.len() > 128 {
+        return Err(AppError::Validation(
+            "password must be at most 128 characters".into(),
+        ));
+    }
+    let has_letter = password.chars().any(|c| c.is_ascii_alphabetic());
+    let has_digit = password.chars().any(|c| c.is_ascii_digit());
+    if !has_letter || !has_digit {
+        return Err(AppError::Validation(
+            "password must contain at least one letter and one digit".into(),
+        ));
+    }
+    if let Some(u) = username {
+        if !u.is_empty() && password.eq_ignore_ascii_case(u) {
+            return Err(AppError::Validation(
+                "password must not match your username".into(),
+            ));
+        }
+    }
+    const COMMON: &[&str] = &[
+        "password10",
+        "password123",
+        "1234567890",
+        "qwerty1234",
+        "letmein123",
+        "admin12345",
+        "welcome123",
+        "screenraid1",
+    ];
+    let lower = password.to_ascii_lowercase();
+    if COMMON.iter().any(|c| *c == lower) {
+        return Err(AppError::Validation(
+            "password is too common — choose a stronger one".into(),
+        ));
     }
     Ok(())
 }

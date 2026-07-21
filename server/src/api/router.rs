@@ -39,7 +39,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/login", post(handlers::login))
         .route("/refresh", post(handlers::refresh))
         .route("/logout", post(handlers::logout))
-        .route("/me", get(handlers::me));
+        .route("/logout-all", post(handlers::logout_all))
+        .route("/me", get(handlers::me))
+        .route("/change-password", post(handlers::change_password))
+        .route("/change-username", post(handlers::change_username))
+        .route("/change-display-name", post(handlers::change_display_name));
 
     let room_routes = Router::new()
         .route("/", get(handlers::list_rooms).post(handlers::create_room))

@@ -9,6 +9,7 @@ interface AuthStore {
   isAuthenticated: boolean;
   isAdmin: boolean;
   login: (tokens: { access: string; refresh: string }, user: UserSummary) => void;
+  setUser: (user: UserSummary) => void;
   setIsAdmin: (isAdmin: boolean) => void;
   logout: () => void;
 }
@@ -28,6 +29,7 @@ export const useAuthStore = create<AuthStore>()(
           user,
           isAuthenticated: true,
         }),
+      setUser: (user) => set({ user }),
       setIsAdmin: (isAdmin) => set({ isAdmin }),
       logout: () =>
         set({

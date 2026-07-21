@@ -9,7 +9,7 @@ async fn register_user(app: &mut axum::Router, username: &str) -> String {
         r#"{{
             "username": "{username}",
             "email": "{username}@example.com",
-            "password": "password123",
+            "password": "SecurePass99",
             "display_name": "{username}"
         }}"#
     );

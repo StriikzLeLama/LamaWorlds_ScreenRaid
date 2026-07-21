@@ -23,6 +23,24 @@ pub struct RefreshRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeUsernameRequest {
+    pub current_password: String,
+    pub new_username: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeDisplayNameRequest {
+    pub current_password: String,
+    pub new_display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthResponse {
     pub access_token: String,
     pub refresh_token: String,

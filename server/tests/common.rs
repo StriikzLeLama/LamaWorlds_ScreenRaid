@@ -28,6 +28,7 @@ pub async fn spawn_app() -> TestApp {
         admin_usernames: std::collections::HashSet::new(),
         allow_self_prank: false,
         static_path: std::path::PathBuf::from("/nonexistent-no-web-in-tests"),
+        klipy_api_key: String::new(),
     };
 
     let connect_options = SqliteConnectOptions::new()

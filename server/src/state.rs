@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use sqlx::SqlitePool;
 
-use crate::api::middleware::rate_limit::{api_limiter, login_limiter, register_limiter, RateLimiter};
+use crate::api::middleware::rate_limit::{
+    account_limiter, api_limiter, login_limiter, refresh_limiter, register_limiter, RateLimiter,
+};
 use crate::config::Config;
 use crate::repository::{
     ConsentRepository, FriendRepository, MediaRepository, MonitorRepository, PrankRepository,
@@ -29,6 +31,8 @@ pub struct AppState {
     pub ws_hub: Arc<WsHub>,
     pub login_limiter: Arc<RateLimiter>,
     pub register_limiter: Arc<RateLimiter>,
+    pub refresh_limiter: Arc<RateLimiter>,
+    pub account_limiter: Arc<RateLimiter>,
     pub api_limiter: Arc<RateLimiter>,
 }
 
@@ -103,6 +107,8 @@ impl AppState {
             ws_hub,
             login_limiter: Arc::new(login_limiter()),
             register_limiter: Arc::new(register_limiter()),
+            refresh_limiter: Arc::new(refresh_limiter()),
+            account_limiter: Arc::new(account_limiter()),
             api_limiter: Arc::new(api_limiter()),
         }
     }

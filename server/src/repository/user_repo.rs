@@ -124,12 +124,74 @@ impl UserRepository {
     }
 
     pub async fn find_by_username(&self, username: &str) -> Result<Option<UserRecord>, AppError> {
-        let row = sqlx::query_as::<_, UserRow>("SELECT * FROM users WHERE username = ?")
-            .bind(username)
-            .fetch_optional(&self.pool)
-            .await?;
+        // Case-insensitive match so "Alice" and "alice" collide / login the same.
+        let row = sqlx::query_as::<_, UserRow>(
+            "SELECT * FROM users WHERE LOWER(username) = LOWER(?)",
+        )
+        .bind(username)
+        .fetch_optional(&self.pool)
+        .await?;
 
         Ok(row.map(Into::into))
+    }
+
+    pub async fn update_password_hash(
+        &self,
+        user_id: Uuid,
+        password_hash: &str,
+    ) -> Result<(), AppError> {
+        let result = sqlx::query(
+            "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(password_hash)
+        .bind(Utc::now().to_rfc3339())
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound("user".into()));
+        }
+        Ok(())
+    }
+
+    pub async fn update_username(&self, user_id: Uuid, username: &str) -> Result<(), AppError> {
+        let result = sqlx::query("UPDATE users SET username = ?, updated_at = ? WHERE id = ?")
+            .bind(username)
+            .bind(Utc::now().to_rfc3339())
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                if let sqlx::Error::Database(db) = &e {
+                    if db.message().contains("UNIQUE") {
+                        return AppError::Conflict("username already taken".into());
+                    }
+                }
+                AppError::from(e)
+            })?;
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound("user".into()));
+        }
+        Ok(())
+    }
+
+    pub async fn update_display_name(
+        &self,
+        user_id: Uuid,
+        display_name: &str,
+    ) -> Result<(), AppError> {
+        let result = sqlx::query(
+            "UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(display_name)
+        .bind(Utc::now().to_rfc3339())
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound("user".into()));
+        }
+        Ok(())
     }
 
     pub async fn store_refresh_token(

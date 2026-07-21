@@ -59,6 +59,16 @@ pub fn register_limiter() -> RateLimiter {
     RateLimiter::new(3, Duration::from_secs(3600))
 }
 
+pub fn refresh_limiter() -> RateLimiter {
+    // Caps refresh-token stuffing / stolen-token spray.
+    RateLimiter::new(20, Duration::from_secs(60))
+}
+
+pub fn account_limiter() -> RateLimiter {
+    // Password / username / display-name changes (per IP).
+    RateLimiter::new(5, Duration::from_secs(60))
+}
+
 pub fn api_limiter() -> RateLimiter {
     RateLimiter::new(120, Duration::from_secs(60))
 }

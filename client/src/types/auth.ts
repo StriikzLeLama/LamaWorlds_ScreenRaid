@@ -24,3 +24,18 @@ export interface LoginPayload {
   username: string;
   password: string;
 }
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+}
+
+export interface ChangeUsernamePayload {
+  current_password: string;
+  new_username: string;
+}
+
+export interface ChangeDisplayNamePayload {
+  current_password: string;
+  new_display_name: string;
+}

@@ -101,11 +101,15 @@ export function RegisterPage() {
             type="password"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="Min. 8 characters"
+            placeholder="Min. 10 characters · letter + digit"
             required
-            minLength={8}
+            minLength={10}
+            maxLength={128}
             autoComplete="new-password"
           />
+          <p className="text-xs text-raid-text-secondary">
+            Au moins 10 caractères, une lettre et un chiffre. Évite les mots de passe trop courants.
+          </p>
           {error && (
             <p className="rounded-xl border border-raid-danger/30 bg-raid-danger/10 px-3 py-2 text-sm text-raid-danger">
               {error}
