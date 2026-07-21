@@ -46,6 +46,36 @@ export function usePrankReceiver() {
         return;
       }
 
+      // Quiet hours — local clock window (supports overnight, e.g. 22:00–08:00).
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const settings = await invoke<{
+          quiet_hours_enabled?: boolean;
+          quiet_hours_start?: string;
+          quiet_hours_end?: string;
+        }>('get_settings');
+        if (settings.quiet_hours_enabled) {
+          const start = settings.quiet_hours_start ?? '22:00';
+          const end = settings.quiet_hours_end ?? '08:00';
+          const now = new Date();
+          const mins = now.getHours() * 60 + now.getMinutes();
+          const parse = (hhmm: string) => {
+            const [h, m] = hhmm.split(':').map(Number);
+            return (h || 0) * 60 + (m || 0);
+          };
+          const s = parse(start);
+          const e = parse(end);
+          const inQuiet = s <= e ? mins >= s && mins < e : mins >= s || mins < e;
+          if (inQuiet) {
+            log.warn('prank blocked by quiet hours', start, end);
+            await ackPrank(prank.prank_id, false, prank.room_id);
+            return;
+          }
+        }
+      } catch {
+        // settings optional outside Tauri
+      }
+
       const token = useAuthStore.getState().accessToken;
       if (!token) {
         log.warn('prank dropped — no access token');

@@ -1,10 +1,11 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
 use screenraid_types::{
-    CreateRoomRequest, JoinRoomRequest, RoomDetail, RoomRole, RoomSummary, RoomsListResponse,
+    ActivityListResponse, CreateRoomRequest, JoinRoomRequest, RoomDetail, RoomRole, RoomSummary,
+    RoomsListResponse,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -16,6 +17,16 @@ use crate::state::AppState;
 #[derive(Deserialize)]
 pub struct ChangeRoleBody {
     pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ActivityQuery {
+    #[serde(default = "default_activity_limit")]
+    pub limit: u32,
+}
+
+fn default_activity_limit() -> u32 {
+    50
 }
 
 pub async fn list_rooms(
@@ -93,4 +104,18 @@ pub async fn change_member_role(
         .change_role(auth.user_id, room_id, user_id, role)
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_room_activity(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Path(room_id): Path<Uuid>,
+    Query(query): Query<ActivityQuery>,
+) -> Result<Json<ActivityListResponse>, AppError> {
+    let limit = query.limit.clamp(1, 100);
+    let items = state
+        .pranks
+        .list_activity(room_id, auth.user_id, limit)
+        .await?;
+    Ok(Json(ActivityListResponse { items }))
 }

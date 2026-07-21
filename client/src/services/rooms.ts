@@ -19,6 +19,49 @@ export async function joinRoom(invite_code: string): Promise<RoomSummary> {
   });
 }
 
+/** Join via guest/member invite link token (expiry + max uses). */
+export async function joinRoomByToken(invite_token: string): Promise<RoomSummary> {
+  return apiFetch('/v1/rooms/join', {
+    method: 'POST',
+    body: JSON.stringify({ invite_token }),
+  });
+}
+
+export interface RoomInvite {
+  id: string;
+  room_id: string;
+  token: string;
+  role: string;
+  expires_at: string | null;
+  max_uses: number;
+  use_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export async function createRoomInvite(
+  roomId: string,
+  opts: { role?: string; expires_in_hours?: number; max_uses?: number } = {},
+): Promise<RoomInvite> {
+  return apiFetch(`/v1/rooms/${roomId}/invites`, {
+    method: 'POST',
+    body: JSON.stringify({
+      role: opts.role ?? 'guest',
+      expires_in_hours: opts.expires_in_hours ?? 24,
+      max_uses: opts.max_uses ?? 1,
+    }),
+  });
+}
+
+export async function listRoomInvites(roomId: string): Promise<RoomInvite[]> {
+  const res = await apiFetch<{ invites: RoomInvite[] }>(`/v1/rooms/${roomId}/invites`);
+  return res.invites;
+}
+
+export async function deactivateRoomInvite(roomId: string, inviteId: string): Promise<void> {
+  await apiFetch(`/v1/rooms/${roomId}/invites/${inviteId}`, { method: 'DELETE' });
+}
+
 export async function getRoom(id: string): Promise<RoomDetail> {
   return apiFetch(`/v1/rooms/${id}`);
 }

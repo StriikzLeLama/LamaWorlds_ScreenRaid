@@ -23,10 +23,27 @@ pub struct AppSettings {
     pub soft_mode: bool,
     #[serde(default = "default_max_opacity")]
     pub max_opacity: f32,
+    /// When true, auto-block receive during quiet hours window.
+    #[serde(default)]
+    pub quiet_hours_enabled: bool,
+    /// Local time HH:MM (24h), inclusive start.
+    #[serde(default = "default_quiet_start")]
+    pub quiet_hours_start: String,
+    /// Local time HH:MM (24h), exclusive end (supports overnight windows).
+    #[serde(default = "default_quiet_end")]
+    pub quiet_hours_end: String,
 }
 
 fn default_max_opacity() -> f32 {
     0.55
+}
+
+fn default_quiet_start() -> String {
+    "22:00".into()
+}
+
+fn default_quiet_end() -> String {
+    "08:00".into()
 }
 
 impl Default for AppSettings {
@@ -43,6 +60,9 @@ impl Default for AppSettings {
             force_preferred_monitor: false,
             soft_mode: false,
             max_opacity: default_max_opacity(),
+            quiet_hours_enabled: false,
+            quiet_hours_start: default_quiet_start(),
+            quiet_hours_end: default_quiet_end(),
         }
     }
 }

@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
+use chrono::{Duration, Utc};
 use screenraid_types::{
-    ConsentState, CreateRoomRequest, JoinRoomRequest, PresenceStatus, RoomDetail,
-    RoomMember, RoomRole, RoomSummary, RoomsListResponse, UserSummary,
+    ConsentState, CreateRoomInviteRequest, CreateRoomRequest, JoinRoomRequest, PresenceStatus,
+    RoomDetail, RoomInviteResponse, RoomInvitesListResponse, RoomMember, RoomRole, RoomSummary,
+    RoomsListResponse, UserSummary,
 };
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::repository::{RoomRepository, UserRepository};
-use crate::repository::room_repo::{parse_role, role_to_str};
+use crate::repository::room_repo::{parse_dt, parse_role, role_to_str, RoomInviteRow};
 use crate::service::ConsentService;
 use crate::websocket::WsHub;
 
@@ -100,7 +102,16 @@ impl RoomService {
     }
 
     pub async fn join(&self, user_id: Uuid, req: JoinRoomRequest) -> Result<RoomSummary, AppError> {
-        let code = req.invite_code.trim().to_uppercase();
+        if let Some(token) = req.invite_token.as_deref().filter(|t| !t.is_empty()) {
+            return self.join_via_invite(user_id, token).await;
+        }
+
+        let code = req
+            .invite_code
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_uppercase();
         if code.len() != 8 {
             return Err(AppError::Validation("invalid invite code".into()));
         }
@@ -126,6 +137,78 @@ impl RoomService {
             .add_member(room_id, user_id, RoomRole::Member)
             .await?;
 
+        self.broadcast_member_joined(room_id, user_id).await?;
+
+        Ok(RoomSummary {
+            id: room_id,
+            name: room.name,
+            invite_code: room.invite_code,
+            role: RoomRole::Member,
+            member_count: count + 1,
+        })
+    }
+
+    async fn join_via_invite(&self, user_id: Uuid, token: &str) -> Result<RoomSummary, AppError> {
+        let invite = self
+            .rooms
+            .find_invite_by_token(token)
+            .await?
+            .ok_or_else(|| AppError::NotFound("invite".into()))?;
+
+        if invite.is_active == 0 {
+            return Err(AppError::Validation("invite is no longer active".into()));
+        }
+
+        if let Some(expires_at) = invite.expires_at.as_deref() {
+            if parse_dt(expires_at) <= Utc::now() {
+                let invite_id = Uuid::parse_str(&invite.id).unwrap_or_default();
+                self.rooms.deactivate_invite(invite_id).await?;
+                return Err(AppError::Validation("invite has expired".into()));
+            }
+        }
+
+        if invite.use_count >= invite.max_uses {
+            return Err(AppError::Validation("invite has reached its use limit".into()));
+        }
+
+        let room_id = Uuid::parse_str(&invite.room_id).unwrap_or_default();
+        let room = self
+            .rooms
+            .find_by_id(room_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("room".into()))?;
+
+        if self.rooms.is_member(room_id, user_id).await?.is_some() {
+            return Err(AppError::Conflict("already in room".into()));
+        }
+
+        let count = self.rooms.member_count(room_id).await?;
+        if count >= room.max_members {
+            return Err(AppError::Validation("room is full".into()));
+        }
+
+        let role = parse_role(&invite.role);
+        self.rooms.add_member(room_id, user_id, role).await?;
+
+        let invite_id = Uuid::parse_str(&invite.id).unwrap_or_default();
+        self.rooms.increment_invite_use(invite_id).await?;
+        let new_use_count = invite.use_count + 1;
+        if new_use_count >= invite.max_uses {
+            self.rooms.deactivate_invite(invite_id).await?;
+        }
+
+        self.broadcast_member_joined(room_id, user_id).await?;
+
+        Ok(RoomSummary {
+            id: room_id,
+            name: room.name,
+            invite_code: room.invite_code,
+            role,
+            member_count: count + 1,
+        })
+    }
+
+    async fn broadcast_member_joined(&self, room_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
         let user = self
             .users
             .find_by_id(user_id)
@@ -147,14 +230,101 @@ impl RoomService {
                 }),
             )
             .await;
+        Ok(())
+    }
 
-        Ok(RoomSummary {
-            id: room_id,
-            name: room.name,
-            invite_code: room.invite_code,
-            role: RoomRole::Member,
-            member_count: count + 1,
+    pub async fn create_invite(
+        &self,
+        actor_id: Uuid,
+        room_id: Uuid,
+        req: CreateRoomInviteRequest,
+    ) -> Result<RoomInviteResponse, AppError> {
+        let actor_role = self
+            .rooms
+            .is_member(room_id, actor_id)
+            .await?
+            .ok_or(AppError::Forbidden)?;
+
+        if !actor_role.can_moderate() {
+            return Err(AppError::Forbidden);
+        }
+
+        let role = req.role.unwrap_or(RoomRole::Guest);
+        if !matches!(role, RoomRole::Guest | RoomRole::Member) {
+            return Err(AppError::Validation(
+                "invite role must be guest or member".into(),
+            ));
+        }
+
+        let max_uses = req.max_uses.unwrap_or(1).clamp(1, 1000);
+        let expires_at = req
+            .expires_in_hours
+            .map(|h| Utc::now() + Duration::hours(h.clamp(1, 24 * 365) as i64));
+
+        let id = Uuid::new_v4();
+        let token = RoomRepository::generate_invite_token();
+        self.rooms
+            .create_invite(id, room_id, &token, role, actor_id, expires_at, max_uses)
+            .await?;
+
+        Ok(RoomInviteResponse {
+            id,
+            room_id,
+            token,
+            role,
+            expires_at,
+            max_uses,
+            use_count: 0,
+            is_active: true,
+            created_at: Utc::now(),
         })
+    }
+
+    pub async fn list_invites(
+        &self,
+        actor_id: Uuid,
+        room_id: Uuid,
+    ) -> Result<RoomInvitesListResponse, AppError> {
+        let actor_role = self
+            .rooms
+            .is_member(room_id, actor_id)
+            .await?
+            .ok_or(AppError::Forbidden)?;
+
+        if !actor_role.can_moderate() {
+            return Err(AppError::Forbidden);
+        }
+
+        let rows = self.rooms.list_active_invites(room_id).await?;
+        Ok(RoomInvitesListResponse {
+            invites: rows.into_iter().map(invite_row_to_response).collect(),
+        })
+    }
+
+    pub async fn deactivate_invite(
+        &self,
+        actor_id: Uuid,
+        room_id: Uuid,
+        invite_id: Uuid,
+    ) -> Result<(), AppError> {
+        let actor_role = self
+            .rooms
+            .is_member(room_id, actor_id)
+            .await?
+            .ok_or(AppError::Forbidden)?;
+
+        if !actor_role.can_moderate() {
+            return Err(AppError::Forbidden);
+        }
+
+        let changed = self
+            .rooms
+            .deactivate_invite_in_room(room_id, invite_id)
+            .await?;
+        if !changed {
+            return Err(AppError::NotFound("invite".into()));
+        }
+        Ok(())
     }
 
     pub async fn leave(&self, user_id: Uuid, room_id: Uuid) -> Result<(), AppError> {
@@ -340,5 +510,19 @@ impl RoomService {
             });
         }
         Ok(members)
+    }
+}
+
+fn invite_row_to_response(row: RoomInviteRow) -> RoomInviteResponse {
+    RoomInviteResponse {
+        id: Uuid::parse_str(&row.id).unwrap_or_default(),
+        room_id: Uuid::parse_str(&row.room_id).unwrap_or_default(),
+        token: row.token,
+        role: parse_role(&row.role),
+        expires_at: row.expires_at.as_deref().map(parse_dt),
+        max_uses: row.max_uses,
+        use_count: row.use_count,
+        is_active: row.is_active != 0,
+        created_at: parse_dt(&row.created_at),
     }
 }

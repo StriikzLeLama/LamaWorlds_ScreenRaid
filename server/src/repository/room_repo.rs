@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 
 const INVITE_CHARS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const INVITE_TOKEN_LEN: usize = 16;
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct RoomRow {
@@ -28,6 +29,20 @@ pub struct MemberRow {
     pub role: String,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+pub struct RoomInviteRow {
+    pub id: String,
+    pub room_id: String,
+    pub token: String,
+    pub role: String,
+    pub created_by: String,
+    pub expires_at: Option<String>,
+    pub max_uses: i32,
+    pub use_count: i32,
+    pub is_active: i64,
+    pub created_at: String,
+}
+
 #[derive(Clone)]
 pub struct RoomRepository {
     pool: SqlitePool,
@@ -41,6 +56,18 @@ impl RoomRepository {
     pub fn generate_invite_code() -> String {
         let mut rng = rand::thread_rng();
         (0..8)
+            .map(|_| {
+                let idx = rng.gen_range(0..INVITE_CHARS.len());
+                INVITE_CHARS[idx] as char
+            })
+            .collect()
+    }
+
+    /// Longer token for guest/member invite links, using the same
+    /// unambiguous alphabet as the room invite code.
+    pub fn generate_invite_token() -> String {
+        let mut rng = rand::thread_rng();
+        (0..INVITE_TOKEN_LEN)
             .map(|_| {
                 let idx = rng.gen_range(0..INVITE_CHARS.len());
                 INVITE_CHARS[idx] as char
@@ -292,6 +319,83 @@ impl RoomRepository {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn create_invite(
+        &self,
+        id: Uuid,
+        room_id: Uuid,
+        token: &str,
+        role: RoomRole,
+        created_by: Uuid,
+        expires_at: Option<DateTime<Utc>>,
+        max_uses: i32,
+    ) -> Result<(), AppError> {
+        sqlx::query(
+            "INSERT INTO room_invites (id, room_id, token, role, created_by, expires_at, max_uses, use_count, is_active, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, datetime('now'))",
+        )
+        .bind(id.to_string())
+        .bind(room_id.to_string())
+        .bind(token)
+        .bind(role_to_str(role))
+        .bind(created_by.to_string())
+        .bind(expires_at.map(|d| d.to_rfc3339()))
+        .bind(max_uses)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn list_active_invites(&self, room_id: Uuid) -> Result<Vec<RoomInviteRow>, AppError> {
+        let rows = sqlx::query_as::<_, RoomInviteRow>(
+            "SELECT * FROM room_invites WHERE room_id = ? AND is_active = 1 ORDER BY created_at DESC",
+        )
+        .bind(room_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn find_invite_by_token(&self, token: &str) -> Result<Option<RoomInviteRow>, AppError> {
+        let row = sqlx::query_as::<_, RoomInviteRow>(
+            "SELECT * FROM room_invites WHERE token = ?",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn increment_invite_use(&self, id: Uuid) -> Result<(), AppError> {
+        sqlx::query("UPDATE room_invites SET use_count = use_count + 1 WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn deactivate_invite(&self, id: Uuid) -> Result<(), AppError> {
+        sqlx::query("UPDATE room_invites SET is_active = 0 WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn deactivate_invite_in_room(
+        &self,
+        room_id: Uuid,
+        invite_id: Uuid,
+    ) -> Result<bool, AppError> {
+        let result = sqlx::query(
+            "UPDATE room_invites SET is_active = 0 WHERE id = ? AND room_id = ?",
+        )
+        .bind(invite_id.to_string())
+        .bind(room_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 }
 

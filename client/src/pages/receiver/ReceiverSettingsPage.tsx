@@ -27,6 +27,9 @@ interface AppSettings {
   force_preferred_monitor: boolean;
   soft_mode: boolean;
   max_opacity: number;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -41,6 +44,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   force_preferred_monitor: false,
   soft_mode: false,
   max_opacity: 0.55,
+  quiet_hours_enabled: false,
+  quiet_hours_start: '22:00',
+  quiet_hours_end: '08:00',
 };
 
 /** Tauri receiver — server URL, cache, autostart, overlay defaults. */
@@ -239,6 +245,34 @@ export function ReceiverSettingsPage() {
                 label="Toujours recevoir sur cet écran"
                 description="Ignore le moniteur choisi par l’envoyeur."
               />
+              <div className="space-y-2 border-t border-raid-border pt-4">
+                <Toggle
+                  checked={settings.quiet_hours_enabled}
+                  onChange={(v) => setSettings({ ...settings, quiet_hours_enabled: v })}
+                  label="Quiet hours"
+                  description="Auto-bloque la réception pendant une plage horaire locale."
+                />
+                {settings.quiet_hours_enabled && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="Début"
+                      type="time"
+                      value={settings.quiet_hours_start}
+                      onChange={(e) =>
+                        setSettings({ ...settings, quiet_hours_start: e.target.value })
+                      }
+                    />
+                    <Input
+                      label="Fin"
+                      type="time"
+                      value={settings.quiet_hours_end}
+                      onChange={(e) =>
+                        setSettings({ ...settings, quiet_hours_end: e.target.value })
+                      }
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </Card>

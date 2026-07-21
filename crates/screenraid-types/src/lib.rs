@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod admin;
 pub mod auth;
 pub mod consent;
@@ -7,10 +8,12 @@ pub mod monitor;
 pub mod prank;
 pub mod roles;
 pub mod room;
+pub mod scheduled_prank;
 pub mod security;
 pub mod user;
 pub mod websocket;
 
+pub use activity::*;
 pub use admin::*;
 pub use auth::*;
 pub use consent::*;
@@ -20,6 +23,7 @@ pub use monitor::*;
 pub use prank::*;
 pub use roles::*;
 pub use room::*;
+pub use scheduled_prank::*;
 pub use security::*;
 pub use user::*;
 pub use websocket::*;

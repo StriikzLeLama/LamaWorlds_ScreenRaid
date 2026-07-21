@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use screenraid_types::{
-    MediaRef, OverlayType, PrankIncomingPayload, PrankResponse, PrankStatus, SendPrankRequest,
+    ActivityItem, ActivityKind, MediaRef, OverlayType, PrankIncomingPayload, PrankResponse,
+    PrankStatus, SchedulePrankRequest, ScheduleTriggerType, ScheduledPrankItem,
+    ScheduledPrankListResponse, ScheduledPrankResponse, ScheduledPrankStatus, SendPrankRequest,
     UserSummary,
 };
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::repository::prank_repo::{parse_trigger_type, ScheduledPrankRow};
 use crate::repository::{
     media_repo::row_to_media, AuditRepository, MediaRepository, PrankRepository, RoomRepository,
     SecurityRepository, UserRepository,
@@ -343,6 +346,250 @@ impl PrankService {
         Ok(())
     }
 
+    pub async fn schedule(
+        &self,
+        room_id: Uuid,
+        sender_id: Uuid,
+        req: SchedulePrankRequest,
+    ) -> Result<ScheduledPrankResponse, AppError> {
+        let sender_role = self
+            .rooms
+            .is_member(room_id, sender_id)
+            .await?
+            .ok_or(AppError::Forbidden)?;
+
+        if !sender_role.can_send_pranks() {
+            return Err(AppError::Forbidden);
+        }
+
+        let send_req = SendPrankRequest {
+            target_id: req.target_id,
+            media_id: req.media_id,
+            overlay_type: req.overlay_type,
+            text_content: req.text_content.clone(),
+            duration_ms: req.duration_ms,
+            config: req.config.clone(),
+        };
+        self.validate_request(&send_req)?;
+
+        let members = self.rooms.list_members(room_id).await?;
+        self.resolve_targets(&members, sender_id, req.target_id)?;
+
+        let (run_at, online_user_id) = match req.trigger_type {
+            ScheduleTriggerType::AtTime => {
+                let run_at = req.run_at.ok_or_else(|| {
+                    AppError::Validation("run_at required for at_time trigger".into())
+                })?;
+                if run_at <= Utc::now() {
+                    return Err(AppError::Validation("run_at must be in the future".into()));
+                }
+                (Some(run_at), None)
+            }
+            ScheduleTriggerType::OnOnline => {
+                let online_user_id = req.online_user_id.ok_or_else(|| {
+                    AppError::Validation("online_user_id required for on_online trigger".into())
+                })?;
+                let is_member = members
+                    .iter()
+                    .any(|m| m.user_id == online_user_id.to_string());
+                if !is_member {
+                    return Err(AppError::Validation(
+                        "online_user_id must be a room member".into(),
+                    ));
+                }
+                (None, Some(online_user_id))
+            }
+        };
+
+        let payload_json =
+            serde_json::to_string(&send_req).map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+        self.pranks
+            .insert_scheduled(
+                id,
+                room_id,
+                sender_id,
+                req.target_id,
+                req.trigger_type,
+                run_at,
+                online_user_id,
+                &payload_json,
+            )
+            .await?;
+
+        Ok(ScheduledPrankResponse {
+            id,
+            room_id,
+            trigger_type: req.trigger_type,
+            run_at,
+            online_user_id,
+            status: ScheduledPrankStatus::Pending,
+            created_at: now,
+        })
+    }
+
+    pub async fn list_scheduled(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<ScheduledPrankListResponse, AppError> {
+        if self.rooms.is_member(room_id, user_id).await?.is_none() {
+            return Err(AppError::Forbidden);
+        }
+
+        let rows = self.pranks.list_pending_for_room(room_id).await?;
+        let items = rows.into_iter().filter_map(scheduled_row_to_item).collect();
+        Ok(ScheduledPrankListResponse { items })
+    }
+
+    pub async fn cancel_scheduled(
+        &self,
+        room_id: Uuid,
+        actor_id: Uuid,
+        sched_id: Uuid,
+    ) -> Result<(), AppError> {
+        let row = self
+            .pranks
+            .find_scheduled_by_id(sched_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("scheduled prank".into()))?;
+
+        if row.room_id != room_id.to_string() {
+            return Err(AppError::NotFound("scheduled prank".into()));
+        }
+
+        if row.status != "pending" {
+            return Err(AppError::Conflict(
+                "scheduled prank already resolved".into(),
+            ));
+        }
+
+        let sender_id = Uuid::parse_str(&row.sender_id).unwrap_or_default();
+        if sender_id != actor_id {
+            let actor_role = self
+                .rooms
+                .is_member(room_id, actor_id)
+                .await?
+                .ok_or(AppError::Forbidden)?;
+            if !actor_role.can_moderate() {
+                return Err(AppError::Forbidden);
+            }
+        }
+
+        self.pranks
+            .update_scheduled_status(sched_id, "cancelled", None)
+            .await?;
+        Ok(())
+    }
+
+    /// Called by the periodic background worker (see `main.rs`) to fire any
+    /// `at_time` schedules whose `run_at` has passed.
+    pub async fn fire_due_at_time(&self) -> Result<(), AppError> {
+        let rows = self.pranks.list_due_at_time(Utc::now()).await?;
+        for row in rows {
+            self.fire_scheduled_row(row).await;
+        }
+        Ok(())
+    }
+
+    /// Called from the WebSocket handler when a user's presence flips to
+    /// online, to fire any `on_online` schedules waiting on that user.
+    pub async fn fire_due_on_online(&self, online_user_id: Uuid) -> Result<(), AppError> {
+        let rows = self.pranks.list_due_on_online(online_user_id).await?;
+        for row in rows {
+            self.fire_scheduled_row(row).await;
+        }
+        Ok(())
+    }
+
+    async fn fire_scheduled_row(&self, row: ScheduledPrankRow) {
+        let id = Uuid::parse_str(&row.id).unwrap_or_default();
+        let room_id = Uuid::parse_str(&row.room_id).unwrap_or_default();
+        let sender_id = Uuid::parse_str(&row.sender_id).unwrap_or_default();
+
+        let result: Result<(), AppError> = match serde_json::from_str::<SendPrankRequest>(&row.payload_json)
+        {
+            Ok(req) => self.send(room_id, sender_id, req).await.map(|_| ()),
+            Err(e) => Err(AppError::Internal(e.to_string())),
+        };
+
+        match result {
+            Ok(()) => {
+                let _ = self
+                    .pranks
+                    .update_scheduled_status(id, "fired", Some(Utc::now()))
+                    .await;
+            }
+            Err(e) => {
+                tracing::warn!(%id, error = %e, "scheduled prank failed to fire");
+                let _ = self
+                    .pranks
+                    .update_scheduled_status(id, "failed", Some(Utc::now()))
+                    .await;
+            }
+        }
+    }
+
+    /// Simple room activity feed derived from prank history, enriched with
+    /// sender/target display names.
+    pub async fn list_activity(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<ActivityItem>, AppError> {
+        if self.rooms.is_member(room_id, user_id).await?.is_none() {
+            return Err(AppError::Forbidden);
+        }
+
+        let rows = self.pranks.list_by_room(room_id, limit).await?;
+        let mut items = Vec::with_capacity(rows.len());
+
+        for row in rows {
+            let sender_id = Uuid::parse_str(&row.sender_id).ok();
+            let target_id = row
+                .target_id
+                .as_deref()
+                .and_then(|s| Uuid::parse_str(s).ok());
+
+            let actor_name = match sender_id {
+                Some(id) => self
+                    .users
+                    .find_by_id(id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|u| u.display_name),
+                None => None,
+            };
+            let target_name = match target_id {
+                Some(id) => self
+                    .users
+                    .find_by_id(id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|u| u.display_name),
+                None => None,
+            };
+
+            items.push(ActivityItem {
+                id: Uuid::parse_str(&row.id).unwrap_or_default(),
+                kind: ActivityKind::Prank,
+                at: crate::repository::room_repo::parse_dt(&row.created_at),
+                actor_name,
+                target_name,
+                overlay_type: Some(row.overlay_type),
+                status: Some(row.status),
+                text: row.text_content,
+            });
+        }
+
+        Ok(items)
+    }
+
     fn validate_request(&self, req: &SendPrankRequest) -> Result<(), AppError> {
         match req.overlay_type {
             OverlayType::Text => {
@@ -427,4 +674,40 @@ fn overlay_type_str(t: OverlayType) -> &'static str {
         OverlayType::Text => "text",
         OverlayType::Sound => "sound",
     }
+}
+
+fn parse_scheduled_status(s: &str) -> ScheduledPrankStatus {
+    match s {
+        "fired" => ScheduledPrankStatus::Fired,
+        "cancelled" => ScheduledPrankStatus::Cancelled,
+        "failed" => ScheduledPrankStatus::Failed,
+        _ => ScheduledPrankStatus::Pending,
+    }
+}
+
+fn scheduled_row_to_item(row: ScheduledPrankRow) -> Option<ScheduledPrankItem> {
+    let payload: SendPrankRequest = serde_json::from_str(&row.payload_json).ok()?;
+    Some(ScheduledPrankItem {
+        id: Uuid::parse_str(&row.id).ok()?,
+        room_id: Uuid::parse_str(&row.room_id).ok()?,
+        sender_id: Uuid::parse_str(&row.sender_id).ok()?,
+        target_id: row.target_id.as_deref().and_then(|s| Uuid::parse_str(s).ok()),
+        trigger_type: parse_trigger_type(&row.trigger_type),
+        run_at: row
+            .run_at
+            .as_deref()
+            .map(crate::repository::room_repo::parse_dt),
+        online_user_id: row
+            .online_user_id
+            .as_deref()
+            .and_then(|s| Uuid::parse_str(s).ok()),
+        status: parse_scheduled_status(&row.status),
+        created_at: crate::repository::room_repo::parse_dt(&row.created_at),
+        fired_at: row
+            .fired_at
+            .as_deref()
+            .map(crate::repository::room_repo::parse_dt),
+        overlay_type: payload.overlay_type,
+        text_content: payload.text_content,
+    })
 }

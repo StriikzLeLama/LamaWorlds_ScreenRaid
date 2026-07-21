@@ -3,7 +3,7 @@ import { Plus, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, Button, Input, Badge, Modal } from '../components/ui';
 import { ApiError } from '../services/api';
-import { createRoom, joinRoom, listRooms } from '../services/rooms';
+import { createRoom, joinRoom, joinRoomByToken, listRooms } from '../services/rooms';
 import type { RoomSummary } from '../types/room';
 
 export function RoomsPage() {
@@ -47,7 +47,13 @@ export function RoomsPage() {
 
   const handleJoin = async () => {
     try {
-      await joinRoom(inviteCode.trim().toUpperCase());
+      const raw = inviteCode.trim();
+      // Long tokens are guest invite links; short codes are classic room codes.
+      if (raw.length > 10) {
+        await joinRoomByToken(raw);
+      } else {
+        await joinRoom(raw.toUpperCase());
+      }
       setShowJoin(false);
       setInviteCode('');
       load();
@@ -123,8 +129,16 @@ export function RoomsPage() {
 
       <Modal open={showJoin} onClose={() => setShowJoin(false)} title="Join Room">
         <div className="space-y-4">
-          <Input label="Invite code" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} placeholder="ABC12345" className="font-mono uppercase" />
-          <Button className="w-full" onClick={handleJoin} disabled={inviteCode.trim().length < 8}>Join</Button>
+          <Input
+            label="Invite code or guest link token"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+            placeholder="ABC12345 or long guest token"
+            className="font-mono"
+          />
+          <Button className="w-full" onClick={handleJoin} disabled={inviteCode.trim().length < 6}>
+            Join
+          </Button>
         </div>
       </Modal>
     </div>

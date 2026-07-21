@@ -101,6 +101,11 @@ async fn handle_pending_auth(socket: WebSocket, state: AppState) {
                                                     .await;
                                                 hub.broadcast_presence(claims.sub, "online")
                                                     .await;
+                                                if let Err(e) =
+                                                    state.pranks.fire_due_on_online(claims.sub).await
+                                                {
+                                                    tracing::warn!(error = %e, "failed to fire on_online scheduled pranks");
+                                                }
                                                 run_authenticated_loop(
                                                     sender,
                                                     receiver,
@@ -177,6 +182,9 @@ async fn handle_socket(
         tracing::warn!("WS legacy query auth for user {user_id}");
     }
     hub.broadcast_presence(user_id, "online").await;
+    if let Err(e) = state.pranks.fire_due_on_online(user_id).await {
+        tracing::warn!(error = %e, "failed to fire on_online scheduled pranks");
+    }
     run_authenticated_loop(sender, receiver, rx, state, user_id, session_id).await;
 }
 

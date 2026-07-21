@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { ReceiverSidebar } from './ReceiverSidebar';
 import { TitleBar } from './TitleBar';
+import { RevengeToast } from '../RevengeToast';
 
 export function ReceiverLayout() {
   return (
@@ -12,6 +13,7 @@ export function ReceiverLayout() {
           <Outlet />
         </main>
       </div>
+      <RevengeToast />
     </div>
   );
 }

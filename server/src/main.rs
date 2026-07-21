@@ -58,6 +58,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // Background task: fire scheduled `at_time` pranks whose `run_at` has
+    // passed. `on_online` schedules are instead fired from the WebSocket
+    // handler when the target user's presence flips to online.
+    {
+        let pranks = state.pranks.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(15));
+            loop {
+                interval.tick().await;
+                if let Err(e) = pranks.fire_due_at_time().await {
+                    tracing::warn!(error = %e, "failed to fire due scheduled pranks");
+                }
+            }
+        });
+    }
+
     let app = create_router(state);
 
     let addr: SocketAddr = config.addr().parse()?;

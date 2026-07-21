@@ -4,10 +4,12 @@ pub mod consent;
 pub mod friends;
 pub mod gifs;
 pub mod health;
+pub mod invites;
 pub mod media;
 pub mod monitors;
 pub mod pranks;
 pub mod rooms;
+pub mod scheduled;
 
 pub use admin::{
     deactivate_user, delete_media_admin, force_delete_room, list_admin_audit, list_admin_media,
@@ -28,10 +30,12 @@ pub use friends::{
 };
 pub use gifs::{import_gif, search_gifs};
 pub use health::{health, ready};
+pub use invites::{create_room_invite, deactivate_room_invite, list_room_invites};
 pub use media::{delete_media, download_media, list_media, list_room_media, upload_media};
 pub use monitors::{get_my_monitors, get_user_monitors, update_my_monitors};
 pub use pranks::{ack_prank, list_pranks, send_prank};
 pub use rooms::{
-    change_member_role, create_room, delete_room, get_room, join_room, kick_member, leave_room,
-    list_rooms,
+    change_member_role, create_room, delete_room, get_room, get_room_activity, join_room,
+    kick_member, leave_room, list_rooms,
 };
+pub use scheduled::{cancel_scheduled_prank, list_scheduled_pranks, schedule_prank};

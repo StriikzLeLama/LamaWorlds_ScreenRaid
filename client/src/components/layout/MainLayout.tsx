@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { isWebApp } from '../../lib/platform';
 import { TitleBar } from './TitleBar';
 import { Sidebar } from './Sidebar';
+import { RevengeToast } from '../RevengeToast';
 
 export function MainLayout() {
   return (
@@ -19,6 +20,7 @@ export function MainLayout() {
           <Outlet />
         </main>
       </div>
+      <RevengeToast />
     </div>
   );
 }

@@ -62,7 +62,18 @@ pub fn create_router(state: AppState) -> Router {
             delete(handlers::kick_member).patch(handlers::change_member_role),
         )
         .route("/{id}/security", get(handlers::get_room_security).patch(handlers::update_room_security))
-        .route("/{id}/pranks", post(handlers::send_prank).get(handlers::list_pranks));
+        .route("/{id}/pranks", post(handlers::send_prank).get(handlers::list_pranks))
+        .route(
+            "/{id}/scheduled",
+            post(handlers::schedule_prank).get(handlers::list_scheduled_pranks),
+        )
+        .route("/{id}/scheduled/{sched_id}", delete(handlers::cancel_scheduled_prank))
+        .route(
+            "/{id}/invites",
+            post(handlers::create_room_invite).get(handlers::list_room_invites),
+        )
+        .route("/{id}/invites/{invite_id}", delete(handlers::deactivate_room_invite))
+        .route("/{id}/activity", get(handlers::get_room_activity));
 
     let friend_routes = Router::new()
         .route("/", get(handlers::list_friends))

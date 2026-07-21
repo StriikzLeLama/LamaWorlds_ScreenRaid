@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, LogOut, Send, Trash2 } from 'lucide-react';
+import { Copy, LogOut, Send, Trash2, Clock, Link2 } from 'lucide-react';
 import { Card, Button, Badge, Input } from '../components/ui';
 import { GifSelector } from '../components/GifSelector';
 import { AnimationPreview } from '../components/AnimationPreview';
@@ -18,21 +18,40 @@ import {
   type OverlayType,
   type PrankHistoryItem,
 } from '../services/pranks';
-import { deleteRoom, getRoom, leaveRoom } from '../services/rooms';
+import {
+  createRoomInvite,
+  deactivateRoomInvite,
+  deleteRoom,
+  getRoom,
+  leaveRoom,
+  listRoomInvites,
+  type RoomInvite,
+} from '../services/rooms';
 import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
 import { RoomSecurityPanel } from '../components/settings/RoomSecurityPanel';
 import { RoomMembersPanel } from '../components/room/RoomMembersPanel';
+import {
+  deleteRaidTemplate,
+  loadRaidTemplates,
+  saveRaidTemplate,
+  type RaidTemplate,
+} from '../services/raidTemplates';
+import {
+  cancelScheduled,
+  listScheduled,
+  schedulePrank,
+  type ScheduledPrankItem,
+} from '../services/scheduled';
+import { listRoomActivity, type ActivityItem } from '../services/activity';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { useWsConnection } from '../hooks/useWsConnection';
 import { isTauriRuntime } from '../lib/platform';
 import type { RoomDetail } from '../types/room';
 import type { MediaType } from '../types';
-
-type ComposerStep = 1 | 2 | 3 | 4;
 
 const OVERLAY_TYPES: OverlayType[] = ['text', 'image', 'gif', 'video', 'sound'];
 
@@ -87,7 +106,6 @@ function mediaForOverlay(type: OverlayType, items: Media[]): Media[] {
   };
   const wanted = map[type];
   if (!wanted) return [];
-  // KLIPY sometimes serves animated webp → stored as image; still usable as gif raids.
   if (type === 'gif') {
     return items.filter((m) => m.media_type === 'gif' || m.media_type === 'image');
   }
@@ -106,15 +124,6 @@ function randomBombCoord(): number {
   return 0.2 + Math.random() * 0.6;
 }
 
-function countByStatus(history: PrankHistoryItem[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const item of history) {
-    const key = item.status || 'unknown';
-    counts[key] = (counts[key] ?? 0) + 1;
-  }
-  return counts;
-}
-
 export function RoomPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -127,11 +136,14 @@ export function RoomPage() {
   const [copied, setCopied] = useState(false);
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
   const [history, setHistory] = useState<PrankHistoryItem[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [scheduled, setScheduled] = useState<ScheduledPrankItem[]>([]);
+  const [invites, setInvites] = useState<RoomInvite[]>([]);
+  const [templates, setTemplates] = useState<RaidTemplate[]>([]);
   const [sending, setSending] = useState(false);
   const [gifSelectorOpen, setGifSelectorOpen] = useState(false);
-  const [composerStep, setComposerStep] = useState<ComposerStep>(1);
+  const [templateName, setTemplateName] = useState('');
 
-  // Composer state — kept local so sending one room doesn't affect another.
   const [overlayType, setOverlayType] = useState<OverlayType>('text');
   const [targetId, setTargetId] = useState<string>('');
   const [textContent, setTextContent] = useState('');
@@ -142,6 +154,7 @@ export function RoomPage() {
   const [sfx, setSfx] = useState<SfxOption>('none');
   const [opacity, setOpacity] = useState(1);
   const [raidBomb, setRaidBomb] = useState(false);
+  const [multiMonitorBomb, setMultiMonitorBomb] = useState(false);
   const [textColor, setTextColor] = useState(TEXT_COLOR_PRESETS[0].value);
   const [bgColor, setBgColor] = useState(BG_COLOR_PRESETS[0].value);
   const [accentColor, setAccentColor] = useState(ACCENT_COLOR_PRESETS[0].value);
@@ -152,12 +165,9 @@ export function RoomPage() {
     y: 0.5,
   });
   const [targetMonitors, setTargetMonitors] = useState<MonitorDescriptor[]>([]);
-
-  const loadRoom = () => {
-    if (!id) return;
-    getRoom(id).then(setRoom).catch(() => undefined);
-    listPrankHistory(id).then(setHistory).catch(() => undefined);
-  };
+  const [scheduleMode, setScheduleMode] = useState<'now' | 'at_time' | 'on_online'>('now');
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [onlineUserId, setOnlineUserId] = useState('');
 
   const refreshMedia = () => {
     listMedia({ page: 1, limit: 50 })
@@ -165,13 +175,27 @@ export function RoomPage() {
       .catch(() => undefined);
   };
 
+  const loadExtras = useCallback(() => {
+    if (!id) return;
+    listPrankHistory(id).then(setHistory).catch(() => undefined);
+    listRoomActivity(id).then(setActivity).catch(() => undefined);
+    listScheduled(id).then(setScheduled).catch(() => undefined);
+    setTemplates(loadRaidTemplates(id));
+  }, [id]);
+
+  const loadRoom = useCallback(() => {
+    if (!id) return;
+    getRoom(id).then(setRoom).catch(() => undefined);
+    loadExtras();
+  }, [id, loadExtras]);
+
   useEffect(() => {
     if (!id) return;
     getRoom(id)
       .then(setRoom)
       .catch((e) => setError(e instanceof ApiError ? e.message : 'Failed to load room'));
     refreshMedia();
-    listPrankHistory(id).then(setHistory).catch(() => undefined);
+    loadExtras();
     subscribeRoom(id);
 
     const handler = (event: Event) => {
@@ -191,7 +215,7 @@ export function RoomPage() {
       unsubscribeRoom(id);
       window.removeEventListener('screenraid:room', handler);
     };
-  }, [id]);
+  }, [id, loadExtras, loadRoom]);
 
   useEffect(() => {
     if (!targetId) {
@@ -203,7 +227,6 @@ export function RoomPage() {
         .then((layout) => {
           const list = layout?.monitors ?? [];
           setTargetMonitors(list);
-          // Default to primary / preferred when targeting yourself.
           if (targetId === currentUserId && list.length > 0) {
             const primary = list.find((m) => m.is_primary) ?? list[0];
             setPlacement((p) => ({ ...p, monitor_index: primary.id }));
@@ -212,7 +235,6 @@ export function RoomPage() {
         .catch(() => setTargetMonitors([]));
     };
     refresh();
-    // Prefer local Tauri preferred monitor when targeting self.
     if (targetId === currentUserId && isTauriRuntime()) {
       void (async () => {
         try {
@@ -229,54 +251,53 @@ export function RoomPage() {
     }
     const onMonitorsChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ user_id?: string }>).detail;
-      if (detail?.user_id === targetId) {
-        refresh();
-      }
+      if (detail?.user_id === targetId) refresh();
     };
     window.addEventListener('screenraid:monitors', onMonitorsChanged);
     return () => window.removeEventListener('screenraid:monitors', onMonitorsChanged);
   }, [targetId, currentUserId]);
 
-  const copyCode = () => {
-    if (room) {
-      navigator.clipboard.writeText(room.invite_code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  useEffect(() => {
+    if (!id || !room) return;
+    const myRole = room.members.find((m) => m.user_id === currentUserId)?.role;
+    if (myRole === 'owner' || myRole === 'admin') {
+      listRoomInvites(id).then(setInvites).catch(() => undefined);
     }
+  }, [id, room, currentUserId]);
+
+  const copyCode = () => {
+    if (!room) return;
+    void navigator.clipboard.writeText(room.invite_code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   const handleLeave = async () => {
     if (!id) return;
-    try {
-      await leaveRoom(id);
-      navigate('/rooms');
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Leave failed');
-    }
+    await leaveRoom(id);
+    navigate('/rooms');
   };
 
   const handleDelete = async () => {
-    if (!id) return;
-    try {
-      await deleteRoom(id);
-      navigate('/rooms');
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Delete failed');
-    }
+    if (!id || !confirm('Delete this room for everyone?')) return;
+    await deleteRoom(id);
+    navigate('/rooms');
   };
 
-  const buildConfig = (pos?: { x: number; y: number }): OverlayConfig => {
+  const buildConfig = (pos?: { x: number; y: number; monitor_index?: number }): OverlayConfig => {
     const config = defaultOverlayConfig();
     config.animation = animation;
-    config.volume = volume;
     config.opacity = opacity;
+    config.volume = volume;
     config.sfx = sfx;
-    config.text_color = textColor;
-    config.bg_color = bgColor;
-    config.accent_color = accentColor;
-    config.font_family = fontFamily;
+    if (overlayType === 'text') {
+      config.text_color = textColor;
+      config.bg_color = bgColor;
+      config.accent_color = accentColor;
+      config.font_family = fontFamily;
+    }
     config.position = {
-      monitor_index: placement.monitor_index,
+      monitor_index: pos?.monitor_index ?? placement.monitor_index,
       x: pos?.x ?? placement.x,
       y: pos?.y ?? placement.y,
       preset: 'exact',
@@ -284,7 +305,7 @@ export function RoomPage() {
     return config;
   };
 
-  const buildRequest = (pos?: { x: number; y: number }) => ({
+  const buildRequest = (pos?: { x: number; y: number; monitor_index?: number }) => ({
     target_id: targetId || null,
     media_id: overlayType === 'text' ? null : mediaId || null,
     overlay_type: overlayType,
@@ -306,12 +327,32 @@ export function RoomPage() {
     }
   };
 
+  const fireShots = async (
+    positions: Array<{ x: number; y: number; monitor_index?: number }>,
+  ) => {
+    if (!id) return;
+    const shots = positions.map((pos) => sendPrank(id, buildRequest(pos)));
+    const results = await Promise.allSettled(shots);
+    const failed = results.filter((r) => r.status === 'rejected');
+    const ok = results.length - failed.length;
+    if (failed.length > 0) {
+      const first = failed[0];
+      handleSendError(first.status === 'rejected' ? first.reason : new Error('partial fail'));
+      setError((prev) =>
+        prev ? `${prev} (${ok}/${results.length} OK)` : `Partiel: ${ok}/${results.length} OK`,
+      );
+    } else {
+      setTextContent('');
+    }
+  };
+
   const handleSend = async () => {
     if (!id) return;
+    const needsMedia = overlayType !== 'text';
     if (needsMedia && !mediaId) {
       setError(
         showGifSelector
-          ? 'Choisis un GIF (sélecteur) ou un media de la bibliothèque.'
+          ? 'Choisis un GIF ou un media de la bibliothèque.'
           : 'Choisis un media avant d’envoyer.',
       );
       return;
@@ -320,36 +361,57 @@ export function RoomPage() {
       setError('Écris un message texte.');
       return;
     }
+
+    if (scheduleMode !== 'now') {
+      setSending(true);
+      setError('');
+      try {
+        await schedulePrank(id, {
+          ...buildRequest(),
+          trigger_type: scheduleMode,
+          run_at: scheduleMode === 'at_time' ? new Date(scheduleAt).toISOString() : null,
+          online_user_id: scheduleMode === 'on_online' ? onlineUserId || null : null,
+        });
+        setScheduleMode('now');
+        loadExtras();
+      } catch (e) {
+        handleSendError(e);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
     setSending(true);
     setError('');
     try {
+      const monitors =
+        multiMonitorBomb && targetMonitors.length > 0
+          ? targetMonitors.map((m) => m.id)
+          : [placement.monitor_index];
+
       if (raidBomb) {
-        const shots = Array.from({ length: 5 }, () =>
-          sendPrank(id, buildRequest({ x: randomBombCoord(), y: randomBombCoord() })),
+        const positions = monitors.flatMap((mi) =>
+          Array.from({ length: 5 }, () => ({
+            x: randomBombCoord(),
+            y: randomBombCoord(),
+            monitor_index: mi,
+          })),
         );
-        const results = await Promise.allSettled(shots);
-        const failed = results.filter((r) => r.status === 'rejected');
-        const ok = results.length - failed.length;
-        if (failed.length > 0) {
-          const first = failed[0];
-          const reason =
-            first.status === 'rejected'
-              ? first.reason
-              : new Error(`${failed.length}/${results.length} raids ont échoué`);
-          handleSendError(reason);
-          setError((prev) =>
-            prev
-              ? `${prev} (${ok}/${results.length} OK)`
-              : `Raid bomb partiel: ${ok}/${results.length} OK`,
-          );
-        } else {
-          setTextContent('');
-        }
+        await fireShots(positions);
+      } else if (multiMonitorBomb && monitors.length > 1) {
+        await fireShots(
+          monitors.map((mi) => ({
+            x: placement.x,
+            y: placement.y,
+            monitor_index: mi,
+          })),
+        );
       } else {
         await sendPrank(id, buildRequest());
         setTextContent('');
       }
-      listPrankHistory(id).then(setHistory).catch(() => undefined);
+      loadExtras();
     } catch (e) {
       handleSendError(e);
     } finally {
@@ -364,14 +426,51 @@ export function RoomPage() {
     setSfx(pack.sfx);
     setRaidBomb(Boolean(pack.bomb));
     if (pack.text) setTextContent(pack.text);
-    // Always clear media when switching packs — avoids sending a video as a "gif".
     setMediaId('');
-    if (pack.needsGif) {
-      setGifSelectorOpen(true);
-    }
+    if (pack.needsGif) setGifSelectorOpen(true);
   };
 
-  const statusCounts = countByStatus(history);
+  const applyTemplate = (t: RaidTemplate) => {
+    setOverlayType(t.overlayType);
+    setTextContent(t.textContent);
+    setMediaId(t.mediaId);
+    setDurationMs(t.durationMs);
+    setAnimation(t.animation);
+    setVolume(t.volume);
+    setSfx(t.sfx);
+    setOpacity(t.opacity);
+    setRaidBomb(t.raidBomb);
+    setMultiMonitorBomb(t.multiMonitorBomb);
+    setTextColor(t.textColor);
+    setBgColor(t.bgColor);
+    setAccentColor(t.accentColor);
+    setFontFamily(t.fontFamily);
+  };
+
+  const saveCurrentTemplate = () => {
+    if (!id || !templateName.trim()) return;
+    const next = saveRaidTemplate({
+      name: templateName.trim(),
+      roomId: id,
+      overlayType,
+      textContent,
+      mediaId,
+      durationMs,
+      animation,
+      volume,
+      sfx,
+      opacity,
+      raidBomb,
+      multiMonitorBomb,
+      textColor,
+      bgColor,
+      accentColor,
+      fontFamily,
+    });
+    setTemplates(next);
+    setTemplateName('');
+  };
+
   const selectedMedia = mediaItems.find((m) => m.id === mediaId) ?? null;
   const selectableMedia = mediaForOverlay(overlayType, mediaItems);
   const needsMedia = overlayType !== 'text';
@@ -384,7 +483,11 @@ export function RoomPage() {
       : selectedMedia?.original_name || previewLabel(overlayType);
 
   if (!room) {
-    return <Card><p className="text-sm text-raid-text-secondary">{error || 'Loading room…'}</p></Card>;
+    return (
+      <Card>
+        <p className="text-sm text-raid-text-secondary">{error || 'Loading room…'}</p>
+      </Card>
+    );
   }
 
   const myRole = room.members.find((m) => m.user_id === currentUserId)?.role;
@@ -393,6 +496,7 @@ export function RoomPage() {
   const canSend = myRole !== 'guest';
   const otherMembers = room.members.filter((m) => m.user_id !== currentUserId);
   const isSoloRoom = room.members.length === 1;
+  const pendingScheduled = scheduled.filter((s) => s.status === 'pending');
 
   return (
     <div className="space-y-6">
@@ -400,7 +504,9 @@ export function RoomPage() {
         <div>
           <h1 className="text-2xl font-bold text-raid-text">{room.name}</h1>
           <div className="mt-2 flex items-center gap-2">
-            <code className="rounded-lg bg-raid-surface px-2 py-1 text-sm text-raid-accent">{room.invite_code}</code>
+            <code className="rounded-lg bg-raid-surface px-2 py-1 text-sm text-raid-accent">
+              {room.invite_code}
+            </code>
             <Button variant="ghost" className="!p-2" onClick={copyCode}>
               <Copy size={16} />
             </Button>
@@ -453,445 +559,577 @@ export function RoomPage() {
         )}
 
         <Card accentHeader className="lg:col-span-2">
-          <h2 className="mb-2 text-lg font-semibold text-raid-text">Send raid</h2>
+          <h2 className="mb-4 text-lg font-semibold text-raid-text">Send raid</h2>
           {!canSend ? (
             <p className="text-sm text-raid-text-secondary">Guests cannot send pranks.</p>
           ) : (
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    [1, 'Target'],
-                    [2, 'Content'],
-                    [3, 'Style & place'],
-                    [4, 'Send'],
-                  ] as const
-                ).map(([step, label]) => (
-                  <button
-                    key={step}
-                    type="button"
-                    onClick={() => setComposerStep(step)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                      composerStep === step
-                        ? 'bg-raid-accent text-raid-bg'
-                        : 'bg-raid-surface text-raid-text-secondary hover:text-raid-text'
-                    }`}
-                  >
-                    {step}. {label}
-                  </button>
-                ))}
-              </div>
-
-              {isSoloRoom && composerStep === 1 && (
+              {isSoloRoom && (
                 <p className="rounded-xl border border-raid-accent/30 bg-raid-accent/10 px-3 py-2 text-xs text-raid-text-secondary">
-                  Solo room: you can prank yourself (target <strong>Yourself</strong> or{' '}
-                  <strong>Everyone</strong>). Enable Receive raids first.
+                  Solo room: target <strong>Yourself</strong> or <strong>Everyone</strong>. Enable
+                  Receive raids first.
                 </p>
               )}
 
-              {composerStep === 1 && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="mb-1 block text-xs text-raid-text-secondary">Target</label>
-                    <select
-                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                      value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
-                    >
-                      <option value="">Everyone in room</option>
-                      {currentUserId && (
-                        <option value={currentUserId}>Yourself (solo test)</option>
-                      )}
-                      {otherMembers.map((m) => (
-                        <option key={m.user_id} value={m.user_id}>
-                          {m.display_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <p className="mb-2 text-xs font-medium text-raid-text-secondary">Quick packs</p>
-                    <div className="flex flex-wrap gap-2">
-                      {RAID_PACKS.map((pack) => (
-                        <Button
-                          key={pack.id}
-                          variant="secondary"
-                          className="!h-auto flex-col items-start gap-0.5 !px-3 !py-2 text-left"
-                          onClick={() => {
-                            applyPack(pack);
-                            setComposerStep(2);
-                          }}
-                          title={pack.description}
-                        >
-                          <span className="text-sm font-medium">{pack.label}</span>
-                          <span className="text-[10px] font-normal text-raid-text-secondary">
-                            {pack.description}
-                          </span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <Button onClick={() => setComposerStep(2)}>Next: Content</Button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">Target</label>
+                  <select
+                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                    value={targetId}
+                    onChange={(e) => setTargetId(e.target.value)}
+                  >
+                    <option value="">Everyone in room</option>
+                    {currentUserId && (
+                      <option value={currentUserId}>Yourself (solo test)</option>
+                    )}
+                    {otherMembers.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {m.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">When</label>
+                  <select
+                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                    value={scheduleMode}
+                    onChange={(e) =>
+                      setScheduleMode(e.target.value as 'now' | 'at_time' | 'on_online')
+                    }
+                  >
+                    <option value="now">Send now</option>
+                    <option value="at_time">Schedule for time</option>
+                    <option value="on_online">When someone comes online</option>
+                  </select>
+                </div>
+              </div>
+
+              {scheduleMode === 'at_time' && (
+                <Input
+                  label="Send at"
+                  type="datetime-local"
+                  value={scheduleAt}
+                  onChange={(e) => setScheduleAt(e.target.value)}
+                />
+              )}
+              {scheduleMode === 'on_online' && (
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">
+                    Fire when this user is online
+                  </label>
+                  <select
+                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                    value={onlineUserId}
+                    onChange={(e) => setOnlineUserId(e.target.value)}
+                  >
+                    <option value="">Select member…</option>
+                    {room.members.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {m.display_name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
-              {composerStep === 2 && (
-                <div className="space-y-4">
+              <div>
+                <p className="mb-2 text-xs font-medium text-raid-text-secondary">Quick packs</p>
+                <div className="flex flex-wrap gap-2">
+                  {RAID_PACKS.map((pack) => (
+                    <Button
+                      key={pack.id}
+                      variant="secondary"
+                      className="!px-3 !py-1.5 text-sm"
+                      onClick={() => applyPack(pack)}
+                      title={pack.description}
+                    >
+                      {pack.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-raid-border bg-raid-bg/40 p-3 space-y-2">
+                  <p className="text-xs font-medium text-raid-text-secondary">My templates</p>
                   <div className="flex flex-wrap gap-2">
-                    {OVERLAY_TYPES.map((t) => (
-                      <Button
-                        key={t}
-                        variant={overlayType === t ? 'primary' : 'secondary'}
-                        onClick={() => {
-                          setOverlayType(t);
-                          setMediaId('');
-                        }}
-                      >
-                        {t}
-                      </Button>
+                    {templates.map((t) => (
+                      <div key={t.id} className="flex items-center gap-1">
+                        <Button
+                          variant="secondary"
+                          className="!px-3 !py-1.5 text-sm"
+                          onClick={() => applyTemplate(t)}
+                        >
+                          {t.name}
+                        </Button>
+                        <button
+                          type="button"
+                          className="text-xs text-raid-danger"
+                          onClick={() => {
+                            if (!id) return;
+                            setTemplates(deleteRaidTemplate(id, t.id));
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
                     ))}
                   </div>
-
-                  {overlayType === 'text' ? (
+                  <div className="flex flex-wrap gap-2">
                     <Input
-                      label="Message"
-                      value={textContent}
-                      onChange={(e) => setTextContent(e.target.value)}
-                      placeholder="Overlay text…"
+                      placeholder="Template name"
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                      className="!py-1.5"
                     />
-                  ) : (
-                    <div className="space-y-3">
-                      {showGifSelector && (
-                        <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
-                          Ouvrir le sélecteur GIF
-                        </Button>
-                      )}
-
-                      <div>
-                        <label className="mb-1 block text-xs text-raid-text-secondary">
-                          {showGifSelector ? 'Ou choisir dans la bibliothèque' : 'Media'}
-                        </label>
-                        <MediaPicker
-                          items={selectableMedia}
-                          value={mediaId}
-                          onChange={setMediaId}
-                          emptyHint={
-                            showGifSelector
-                              ? 'Bibliothèque vide — utilise le sélecteur GIF ou upload dans Media.'
-                              : `Upload ${overlayType} media in the Media library first.`
-                          }
-                        />
-                      </div>
-
-                      {selectedMedia && (
-                        <div className="flex items-center gap-3 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
-                          <MediaThumb media={selectedMedia} sizeClass="h-16 w-16" />
-                          <div className="min-w-0">
-                            <p className="text-xs uppercase tracking-wide text-raid-accent">
-                              Sélectionné
-                            </p>
-                            <p className="truncate text-sm text-raid-text">
-                              {selectedMedia.original_name}
-                            </p>
-                            <p className="text-xs text-raid-text-secondary">
-                              {selectedMedia.media_type}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <Button variant="secondary" onClick={() => setComposerStep(1)}>
-                      Back
-                    </Button>
-                    <Button
-                      disabled={
-                        (overlayType === 'text' && !textContent.trim()) ||
-                        (needsMedia && !mediaId)
-                      }
-                      onClick={() => setComposerStep(3)}
-                    >
-                      Next: Style & place
+                    <Button variant="secondary" onClick={saveCurrentTemplate}>
+                      Save current
                     </Button>
                   </div>
                 </div>
+
+              <div className="flex flex-wrap gap-2">
+                {OVERLAY_TYPES.map((t) => (
+                  <Button
+                    key={t}
+                    variant={overlayType === t ? 'primary' : 'secondary'}
+                    onClick={() => {
+                      setOverlayType(t);
+                      setMediaId('');
+                    }}
+                  >
+                    {t}
+                  </Button>
+                ))}
+              </div>
+
+              {overlayType === 'text' ? (
+                <Input
+                  label="Message"
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                  placeholder="Overlay text…"
+                />
+              ) : (
+                <div className="space-y-3">
+                  {showGifSelector && (
+                    <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
+                      Ouvrir le sélecteur GIF
+                    </Button>
+                  )}
+                  <MediaPicker
+                    items={selectableMedia}
+                    value={mediaId}
+                    onChange={setMediaId}
+                    emptyHint={
+                      showGifSelector
+                        ? 'Bibliothèque vide — utilise le sélecteur GIF ou upload dans Media.'
+                        : `Upload ${overlayType} media in the Media library first.`
+                    }
+                  />
+                  {selectedMedia && (
+                    <div className="flex items-center gap-3 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
+                      <MediaThumb media={selectedMedia} sizeClass="h-16 w-16" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-raid-text">
+                          {selectedMedia.original_name}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
-              {composerStep === 3 && (
-                <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-raid-text-secondary">Animation</label>
-                      <select
-                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                        value={animation}
-                        onChange={(e) => setAnimation(e.target.value as Animation)}
-                        disabled={isSoundOnly}
-                      >
-                        {ANIMATION_OPTIONS.map((a) => (
-                          <option key={a.value} value={a.value}>
-                            {a.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {!isSoundOnly && (
-                      <AnimationPreview
-                        animation={animation}
-                        label={previewText}
-                        textColor={textColor}
-                        bgColor={bgColor}
-                        accentColor={accentColor}
-                        fontFamily={fontFamily}
-                      />
-                    )}
-                  </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">Animation</label>
+                  <select
+                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                    value={animation}
+                    onChange={(e) => setAnimation(e.target.value as Animation)}
+                    disabled={isSoundOnly}
+                  >
+                    {ANIMATION_OPTIONS.map((a) => (
+                      <option key={a.value} value={a.value}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">SFX</label>
+                  <select
+                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                    value={sfx}
+                    onChange={(e) => setSfx(e.target.value as SfxOption)}
+                  >
+                    {SFX_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
+              {!isSoundOnly && (
+                <AnimationPreview
+                  animation={animation}
+                  label={previewText}
+                  textColor={textColor}
+                  bgColor={bgColor}
+                  accentColor={accentColor}
+                  fontFamily={fontFamily}
+                />
+              )}
+
+              {overlayType === 'text' && (
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs text-raid-text-secondary">SFX</label>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Couleur texte</label>
                     <select
                       className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                      value={sfx}
-                      onChange={(e) => setSfx(e.target.value as SfxOption)}
+                      value={textColor}
+                      onChange={(e) => setTextColor(e.target.value)}
                     >
-                      {SFX_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
+                      {TEXT_COLOR_PRESETS.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
                         </option>
                       ))}
                     </select>
                   </div>
-
-                  {overlayType === 'text' && (
-                    <div className="space-y-3 rounded-xl border border-raid-border bg-raid-bg/40 p-3">
-                      <p className="text-xs font-medium text-raid-text-secondary">Thème texte</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <label className="mb-1 block text-xs text-raid-text-secondary">
-                            Couleur texte
-                          </label>
-                          <select
-                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                            value={textColor}
-                            onChange={(e) => setTextColor(e.target.value)}
-                          >
-                            {TEXT_COLOR_PRESETS.map((p) => (
-                              <option key={p.value} value={p.value}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-xs text-raid-text-secondary">Fond</label>
-                          <select
-                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                            value={bgColor}
-                            onChange={(e) => setBgColor(e.target.value)}
-                          >
-                            {BG_COLOR_PRESETS.map((p) => (
-                              <option key={p.value} value={p.value}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-xs text-raid-text-secondary">Accent</label>
-                          <select
-                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                            value={accentColor}
-                            onChange={(e) => setAccentColor(e.target.value)}
-                          >
-                            {ACCENT_COLOR_PRESETS.map((p) => (
-                              <option key={p.value} value={p.value}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="mb-1 block text-xs text-raid-text-secondary">Police</label>
-                          <select
-                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                            value={fontFamily}
-                            onChange={(e) => setFontFamily(e.target.value)}
-                          >
-                            {FONT_FAMILY_PRESETS.map((p) => (
-                              <option key={p.value} value={p.value}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {(overlayType === 'sound' || overlayType === 'video') && (
-                    <div>
-                      <label className="mb-1 block text-xs text-raid-text-secondary">
-                        Volume: {Math.round(volume * 100)}%
-                      </label>
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        value={volume}
-                        onChange={(e) => setVolume(Number(e.target.value))}
-                        className="w-full accent-raid-accent"
-                      />
-                    </div>
-                  )}
-
-                  {!isSoundOnly && (
-                    <div>
-                      <label className="mb-1 block text-xs text-raid-text-secondary">
-                        Soft (opacité): {Math.round(opacity * 100)}%
-                      </label>
-                      <input
-                        type="range"
-                        min={0.3}
-                        max={1}
-                        step={0.05}
-                        value={opacity}
-                        onChange={(e) => setOpacity(Number(e.target.value))}
-                        className="w-full accent-raid-accent"
-                      />
-                    </div>
-                  )}
-
                   <div>
-                    <label className="mb-1 block text-xs text-raid-text-secondary">
-                      Duration: {durationMs / 1000}s
-                    </label>
-                    <input
-                      type="range"
-                      min={1000}
-                      max={30000}
-                      step={1000}
-                      value={durationMs}
-                      onChange={(e) => setDurationMs(Number(e.target.value))}
-                      className="w-full accent-raid-accent"
-                    />
-                  </div>
-
-                  {showPlacement && (
-                    <div>
-                      <label className="mb-2 block text-xs font-medium text-raid-text-secondary">
-                        Visual placement
-                        {targetId === currentUserId && (
-                          <span className="ml-2 font-normal text-raid-accent">
-                            (defaults to your preferred screen)
-                          </span>
-                        )}
-                      </label>
-                      <MonitorCanvas
-                        monitors={targetMonitors}
-                        position={placement}
-                        onChange={setPlacement}
-                        previewLabel={previewLabel(overlayType)}
-                      />
-                      {raidBomb && (
-                        <p className="mt-1 text-xs text-raid-text-secondary">
-                          En mode bomb, les positions sont aléatoires (0.2–0.8) ; le placement
-                          ci-dessus sert de référence pour le moniteur.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <Button variant="secondary" onClick={() => setComposerStep(2)}>
-                      Back
-                    </Button>
-                    <Button onClick={() => setComposerStep(4)}>Next: Send</Button>
-                  </div>
-                </div>
-              )}
-
-              {composerStep === 4 && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-raid-border bg-raid-bg/40 p-3 text-sm text-raid-text-secondary">
-                    <p>
-                      <span className="text-raid-text">Target:</span>{' '}
-                      {targetId
-                        ? targetId === currentUserId
-                          ? 'Yourself'
-                          : room.members.find((m) => m.user_id === targetId)?.display_name ??
-                            'User'
-                        : 'Everyone in room'}
-                    </p>
-                    <p>
-                      <span className="text-raid-text">Type:</span> {overlayType}
-                      {raidBomb ? ' · bomb ×5' : ''}
-                    </p>
-                    <p>
-                      <span className="text-raid-text">Duration:</span> {durationMs / 1000}s ·{' '}
-                      {animation}
-                    </p>
-                  </div>
-
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-raid-text">
-                    <input
-                      type="checkbox"
-                      checked={raidBomb}
-                      onChange={(e) => setRaidBomb(e.target.checked)}
-                      className="accent-raid-accent"
-                    />
-                    Raid bomb
-                    <span className="text-xs text-raid-text-secondary">
-                      (5 pranks, positions aléatoires)
-                    </span>
-                  </label>
-
-                  {targetId === currentUserId && !isSoloRoom && (
-                    <p className="text-xs text-raid-text-secondary">
-                      Self-target in a multi-member room requires{' '}
-                      <code className="text-raid-accent">ALLOW_SELF_PRANK=true</code> on the
-                      server.
-                    </p>
-                  )}
-
-                  <div className="flex gap-2">
-                    <Button variant="secondary" onClick={() => setComposerStep(3)}>
-                      Back
-                    </Button>
-                    <Button
-                      disabled={
-                        sending ||
-                        (overlayType === 'text' && !textContent.trim()) ||
-                        (needsMedia && !mediaId)
-                      }
-                      onClick={() => void handleSend()}
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Fond</label>
+                    <select
+                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                      value={bgColor}
+                      onChange={(e) => setBgColor(e.target.value)}
                     >
-                      <Send size={16} />
-                      {sending ? 'Sending…' : raidBomb ? 'Envoyer bomb (×5)' : 'Send prank'}
-                    </Button>
+                      {BG_COLOR_PRESETS.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Accent</label>
+                    <select
+                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                      value={accentColor}
+                      onChange={(e) => setAccentColor(e.target.value)}
+                    >
+                      {ACCENT_COLOR_PRESETS.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Police</label>
+                    <select
+                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                      value={fontFamily}
+                      onChange={(e) => setFontFamily(e.target.value)}
+                    >
+                      {FONT_FAMILY_PRESETS.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               )}
+
+              {(overlayType === 'sound' || overlayType === 'video') && (
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">
+                    Volume: {Math.round(volume * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                    className="w-full accent-raid-accent"
+                  />
+                </div>
+              )}
+
+              {!isSoundOnly && (
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">
+                    Soft (opacité): {Math.round(opacity * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0.3}
+                    max={1}
+                    step={0.05}
+                    value={opacity}
+                    onChange={(e) => setOpacity(Number(e.target.value))}
+                    className="w-full accent-raid-accent"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1 block text-xs text-raid-text-secondary">
+                  Duration: {durationMs / 1000}s
+                </label>
+                <input
+                  type="range"
+                  min={1000}
+                  max={30000}
+                  step={1000}
+                  value={durationMs}
+                  onChange={(e) => setDurationMs(Number(e.target.value))}
+                  className="w-full accent-raid-accent"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-raid-text">
+                  <input
+                    type="checkbox"
+                    checked={raidBomb}
+                    onChange={(e) => setRaidBomb(e.target.checked)}
+                    className="accent-raid-accent"
+                  />
+                  Raid bomb (×5)
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-raid-text">
+                  <input
+                    type="checkbox"
+                    checked={multiMonitorBomb}
+                    onChange={(e) => setMultiMonitorBomb(e.target.checked)}
+                    className="accent-raid-accent"
+                    disabled={!targetId || targetMonitors.length < 2}
+                  />
+                  All monitors
+                  <span className="text-xs text-raid-text-secondary">
+                    {targetMonitors.length > 1
+                      ? `(${targetMonitors.length} screens)`
+                      : '(pick a target with 2+ screens)'}
+                  </span>
+                </label>
+              </div>
+
+              {showPlacement && (
+                <MonitorCanvas
+                  monitors={targetMonitors}
+                  position={placement}
+                  onChange={setPlacement}
+                  previewLabel={previewLabel(overlayType)}
+                />
+              )}
+
+              {targetId === currentUserId && !isSoloRoom && (
+                <p className="text-xs text-raid-text-secondary">
+                  Self-target in a multi-member room requires{' '}
+                  <code className="text-raid-accent">ALLOW_SELF_PRANK=true</code> on the server.
+                </p>
+              )}
+
+              <Button
+                disabled={
+                  sending ||
+                  (overlayType === 'text' && !textContent.trim()) ||
+                  (needsMedia && !mediaId) ||
+                  (scheduleMode === 'at_time' && !scheduleAt) ||
+                  (scheduleMode === 'on_online' && !onlineUserId)
+                }
+                onClick={() => void handleSend()}
+              >
+                <Send size={16} />
+                {sending
+                  ? '…'
+                  : scheduleMode === 'now'
+                    ? raidBomb || multiMonitorBomb
+                      ? 'Send bomb'
+                      : 'Send prank'
+                    : 'Queue raid'}
+              </Button>
             </div>
           )}
         </Card>
+
+        <Card>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-raid-text">
+            Activity
+          </h2>
+          {activity.length === 0 ? (
+            <p className="text-sm text-raid-text-secondary">No activity yet.</p>
+          ) : (
+            <ul className="max-h-72 space-y-2 overflow-y-auto">
+              {activity.map((a) => (
+                <li key={a.id} className="border-b border-raid-border pb-2 text-sm last:border-0">
+                  <p className="text-raid-text">
+                    {a.actor_name ?? '?'} → {a.target_name ?? 'everyone'} · {a.overlay_type}{' '}
+                    {a.status && <Badge variant="neutral">{a.status}</Badge>}
+                  </p>
+                  <p className="text-xs text-raid-text-secondary">
+                    {new Date(a.at).toLocaleString()}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-raid-text">
+            <Clock size={18} /> Queued ({pendingScheduled.length})
+          </h2>
+          {pendingScheduled.length === 0 ? (
+            <p className="text-sm text-raid-text-secondary">No scheduled raids.</p>
+          ) : (
+            <ul className="space-y-2">
+              {pendingScheduled.map((s) => (
+                <li
+                  key={s.id}
+                  className="flex items-center justify-between gap-2 rounded-xl bg-raid-surface px-3 py-2 text-sm"
+                >
+                  <div>
+                    <p className="text-raid-text">
+                      {s.overlay_type} · {s.trigger_type}
+                    </p>
+                    <p className="text-xs text-raid-text-secondary">
+                      {s.trigger_type === 'at_time' && s.run_at
+                        ? new Date(s.run_at).toLocaleString()
+                        : s.online_user_id
+                          ? `when ${room.members.find((m) => m.user_id === s.online_user_id)?.display_name ?? 'user'} online`
+                          : 'pending'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    className="!px-2 !py-1 text-xs"
+                    onClick={() => {
+                      if (!id) return;
+                      void cancelScheduled(id, s.id)
+                        .then(loadExtras)
+                        .catch((e) => setError(e instanceof Error ? e.message : 'Cancel failed'));
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {canModerate && (
+          <Card className="lg:col-span-2">
+            <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-raid-text">
+              <Link2 size={18} /> Guest invite links
+            </h2>
+            <p className="mb-3 text-xs text-raid-text-secondary">
+              One-time or limited links with expiry. Guests join without the main room code.
+            </p>
+            <div className="mb-4 flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!id) return;
+                  void createRoomInvite(id, {
+                    role: 'guest',
+                    expires_in_hours: 24,
+                    max_uses: 1,
+                  })
+                    .then((inv) => setInvites((prev) => [inv, ...prev]))
+                    .catch((e) =>
+                      setError(e instanceof Error ? e.message : 'Invite create failed'),
+                    );
+                }}
+              >
+                Create 1-use / 24h guest link
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!id) return;
+                  void createRoomInvite(id, {
+                    role: 'guest',
+                    expires_in_hours: 168,
+                    max_uses: 10,
+                  })
+                    .then((inv) => setInvites((prev) => [inv, ...prev]))
+                    .catch((e) =>
+                      setError(e instanceof Error ? e.message : 'Invite create failed'),
+                    );
+                }}
+              >
+                Create 10-use / 7d guest link
+              </Button>
+            </div>
+            {invites.filter((i) => i.is_active).length === 0 ? (
+              <p className="text-sm text-raid-text-secondary">No active invite links.</p>
+            ) : (
+              <ul className="space-y-2">
+                {invites
+                  .filter((i) => i.is_active)
+                  .map((inv) => (
+                    <li
+                      key={inv.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-raid-surface px-3 py-2 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <code className="text-raid-accent">{inv.token}</code>
+                        <p className="text-xs text-raid-text-secondary">
+                          {inv.role} · {inv.use_count}/{inv.max_uses} uses
+                          {inv.expires_at
+                            ? ` · expires ${new Date(inv.expires_at).toLocaleString()}`
+                            : ''}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          className="!px-2 !py-1 text-xs"
+                          onClick={() => void navigator.clipboard.writeText(inv.token)}
+                        >
+                          Copy
+                        </Button>
+                        <Button
+                          variant="danger"
+                          className="!px-2 !py-1 text-xs"
+                          onClick={() => {
+                            if (!id) return;
+                            void deactivateRoomInvite(id, inv.id)
+                              .then(() =>
+                                setInvites((prev) =>
+                                  prev.map((x) =>
+                                    x.id === inv.id ? { ...x, is_active: false } : x,
+                                  ),
+                                ),
+                              )
+                              .catch((e) =>
+                                setError(e instanceof Error ? e.message : 'Revoke failed'),
+                              );
+                          }}
+                        >
+                          Revoke
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </Card>
+        )}
       </div>
 
       {history.length > 0 && (
         <Card>
           <h2 className="mb-3 text-lg font-semibold text-raid-text">Prank history</h2>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {Object.entries(statusCounts).map(([status, count]) => (
-              <Badge key={status} variant={status === 'blocked' ? 'danger' : 'neutral'}>
-                {status}: {count}
-              </Badge>
-            ))}
-            <span className="self-center text-xs text-raid-text-secondary">
-              Total {history.length}
-            </span>
-          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
@@ -935,7 +1173,6 @@ export function RoomPage() {
             prev.some((m) => m.id === media.id) ? prev : [media, ...prev],
           );
           setMediaId(media.id);
-          // Keep image if user was composing an image raid; otherwise use gif.
           setOverlayType((prev) => (prev === 'image' ? 'image' : 'gif'));
           refreshMedia();
         }}

@@ -32,7 +32,41 @@ pub struct CreateRoomRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinRoomRequest {
-    pub invite_code: String,
+    #[serde(default)]
+    pub invite_code: Option<String>,
+    /// When set, join via a guest/member invite link instead of the room's
+    /// 8-char invite code.
+    #[serde(default)]
+    pub invite_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRoomInviteRequest {
+    /// Must be `guest` or `member`; defaults to `guest`.
+    #[serde(default)]
+    pub role: Option<RoomRole>,
+    #[serde(default)]
+    pub expires_in_hours: Option<i32>,
+    #[serde(default)]
+    pub max_uses: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomInviteResponse {
+    pub id: Uuid,
+    pub room_id: Uuid,
+    pub token: String,
+    pub role: RoomRole,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub max_uses: i32,
+    pub use_count: i32,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomInvitesListResponse {
+    pub invites: Vec<RoomInviteResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
