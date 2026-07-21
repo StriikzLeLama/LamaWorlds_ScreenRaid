@@ -1,5 +1,6 @@
 import { getWebSocketUrl, onServerUrlChange } from './serverConfig';
 import { useAuthStore } from '../stores/authStore';
+import { refreshToken } from './auth';
 import { log } from '../lib/log';
 
 type MessageHandler = (type: string, payload: unknown) => void;
@@ -13,6 +14,9 @@ let connectedServerBase: string | null = null;
 let connectedToken: string | null = null;
 let wsConnected = false;
 let wsAuthenticated = false;
+/** True when the server rejected the auth message (bad/expired token). */
+let authRejected = false;
+let refreshInFlight: Promise<boolean> | null = null;
 const handlers = new Set<MessageHandler>();
 const connectionListeners = new Set<(connected: boolean) => void>();
 
@@ -49,6 +53,30 @@ function sendAuth(token: string): void {
   );
 }
 
+async function refreshAccessToken(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const stored = useAuthStore.getState().refreshToken;
+    if (!stored) return false;
+    try {
+      const res = await refreshToken(stored);
+      useAuthStore.getState().login(
+        { access: res.access_token, refresh: res.refresh_token },
+        res.user,
+      );
+      log.info('WS auth: refreshed access token');
+      return true;
+    } catch (err) {
+      log.warn('WS auth: refresh failed', err);
+      useAuthStore.getState().logout();
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
 export function onWsMessage(handler: MessageHandler): () => void {
   handlers.add(handler);
   return () => handlers.delete(handler);
@@ -77,6 +105,7 @@ export function connectWebSocket(): void {
   connectedServerBase = base;
   connectedToken = token;
   wsAuthenticated = false;
+  authRejected = false;
 
   const url = wsUrl();
   log.info('connectWebSocket: ws url', url);
@@ -96,9 +125,21 @@ export function connectWebSocket(): void {
     try {
       const msg = JSON.parse(event.data as string) as { type: string; payload: unknown };
       log.info('WS msg', msg.type);
+      if (msg.type === 'auth_required') {
+        const latest = useAuthStore.getState().accessToken;
+        if (latest && !wsAuthenticated) {
+          log.info('WS auth_required — (re)sending auth');
+          sendAuth(latest);
+        }
+      }
       if (msg.type === 'connected') {
         wsAuthenticated = true;
+        authRejected = false;
         setWsConnected(true);
+      }
+      if (msg.type === 'auth_failed') {
+        authRejected = true;
+        log.warn('WS auth_failed', msg.payload);
       }
       handlers.forEach((h) => h(msg.type, msg.payload));
     } catch (e) {
@@ -108,18 +149,48 @@ export function connectWebSocket(): void {
 
   socket.onclose = (event) => {
     log.info('WS close code=', event.code, 'reason=', event.reason);
+    const wasAuthenticated = wsAuthenticated;
+    const wasRejected = authRejected;
     socket = null;
     connectedServerBase = null;
     connectedToken = null;
     wsAuthenticated = false;
+    authRejected = false;
     setWsConnected(false);
-    if (useAuthStore.getState().isAuthenticated) {
-      reconnectTimer = setTimeout(() => {
-        backoff = Math.min(backoff * 2, 30000);
-        log.info('WS reconnect backoff=', backoff);
-        connectWebSocket();
-      }, backoff);
+
+    if (!useAuthStore.getState().isAuthenticated) return;
+
+    // Auth rejected (expired/invalid access token) → refresh then reconnect once.
+    if (!wasAuthenticated && wasRejected) {
+      void (async () => {
+        const ok = await refreshAccessToken();
+        if (!ok) {
+          log.warn('WS: stopping reconnect after auth failure');
+          return;
+        }
+        reconnectTimer = setTimeout(() => connectWebSocket(), 300);
+      })();
+      return;
     }
+
+    // Closed before auth completed without explicit auth_failed — still try refresh.
+    if (!wasAuthenticated) {
+      void (async () => {
+        const ok = await refreshAccessToken();
+        if (!ok) return;
+        reconnectTimer = setTimeout(() => {
+          backoff = Math.min(backoff * 2, 30000);
+          connectWebSocket();
+        }, Math.min(backoff, 2000));
+      })();
+      return;
+    }
+
+    reconnectTimer = setTimeout(() => {
+      backoff = Math.min(backoff * 2, 30000);
+      log.info('WS reconnect backoff=', backoff);
+      connectWebSocket();
+    }, backoff);
   };
 }
 
@@ -141,6 +212,7 @@ export function disconnectWebSocket(clearBackoff = true): void {
   connectedServerBase = null;
   connectedToken = null;
   wsAuthenticated = false;
+  authRejected = false;
   setWsConnected(false);
   if (s) {
     s.onopen = null;
@@ -178,7 +250,7 @@ export function syncMonitorsWs(monitors: unknown[]): void {
 }
 
 export function send(data: object): void {
-  if (socket?.readyState === WebSocket.OPEN) {
+  if (socket?.readyState === WebSocket.OPEN && wsAuthenticated) {
     socket.send(
       JSON.stringify({
         ...data,

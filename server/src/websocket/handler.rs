@@ -68,39 +68,74 @@ async fn handle_pending_auth(socket: WebSocket, state: AppState) {
             msg = receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        if let Ok(envelope) = serde_json::from_str::<serde_json::Value>(&text) {
-                            if envelope.get("type").and_then(|v| v.as_str()) == Some("auth") {
-                                if let Ok(payload) = serde_json::from_value::<WsAuthPayload>(
+                        let text = text.to_string();
+                        let fail_reason = match serde_json::from_str::<serde_json::Value>(&text) {
+                            Ok(envelope)
+                                if envelope.get("type").and_then(|v| v.as_str()) == Some("auth") =>
+                            {
+                                match serde_json::from_value::<WsAuthPayload>(
                                     envelope.get("payload").cloned().unwrap_or_default(),
                                 ) {
-                                    if let Ok(claims) = state.auth.verify_access_token(&payload.token) {
-                                        let (tx, rx) = mpsc::unbounded_channel();
-                                        let hub = state.ws_hub.clone();
-                                        hub.register(claims.sub, claims.sid, tx);
-                                        let connected = WsMessage::new(
-                                            "connected",
-                                            ConnectedPayload {
-                                                user_id: claims.sub,
-                                                session_id: claims.sid,
-                                            },
-                                        );
-                                        let _ = sender.send(Message::Text(
-                                            serde_json::to_string(&connected).unwrap_or_default().into(),
-                                        )).await;
-                                        hub.broadcast_presence(claims.sub, "online").await;
-                                        run_authenticated_loop(
-                                            sender,
-                                            receiver,
-                                            rx,
-                                            state,
-                                            claims.sub,
-                                            claims.sid,
-                                        )
-                                        .await;
-                                        return;
+                                    Ok(payload) if payload.token.is_empty() => {
+                                        Some("empty_token")
                                     }
+                                    Ok(payload) => {
+                                        match state.auth.verify_access_token(&payload.token) {
+                                            Ok(claims) => {
+                                                let (tx, rx) = mpsc::unbounded_channel();
+                                                let hub = state.ws_hub.clone();
+                                                hub.register(claims.sub, claims.sid, tx);
+                                                let connected = WsMessage::new(
+                                                    "connected",
+                                                    ConnectedPayload {
+                                                        user_id: claims.sub,
+                                                        session_id: claims.sid,
+                                                    },
+                                                );
+                                                let _ = sender
+                                                    .send(Message::Text(
+                                                        serde_json::to_string(&connected)
+                                                            .unwrap_or_default()
+                                                            .into(),
+                                                    ))
+                                                    .await;
+                                                hub.broadcast_presence(claims.sub, "online")
+                                                    .await;
+                                                run_authenticated_loop(
+                                                    sender,
+                                                    receiver,
+                                                    rx,
+                                                    state,
+                                                    claims.sub,
+                                                    claims.sid,
+                                                )
+                                                .await;
+                                                return;
+                                            }
+                                            Err(_) => Some("invalid_token"),
+                                        }
+                                    }
+                                    Err(_) => Some("malformed_payload"),
                                 }
                             }
+                            Ok(_) => Some("expected_auth"),
+                            Err(_) => Some("invalid_json"),
+                        };
+
+                        if let Some(reason) = fail_reason {
+                            tracing::warn!("WS auth rejected: {reason}");
+                            let err = WsMessage::new(
+                                "auth_failed",
+                                serde_json::json!({
+                                    "code": "UNAUTHORIZED",
+                                    "message": reason,
+                                }),
+                            );
+                            let _ = sender
+                                .send(Message::Text(
+                                    serde_json::to_string(&err).unwrap_or_default().into(),
+                                ))
+                                .await;
                         }
                         let _ = sender.send(Message::Close(None)).await;
                         return;
