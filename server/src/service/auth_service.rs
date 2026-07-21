@@ -472,6 +472,10 @@ impl AuthService {
         self.users.set_active(user_id, false).await
     }
 
+    pub async fn reactivate_user(&self, user_id: Uuid) -> Result<bool, AppError> {
+        self.users.set_active(user_id, true).await
+    }
+
     pub async fn list_users(
         &self,
         page: u32,

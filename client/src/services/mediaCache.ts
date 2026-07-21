@@ -1,6 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { getServerUrl } from './serverConfig';
+import { appFetch } from './appFetch';
 import { log } from '../lib/log';
 
 const DB_URL = 'sqlite:screenraid-client.db';
@@ -105,7 +106,7 @@ export async function resolveMediaForPrank(
   }
 
   const remoteUrl = media.url.startsWith('http') ? media.url : `${getServerUrl()}${media.url}`;
-  const response = await fetch(remoteUrl, {
+  const response = await appFetch(remoteUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {

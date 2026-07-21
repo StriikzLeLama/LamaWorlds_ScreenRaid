@@ -9,7 +9,10 @@ pub mod monitors;
 pub mod pranks;
 pub mod rooms;
 
-pub use admin::{deactivate_user, delete_media_admin, list_admin_media, list_admin_users};
+pub use admin::{
+    deactivate_user, delete_media_admin, force_delete_room, list_admin_audit, list_admin_media,
+    list_admin_presence, list_admin_rooms, list_admin_users, reactivate_user,
+};
 pub use auth::{
     change_display_name, change_password, change_username, disable_2fa, enable_2fa, get_my_security_prefs,
     get_room_security, list_my_audit, list_sessions, login, logout, logout_all, me, refresh, register,

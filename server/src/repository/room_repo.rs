@@ -222,6 +222,67 @@ impl RoomRepository {
         Ok(())
     }
 
+    pub async fn admin_list_rooms(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<(Vec<(RoomRow, String, i64)>, i64), AppError> {
+        let limit = limit.clamp(1, 100) as i64;
+        let offset = ((page.max(1) - 1) * limit as u32) as i64;
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM rooms")
+            .fetch_one(&self.pool)
+            .await?;
+
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: String,
+            name: String,
+            invite_code: String,
+            owner_id: String,
+            max_members: i32,
+            is_active: i64,
+            created_at: String,
+            updated_at: String,
+            owner_username: String,
+            member_count: i64,
+        }
+
+        let rows = sqlx::query_as::<_, Row>(
+            "SELECT r.id, r.name, r.invite_code, r.owner_id, r.max_members, r.is_active,
+                    r.created_at, r.updated_at, u.username as owner_username,
+                    (SELECT COUNT(*) FROM room_members rm WHERE rm.room_id = r.id) as member_count
+             FROM rooms r
+             LEFT JOIN users u ON u.id = r.owner_id
+             ORDER BY r.created_at DESC
+             LIMIT ? OFFSET ?",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let out = rows
+            .into_iter()
+            .map(|r| {
+                (
+                    RoomRow {
+                        id: r.id,
+                        name: r.name,
+                        invite_code: r.invite_code,
+                        owner_id: r.owner_id,
+                        max_members: r.max_members,
+                        is_active: r.is_active,
+                        created_at: r.created_at,
+                        updated_at: r.updated_at,
+                    },
+                    r.owner_username,
+                    r.member_count,
+                )
+            })
+            .collect();
+        Ok((out, total.0))
+    }
+
     pub async fn update_name(&self, room_id: Uuid, name: &str) -> Result<(), AppError> {
         let now = Utc::now().to_rfc3339();
         sqlx::query("UPDATE rooms SET name = ?, updated_at = ? WHERE id = ?")

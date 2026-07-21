@@ -30,3 +30,18 @@ export async function leaveRoom(id: string): Promise<void> {
 export async function deleteRoom(id: string): Promise<void> {
   return apiFetch(`/v1/rooms/${id}`, { method: 'DELETE' });
 }
+
+export async function kickMember(roomId: string, userId: string): Promise<void> {
+  return apiFetch(`/v1/rooms/${roomId}/members/${userId}`, { method: 'DELETE' });
+}
+
+export async function changeMemberRole(
+  roomId: string,
+  userId: string,
+  role: string,
+): Promise<void> {
+  return apiFetch(`/v1/rooms/${roomId}/members/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}

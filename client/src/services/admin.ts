@@ -39,6 +39,52 @@ export interface AdminMediaListResponse {
   limit: number;
 }
 
+export interface AdminRoomItem {
+  id: string;
+  name: string;
+  invite_code: string;
+  owner_id: string;
+  owner_username: string;
+  member_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminRoomsResponse {
+  rooms: AdminRoomItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AdminPresenceUser {
+  user_id: string;
+  username: string;
+  display_name: string;
+  session_count: number;
+}
+
+export interface AdminPresenceResponse {
+  online: AdminPresenceUser[];
+  online_count: number;
+}
+
+export interface AdminAuditItem {
+  id: string;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  actor_username: string | null;
+  created_at: string;
+}
+
+export interface AdminAuditResponse {
+  items: AdminAuditItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export async function listAdminUsers(page = 1, limit = 50): Promise<AdminUsersResponse> {
   return apiFetch<AdminUsersResponse>(`/v1/admin/users?page=${page}&limit=${limit}`);
 }
@@ -66,6 +112,26 @@ export async function deactivateUser(userId: string): Promise<void> {
   await apiFetch<void>(`/v1/admin/users/${userId}`, { method: 'DELETE' });
 }
 
+export async function reactivateUser(userId: string): Promise<void> {
+  await apiFetch<void>(`/v1/admin/users/${userId}/reactivate`, { method: 'POST' });
+}
+
 export async function deleteAdminMedia(mediaId: string): Promise<void> {
   await apiFetch<void>(`/v1/admin/media/${mediaId}`, { method: 'DELETE' });
+}
+
+export async function listAdminRooms(page = 1, limit = 50): Promise<AdminRoomsResponse> {
+  return apiFetch<AdminRoomsResponse>(`/v1/admin/rooms?page=${page}&limit=${limit}`);
+}
+
+export async function forceDeleteRoom(roomId: string): Promise<void> {
+  await apiFetch<void>(`/v1/admin/rooms/${roomId}`, { method: 'DELETE' });
+}
+
+export async function listAdminPresence(): Promise<AdminPresenceResponse> {
+  return apiFetch<AdminPresenceResponse>('/v1/admin/presence');
+}
+
+export async function listAdminAudit(page = 1, limit = 50): Promise<AdminAuditResponse> {
+  return apiFetch<AdminAuditResponse>(`/v1/admin/audit?page=${page}&limit=${limit}`);
 }

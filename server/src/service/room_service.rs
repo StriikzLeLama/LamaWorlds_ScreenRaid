@@ -280,6 +280,35 @@ impl RoomService {
         Ok(())
     }
 
+    pub async fn admin_list_rooms(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<(Vec<screenraid_types::AdminRoomItem>, i64), AppError> {
+        let (rows, total) = self.rooms.admin_list_rooms(page, limit).await?;
+        let rooms = rows
+            .into_iter()
+            .filter_map(|(r, owner_username, member_count)| {
+                Some(screenraid_types::AdminRoomItem {
+                    id: Uuid::parse_str(&r.id).ok()?,
+                    name: r.name,
+                    invite_code: r.invite_code,
+                    owner_id: Uuid::parse_str(&r.owner_id).ok()?,
+                    owner_username,
+                    member_count,
+                    is_active: r.is_active != 0,
+                    created_at: r.created_at,
+                })
+            })
+            .collect();
+        Ok((rooms, total))
+    }
+
+    pub async fn admin_force_delete(&self, room_id: Uuid) -> Result<(), AppError> {
+        self.rooms.delete_room(room_id).await?;
+        Ok(())
+    }
+
     async fn build_member_list(&self, room_id: Uuid) -> Result<Vec<RoomMember>, AppError> {
         let rows = self.rooms.list_members(room_id).await?;
         let mut members = Vec::new();

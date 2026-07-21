@@ -96,8 +96,13 @@ pub fn create_router(state: AppState) -> Router {
     let admin_routes = Router::new()
         .route("/users", get(handlers::list_admin_users))
         .route("/users/{id}", delete(handlers::deactivate_user))
+        .route("/users/{id}/reactivate", post(handlers::reactivate_user))
         .route("/media", get(handlers::list_admin_media))
-        .route("/media/{id}", delete(handlers::delete_media_admin));
+        .route("/media/{id}", delete(handlers::delete_media_admin))
+        .route("/rooms", get(handlers::list_admin_rooms))
+        .route("/rooms/{id}", delete(handlers::force_delete_room))
+        .route("/presence", get(handlers::list_admin_presence))
+        .route("/audit", get(handlers::list_admin_audit));
 
     let static_path = state.config.static_path.clone();
 

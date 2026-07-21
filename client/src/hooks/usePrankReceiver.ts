@@ -110,17 +110,25 @@ export function usePrankReceiver() {
           return;
         }
 
-        // Soft mode: cap opacity from receiver settings.
+        // Soft mode + preferred monitor from receiver settings.
         let opacity = safeNumber(prank.config?.opacity, 1);
+        let preferredMonitor: number | null = null;
+        let forcePreferred = false;
         try {
           const settings = await invoke<{
             soft_mode?: boolean;
             max_opacity?: number;
+            selected_monitor?: string;
+            force_preferred_monitor?: boolean;
           }>('get_settings');
           if (settings.soft_mode) {
             const cap = settings.max_opacity ?? 0.55;
             opacity = Math.min(opacity, cap);
           }
+          forcePreferred = Boolean(settings.force_preferred_monitor);
+          preferredMonitor = await invoke<number>('resolve_preferred_monitor', {
+            selected: settings.selected_monitor ?? 'primary',
+          });
         } catch {
           // settings optional
         }
@@ -131,7 +139,19 @@ export function usePrankReceiver() {
         const pos = prank.config?.position;
         const positionX = safeNumber(pos?.x, 0.5);
         const positionY = safeNumber(pos?.y, 0.5);
-        const monitorIndex = safeNumber(pos?.monitor_index, 0);
+        let monitorIndex = safeNumber(pos?.monitor_index, preferredMonitor ?? 0);
+        if (forcePreferred && preferredMonitor != null) {
+          monitorIndex = preferredMonitor;
+        } else if (preferredMonitor != null) {
+          try {
+            const monitors = await invoke<Array<{ id: number }>>('collect_monitors');
+            if (!monitors.some((m) => m.id === monitorIndex)) {
+              monitorIndex = preferredMonitor;
+            }
+          } catch {
+            // keep sender index
+          }
+        }
         const scale = safeNumber(prank.config?.scale, 1);
         const animation = prank.config?.animation || 'fade';
 

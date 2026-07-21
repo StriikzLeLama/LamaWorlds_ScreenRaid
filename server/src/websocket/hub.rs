@@ -136,4 +136,19 @@ impl WsHub {
             "timestamp": Utc::now().to_rfc3339(),
         })
     }
+
+    /// Online users with at least one active WebSocket session.
+    pub fn online_sessions(&self) -> Vec<(Uuid, u32)> {
+        self.user_sessions
+            .iter()
+            .filter_map(|entry| {
+                let count = entry.value().len() as u32;
+                if count == 0 {
+                    None
+                } else {
+                    Some((*entry.key(), count))
+                }
+            })
+            .collect()
+    }
 }

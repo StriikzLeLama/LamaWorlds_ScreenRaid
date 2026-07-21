@@ -24,6 +24,7 @@ interface AppSettings {
   panic_hotkey: string;
   server_url: string;
   selected_monitor: string;
+  force_preferred_monitor: boolean;
   soft_mode: boolean;
   max_opacity: number;
 }
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   panic_hotkey: 'Ctrl+Shift+Escape',
   server_url: getServerUrl(),
   selected_monitor: 'primary',
+  force_preferred_monitor: false,
   soft_mode: false,
   max_opacity: 0.55,
 };
@@ -48,6 +50,9 @@ export function ReceiverSettingsPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const loadConsent = useConsentStore((s) => s.loadFromServer);
   const [securityPrefs, setSecurityPrefs] = useState<UserSecurityPrefs | null>(null);
+  const [monitors, setMonitors] = useState<
+    Array<{ id: number; width: number; height: number; is_primary: boolean }>
+  >([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loadError, setLoadError] = useState('');
   const [message, setMessage] = useState('');
@@ -89,6 +94,13 @@ export function ReceiverSettingsPage() {
         setLoadError(`Could not load settings: ${e instanceof Error ? e.message : String(e)}`);
         setSettings(DEFAULT_SETTINGS);
       });
+    invoke<Array<{ id: number; width: number; height: number; is_primary: boolean }>>(
+      'collect_monitors',
+    )
+      .then((list) => {
+        if (!cancelled) setMonitors(list);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -204,6 +216,30 @@ export function ReceiverSettingsPage() {
                 }
               />
             )}
+            <div className="space-y-2 border-t border-raid-border pt-4">
+              <label className="mb-1 block text-xs text-raid-text-secondary">
+                Écran préféré (réception)
+              </label>
+              <select
+                className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                value={settings.selected_monitor}
+                onChange={(e) => setSettings({ ...settings, selected_monitor: e.target.value })}
+              >
+                <option value="primary">Écran principal (OS)</option>
+                {monitors.map((m) => (
+                  <option key={m.id} value={String(m.id)}>
+                    Écran {m.id + 1} — {m.width}×{m.height}
+                    {m.is_primary ? ' · principal' : ''}
+                  </option>
+                ))}
+              </select>
+              <Toggle
+                checked={settings.force_preferred_monitor}
+                onChange={(v) => setSettings({ ...settings, force_preferred_monitor: v })}
+                label="Toujours recevoir sur cet écran"
+                description="Ignore le moniteur choisi par l’envoyeur."
+              />
+            </div>
           </div>
         </Card>
 

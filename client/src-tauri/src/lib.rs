@@ -2,7 +2,7 @@ mod commands;
 mod tray;
 
 use commands::media_cache::{clear_media_cache, remove_media_cache_file, write_media_cache};
-use commands::monitor::collect_monitors;
+use commands::monitor::{collect_monitors, resolve_preferred_monitor};
 use commands::overlay::{
     debug_log, get_active_overlays, hide_overlay, overlay_surface_idle, panic_hide_all,
     show_overlay, sync_overlays_for_monitor, OverlayManager,
@@ -24,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_http::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(
@@ -111,6 +112,7 @@ pub fn run() {
             get_settings,
             save_settings,
             collect_monitors,
+            resolve_preferred_monitor,
             show_overlay,
             hide_overlay,
             panic_hide_all,

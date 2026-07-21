@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores/authStore';
 import { getServerUrl } from './api';
+import { appFetch } from './appFetch';
 import type { Media } from './media';
 
 const cache = new Map<string, string>();
@@ -29,7 +30,7 @@ export async function resolveMediaPreviewUrl(media: Media): Promise<string> {
     const token = useAuthStore.getState().accessToken;
     const path = mediaPath(media);
     const url = path.startsWith('http') ? path : `${getServerUrl()}${path}`;
-    const res = await fetch(url, {
+    const res = await appFetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     if (!res.ok) {

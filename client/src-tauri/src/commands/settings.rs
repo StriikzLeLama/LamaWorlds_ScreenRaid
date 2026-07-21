@@ -15,6 +15,9 @@ pub struct AppSettings {
     pub panic_hotkey: String,
     pub server_url: String,
     pub selected_monitor: String,
+    /// When true, force all received overlays onto the preferred monitor.
+    #[serde(default)]
+    pub force_preferred_monitor: bool,
     /// Soft mode caps overlay opacity so raids stay subtle.
     #[serde(default)]
     pub soft_mode: bool,
@@ -37,6 +40,7 @@ impl Default for AppSettings {
             panic_hotkey: "Ctrl+Shift+Escape".into(),
             server_url: "https://screenraid.lama-worlds.com".into(),
             selected_monitor: "primary".into(),
+            force_preferred_monitor: false,
             soft_mode: false,
             max_opacity: default_max_opacity(),
         }

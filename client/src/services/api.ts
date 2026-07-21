@@ -2,6 +2,7 @@ import { useAuthStore } from '../stores/authStore';
 import { refreshToken } from './auth';
 import { getServerUrl } from './serverConfig';
 import { reconnectWebSocket } from './websocket';
+import { appFetch } from './appFetch';
 
 export class ApiError extends Error {
   status: number;
@@ -61,7 +62,7 @@ export async function apiFetch<T>(
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
 
-  const doFetch = () => fetch(`${getServerUrl()}${path}`, { ...options, headers });
+  const doFetch = () => appFetch(`${getServerUrl()}${path}`, { ...options, headers });
 
   let response = await doFetch();
 
@@ -93,7 +94,7 @@ export async function apiFetch<T>(
 
 export async function checkServerHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${getServerUrl()}/v1/health`);
+    const res = await appFetch(`${getServerUrl()}/v1/health`);
     return res.ok;
   } catch {
     return false;

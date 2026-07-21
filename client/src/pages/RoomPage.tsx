@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, LogOut, Send, Trash2, Users } from 'lucide-react';
+import { Copy, LogOut, Send, Trash2 } from 'lucide-react';
 import { Card, Button, Badge, Input } from '../components/ui';
 import { GifSelector } from '../components/GifSelector';
 import { AnimationPreview } from '../components/AnimationPreview';
@@ -24,11 +24,15 @@ import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
 import { RoomSecurityPanel } from '../components/settings/RoomSecurityPanel';
+import { RoomMembersPanel } from '../components/room/RoomMembersPanel';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { useWsConnection } from '../hooks/useWsConnection';
-import type { RoomDetail, RoomMember } from '../types/room';
+import { isTauriRuntime } from '../lib/platform';
+import type { RoomDetail } from '../types/room';
 import type { MediaType } from '../types';
+
+type ComposerStep = 1 | 2 | 3 | 4;
 
 const OVERLAY_TYPES: OverlayType[] = ['text', 'image', 'gif', 'video', 'sound'];
 
@@ -125,6 +129,7 @@ export function RoomPage() {
   const [history, setHistory] = useState<PrankHistoryItem[]>([]);
   const [sending, setSending] = useState(false);
   const [gifSelectorOpen, setGifSelectorOpen] = useState(false);
+  const [composerStep, setComposerStep] = useState<ComposerStep>(1);
 
   // Composer state — kept local so sending one room doesn't affect another.
   const [overlayType, setOverlayType] = useState<OverlayType>('text');
@@ -195,10 +200,33 @@ export function RoomPage() {
     }
     const refresh = () => {
       getUserMonitors(targetId)
-        .then((layout) => setTargetMonitors(layout?.monitors ?? []))
+        .then((layout) => {
+          const list = layout?.monitors ?? [];
+          setTargetMonitors(list);
+          // Default to primary / preferred when targeting yourself.
+          if (targetId === currentUserId && list.length > 0) {
+            const primary = list.find((m) => m.is_primary) ?? list[0];
+            setPlacement((p) => ({ ...p, monitor_index: primary.id }));
+          }
+        })
         .catch(() => setTargetMonitors([]));
     };
     refresh();
+    // Prefer local Tauri preferred monitor when targeting self.
+    if (targetId === currentUserId && isTauriRuntime()) {
+      void (async () => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          const settings = await invoke<{ selected_monitor?: string }>('get_settings');
+          const idx = await invoke<number>('resolve_preferred_monitor', {
+            selected: settings.selected_monitor ?? 'primary',
+          });
+          setPlacement((p) => ({ ...p, monitor_index: idx }));
+        } catch {
+          // ignore
+        }
+      })();
+    }
     const onMonitorsChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ user_id?: string }>).detail;
       if (detail?.user_id === targetId) {
@@ -207,7 +235,7 @@ export function RoomPage() {
     };
     window.addEventListener('screenraid:monitors', onMonitorsChanged);
     return () => window.removeEventListener('screenraid:monitors', onMonitorsChanged);
-  }, [targetId]);
+  }, [targetId, currentUserId]);
 
   const copyCode = () => {
     if (room) {
@@ -403,23 +431,16 @@ export function RoomPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-raid-text">
-            <Users size={20} /> Members ({room.members.length}/{room.max_members})
-          </h2>
-          <div className="divide-y divide-raid-border">
-            {room.members.map((m: RoomMember) => (
-              <div key={m.user_id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
-                <div className="flex items-center gap-3">
-                  <div className={`h-2 w-2 rounded-full ${m.presence === 'online' ? 'bg-raid-success' : 'bg-raid-disabled'}`} />
-                  <div>
-                    <p className="text-sm font-medium text-raid-text">{m.display_name}</p>
-                    <p className="text-xs text-raid-text-secondary">@{m.username}</p>
-                  </div>
-                </div>
-                <Badge variant={m.role === 'owner' ? 'accent' : 'neutral'}>{m.role}</Badge>
-              </div>
-            ))}
-          </div>
+          <RoomMembersPanel
+            roomId={id!}
+            members={room.members}
+            maxMembers={room.max_members}
+            currentUserId={currentUserId}
+            canModerate={canModerate}
+            isOwner={isOwner}
+            onChanged={loadRoom}
+            onError={setError}
+          />
         </Card>
 
         {accessToken && id && (
@@ -431,328 +452,428 @@ export function RoomPage() {
           />
         )}
 
-        <Card accentHeader>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Prank composer</h2>
+        <Card accentHeader className="lg:col-span-2">
+          <h2 className="mb-2 text-lg font-semibold text-raid-text">Send raid</h2>
           {!canSend ? (
             <p className="text-sm text-raid-text-secondary">Guests cannot send pranks.</p>
           ) : (
             <div className="space-y-4">
-              {isSoloRoom && (
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    [1, 'Target'],
+                    [2, 'Content'],
+                    [3, 'Style & place'],
+                    [4, 'Send'],
+                  ] as const
+                ).map(([step, label]) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() => setComposerStep(step)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                      composerStep === step
+                        ? 'bg-raid-accent text-raid-bg'
+                        : 'bg-raid-surface text-raid-text-secondary hover:text-raid-text'
+                    }`}
+                  >
+                    {step}. {label}
+                  </button>
+                ))}
+              </div>
+
+              {isSoloRoom && composerStep === 1 && (
                 <p className="rounded-xl border border-raid-accent/30 bg-raid-accent/10 px-3 py-2 text-xs text-raid-text-secondary">
                   Solo room: you can prank yourself (target <strong>Yourself</strong> or{' '}
                   <strong>Everyone</strong>). Enable Receive raids first.
                 </p>
               )}
 
-              <div>
-                <label className="mb-1 block text-xs text-raid-text-secondary">Target</label>
-                <select
-                  className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                  value={targetId}
-                  onChange={(e) => setTargetId(e.target.value)}
-                >
-                  <option value="">Everyone in room</option>
-                  {currentUserId && (
-                    <option value={currentUserId}>Yourself (solo test)</option>
-                  )}
-                  {otherMembers.map((m) => (
-                    <option key={m.user_id} value={m.user_id}>
-                      {m.display_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs font-medium text-raid-text-secondary">Packs</p>
-                <div className="flex flex-wrap gap-2">
-                  {RAID_PACKS.map((pack) => (
-                    <Button
-                      key={pack.id}
-                      variant="secondary"
-                      className="!h-auto flex-col items-start gap-0.5 !px-3 !py-2 text-left"
-                      onClick={() => applyPack(pack)}
-                      title={pack.description}
+              {composerStep === 1 && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Target</label>
+                    <select
+                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                      value={targetId}
+                      onChange={(e) => setTargetId(e.target.value)}
                     >
-                      <span className="text-sm font-medium">{pack.label}</span>
-                      <span className="text-[10px] font-normal text-raid-text-secondary">
-                        {pack.description}
-                      </span>
-                    </Button>
-                  ))}
+                      <option value="">Everyone in room</option>
+                      {currentUserId && (
+                        <option value={currentUserId}>Yourself (solo test)</option>
+                      )}
+                      {otherMembers.map((m) => (
+                        <option key={m.user_id} value={m.user_id}>
+                          {m.display_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-raid-text-secondary">Quick packs</p>
+                    <div className="flex flex-wrap gap-2">
+                      {RAID_PACKS.map((pack) => (
+                        <Button
+                          key={pack.id}
+                          variant="secondary"
+                          className="!h-auto flex-col items-start gap-0.5 !px-3 !py-2 text-left"
+                          onClick={() => {
+                            applyPack(pack);
+                            setComposerStep(2);
+                          }}
+                          title={pack.description}
+                        >
+                          <span className="text-sm font-medium">{pack.label}</span>
+                          <span className="text-[10px] font-normal text-raid-text-secondary">
+                            {pack.description}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <Button onClick={() => setComposerStep(2)}>Next: Content</Button>
                 </div>
-              </div>
+              )}
 
-              <div className="flex flex-wrap gap-2">
-                {OVERLAY_TYPES.map((t) => (
-                  <Button
-                    key={t}
-                    variant={overlayType === t ? 'primary' : 'secondary'}
-                    onClick={() => {
-                      setOverlayType(t);
-                      setMediaId('');
-                    }}
-                  >
-                    {t}
-                  </Button>
-                ))}
-              </div>
+              {composerStep === 2 && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {OVERLAY_TYPES.map((t) => (
+                      <Button
+                        key={t}
+                        variant={overlayType === t ? 'primary' : 'secondary'}
+                        onClick={() => {
+                          setOverlayType(t);
+                          setMediaId('');
+                        }}
+                      >
+                        {t}
+                      </Button>
+                    ))}
+                  </div>
 
-              {overlayType === 'text' ? (
-                <Input
-                  label="Message"
-                  value={textContent}
-                  onChange={(e) => setTextContent(e.target.value)}
-                  placeholder="Overlay text…"
-                />
-              ) : (
-                <div className="space-y-3">
-                  {showGifSelector && (
-                    <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
-                      Ouvrir le sélecteur GIF
+                  {overlayType === 'text' ? (
+                    <Input
+                      label="Message"
+                      value={textContent}
+                      onChange={(e) => setTextContent(e.target.value)}
+                      placeholder="Overlay text…"
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      {showGifSelector && (
+                        <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
+                          Ouvrir le sélecteur GIF
+                        </Button>
+                      )}
+
+                      <div>
+                        <label className="mb-1 block text-xs text-raid-text-secondary">
+                          {showGifSelector ? 'Ou choisir dans la bibliothèque' : 'Media'}
+                        </label>
+                        <MediaPicker
+                          items={selectableMedia}
+                          value={mediaId}
+                          onChange={setMediaId}
+                          emptyHint={
+                            showGifSelector
+                              ? 'Bibliothèque vide — utilise le sélecteur GIF ou upload dans Media.'
+                              : `Upload ${overlayType} media in the Media library first.`
+                          }
+                        />
+                      </div>
+
+                      {selectedMedia && (
+                        <div className="flex items-center gap-3 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
+                          <MediaThumb media={selectedMedia} sizeClass="h-16 w-16" />
+                          <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-wide text-raid-accent">
+                              Sélectionné
+                            </p>
+                            <p className="truncate text-sm text-raid-text">
+                              {selectedMedia.original_name}
+                            </p>
+                            <p className="text-xs text-raid-text-secondary">
+                              {selectedMedia.media_type}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => setComposerStep(1)}>
+                      Back
                     </Button>
+                    <Button
+                      disabled={
+                        (overlayType === 'text' && !textContent.trim()) ||
+                        (needsMedia && !mediaId)
+                      }
+                      onClick={() => setComposerStep(3)}
+                    >
+                      Next: Style & place
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {composerStep === 3 && (
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-raid-text-secondary">Animation</label>
+                      <select
+                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                        value={animation}
+                        onChange={(e) => setAnimation(e.target.value as Animation)}
+                        disabled={isSoundOnly}
+                      >
+                        {ANIMATION_OPTIONS.map((a) => (
+                          <option key={a.value} value={a.value}>
+                            {a.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {!isSoundOnly && (
+                      <AnimationPreview
+                        animation={animation}
+                        label={previewText}
+                        textColor={textColor}
+                        bgColor={bgColor}
+                        accentColor={accentColor}
+                        fontFamily={fontFamily}
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">SFX</label>
+                    <select
+                      className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                      value={sfx}
+                      onChange={(e) => setSfx(e.target.value as SfxOption)}
+                    >
+                      {SFX_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {overlayType === 'text' && (
+                    <div className="space-y-3 rounded-xl border border-raid-border bg-raid-bg/40 p-3">
+                      <p className="text-xs font-medium text-raid-text-secondary">Thème texte</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs text-raid-text-secondary">
+                            Couleur texte
+                          </label>
+                          <select
+                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                            value={textColor}
+                            onChange={(e) => setTextColor(e.target.value)}
+                          >
+                            {TEXT_COLOR_PRESETS.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-raid-text-secondary">Fond</label>
+                          <select
+                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                            value={bgColor}
+                            onChange={(e) => setBgColor(e.target.value)}
+                          >
+                            {BG_COLOR_PRESETS.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-raid-text-secondary">Accent</label>
+                          <select
+                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                            value={accentColor}
+                            onChange={(e) => setAccentColor(e.target.value)}
+                          >
+                            {ACCENT_COLOR_PRESETS.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-raid-text-secondary">Police</label>
+                          <select
+                            className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
+                            value={fontFamily}
+                            onChange={(e) => setFontFamily(e.target.value)}
+                          >
+                            {FONT_FAMILY_PRESETS.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(overlayType === 'sound' || overlayType === 'video') && (
+                    <div>
+                      <label className="mb-1 block text-xs text-raid-text-secondary">
+                        Volume: {Math.round(volume * 100)}%
+                      </label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={volume}
+                        onChange={(e) => setVolume(Number(e.target.value))}
+                        className="w-full accent-raid-accent"
+                      />
+                    </div>
+                  )}
+
+                  {!isSoundOnly && (
+                    <div>
+                      <label className="mb-1 block text-xs text-raid-text-secondary">
+                        Soft (opacité): {Math.round(opacity * 100)}%
+                      </label>
+                      <input
+                        type="range"
+                        min={0.3}
+                        max={1}
+                        step={0.05}
+                        value={opacity}
+                        onChange={(e) => setOpacity(Number(e.target.value))}
+                        className="w-full accent-raid-accent"
+                      />
+                    </div>
                   )}
 
                   <div>
                     <label className="mb-1 block text-xs text-raid-text-secondary">
-                      {showGifSelector ? 'Ou choisir dans la bibliothèque' : 'Media'}
+                      Duration: {durationMs / 1000}s
                     </label>
-                    <MediaPicker
-                      items={selectableMedia}
-                      value={mediaId}
-                      onChange={setMediaId}
-                      emptyHint={
-                        showGifSelector
-                          ? 'Bibliothèque vide — utilise le sélecteur GIF ou upload dans Media.'
-                          : `Upload ${overlayType} media in the Media library first.`
-                      }
+                    <input
+                      type="range"
+                      min={1000}
+                      max={30000}
+                      step={1000}
+                      value={durationMs}
+                      onChange={(e) => setDurationMs(Number(e.target.value))}
+                      className="w-full accent-raid-accent"
                     />
                   </div>
 
-                  {selectedMedia && (
-                    <div className="flex items-center gap-3 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
-                      <MediaThumb media={selectedMedia} sizeClass="h-16 w-16" />
-                      <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-wide text-raid-accent">Sélectionné</p>
-                        <p className="truncate text-sm text-raid-text">
-                          {selectedMedia.original_name}
+                  {showPlacement && (
+                    <div>
+                      <label className="mb-2 block text-xs font-medium text-raid-text-secondary">
+                        Visual placement
+                        {targetId === currentUserId && (
+                          <span className="ml-2 font-normal text-raid-accent">
+                            (defaults to your preferred screen)
+                          </span>
+                        )}
+                      </label>
+                      <MonitorCanvas
+                        monitors={targetMonitors}
+                        position={placement}
+                        onChange={setPlacement}
+                        previewLabel={previewLabel(overlayType)}
+                      />
+                      {raidBomb && (
+                        <p className="mt-1 text-xs text-raid-text-secondary">
+                          En mode bomb, les positions sont aléatoires (0.2–0.8) ; le placement
+                          ci-dessus sert de référence pour le moniteur.
                         </p>
-                        <p className="text-xs text-raid-text-secondary">
-                          {selectedMedia.media_type}
-                        </p>
-                      </div>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs text-raid-text-secondary">Animation</label>
-                  <select
-                    className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                    value={animation}
-                    onChange={(e) => setAnimation(e.target.value as Animation)}
-                    disabled={isSoundOnly}
-                  >
-                    {ANIMATION_OPTIONS.map((a) => (
-                      <option key={a.value} value={a.value}>
-                        {a.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {!isSoundOnly && (
-                  <AnimationPreview
-                    animation={animation}
-                    label={previewText}
-                    textColor={textColor}
-                    bgColor={bgColor}
-                    accentColor={accentColor}
-                    fontFamily={fontFamily}
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs text-raid-text-secondary">SFX</label>
-                <select
-                  className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                  value={sfx}
-                  onChange={(e) => setSfx(e.target.value as SfxOption)}
-                >
-                  {SFX_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {overlayType === 'text' && (
-                <div className="space-y-3 rounded-xl border border-raid-border bg-raid-bg/40 p-3">
-                  <p className="text-xs font-medium text-raid-text-secondary">Thème texte</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-raid-text-secondary">Couleur texte</label>
-                      <select
-                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                        value={textColor}
-                        onChange={(e) => setTextColor(e.target.value)}
-                      >
-                        {TEXT_COLOR_PRESETS.map((p) => (
-                          <option key={p.value} value={p.value}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-raid-text-secondary">Fond</label>
-                      <select
-                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                        value={bgColor}
-                        onChange={(e) => setBgColor(e.target.value)}
-                      >
-                        {BG_COLOR_PRESETS.map((p) => (
-                          <option key={p.value} value={p.value}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-raid-text-secondary">Accent</label>
-                      <select
-                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                        value={accentColor}
-                        onChange={(e) => setAccentColor(e.target.value)}
-                      >
-                        {ACCENT_COLOR_PRESETS.map((p) => (
-                          <option key={p.value} value={p.value}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-raid-text-secondary">Police</label>
-                      <select
-                        className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
-                        value={fontFamily}
-                        onChange={(e) => setFontFamily(e.target.value)}
-                      >
-                        {FONT_FAMILY_PRESETS.map((p) => (
-                          <option key={p.value} value={p.value}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => setComposerStep(2)}>
+                      Back
+                    </Button>
+                    <Button onClick={() => setComposerStep(4)}>Next: Send</Button>
                   </div>
                 </div>
               )}
 
-              {(overlayType === 'sound' || overlayType === 'video') && (
-                <div>
-                  <label className="mb-1 block text-xs text-raid-text-secondary">
-                    Volume: {Math.round(volume * 100)}%
+              {composerStep === 4 && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-raid-border bg-raid-bg/40 p-3 text-sm text-raid-text-secondary">
+                    <p>
+                      <span className="text-raid-text">Target:</span>{' '}
+                      {targetId
+                        ? targetId === currentUserId
+                          ? 'Yourself'
+                          : room.members.find((m) => m.user_id === targetId)?.display_name ??
+                            'User'
+                        : 'Everyone in room'}
+                    </p>
+                    <p>
+                      <span className="text-raid-text">Type:</span> {overlayType}
+                      {raidBomb ? ' · bomb ×5' : ''}
+                    </p>
+                    <p>
+                      <span className="text-raid-text">Duration:</span> {durationMs / 1000}s ·{' '}
+                      {animation}
+                    </p>
+                  </div>
+
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-raid-text">
+                    <input
+                      type="checkbox"
+                      checked={raidBomb}
+                      onChange={(e) => setRaidBomb(e.target.checked)}
+                      className="accent-raid-accent"
+                    />
+                    Raid bomb
+                    <span className="text-xs text-raid-text-secondary">
+                      (5 pranks, positions aléatoires)
+                    </span>
                   </label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="w-full accent-raid-accent"
-                  />
-                </div>
-              )}
 
-              {!isSoundOnly && (
-                <div>
-                  <label className="mb-1 block text-xs text-raid-text-secondary">
-                    Soft (opacité): {Math.round(opacity * 100)}%
-                  </label>
-                  <input
-                    type="range"
-                    min={0.3}
-                    max={1}
-                    step={0.05}
-                    value={opacity}
-                    onChange={(e) => setOpacity(Number(e.target.value))}
-                    className="w-full accent-raid-accent"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="mb-1 block text-xs text-raid-text-secondary">
-                  Duration: {durationMs / 1000}s
-                </label>
-                <input
-                  type="range"
-                  min={1000}
-                  max={30000}
-                  step={1000}
-                  value={durationMs}
-                  onChange={(e) => setDurationMs(Number(e.target.value))}
-                  className="w-full accent-raid-accent"
-                />
-              </div>
-
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-raid-text">
-                <input
-                  type="checkbox"
-                  checked={raidBomb}
-                  onChange={(e) => setRaidBomb(e.target.checked)}
-                  className="accent-raid-accent"
-                />
-                Raid bomb
-                <span className="text-xs text-raid-text-secondary">
-                  (5 pranks, positions aléatoires)
-                </span>
-              </label>
-
-              {showPlacement && (
-                <div>
-                  <label className="mb-2 block text-xs font-medium text-raid-text-secondary">
-                    Visual placement
-                  </label>
-                  <MonitorCanvas
-                    monitors={targetMonitors}
-                    position={placement}
-                    onChange={setPlacement}
-                    previewLabel={previewLabel(overlayType)}
-                  />
-                  {raidBomb && (
-                    <p className="mt-1 text-xs text-raid-text-secondary">
-                      En mode bomb, les positions sont aléatoires (0.2–0.8) ; le placement ci-dessus
-                      sert de référence pour le moniteur.
+                  {targetId === currentUserId && !isSoloRoom && (
+                    <p className="text-xs text-raid-text-secondary">
+                      Self-target in a multi-member room requires{' '}
+                      <code className="text-raid-accent">ALLOW_SELF_PRANK=true</code> on the
+                      server.
                     </p>
                   )}
+
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => setComposerStep(3)}>
+                      Back
+                    </Button>
+                    <Button
+                      disabled={
+                        sending ||
+                        (overlayType === 'text' && !textContent.trim()) ||
+                        (needsMedia && !mediaId)
+                      }
+                      onClick={() => void handleSend()}
+                    >
+                      <Send size={16} />
+                      {sending ? 'Sending…' : raidBomb ? 'Envoyer bomb (×5)' : 'Send prank'}
+                    </Button>
+                  </div>
                 </div>
               )}
-
-              {targetId === currentUserId && !isSoloRoom && (
-                <p className="text-xs text-raid-text-secondary">
-                  Self-target in a multi-member room requires{' '}
-                  <code className="text-raid-accent">ALLOW_SELF_PRANK=true</code> on the server.
-                </p>
-              )}
-
-              <Button
-                disabled={
-                  sending ||
-                  (overlayType === 'text' && !textContent.trim()) ||
-                  (needsMedia && !mediaId)
-                }
-                onClick={() => void handleSend()}
-              >
-                <Send size={16} />
-                {sending ? 'Sending…' : raidBomb ? 'Envoyer bomb (×5)' : 'Send prank'}
-              </Button>
             </div>
           )}
         </Card>

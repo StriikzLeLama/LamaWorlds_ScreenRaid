@@ -144,4 +144,12 @@ impl SecurityService {
             limit: limit.clamp(1, 100),
         })
     }
+
+    pub async fn list_audit_all(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<(Vec<crate::repository::audit_repo::AuditRow>, i64), AppError> {
+        self.audit.list_all(page, limit).await
+    }
 }

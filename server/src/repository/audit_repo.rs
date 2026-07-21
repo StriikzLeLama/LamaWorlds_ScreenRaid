@@ -127,4 +127,58 @@ impl AuditRepository {
         }
         Ok((out, total.0))
     }
+
+    pub async fn list_all(
+        &self,
+        page: u32,
+        limit: u32,
+    ) -> Result<(Vec<AuditRow>, i64), AppError> {
+        let limit = limit.clamp(1, 100) as i64;
+        let offset = ((page.max(1) - 1) * limit as u32) as i64;
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_log")
+            .fetch_one(&self.pool)
+            .await?;
+
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            id: String,
+            user_id: Option<String>,
+            action: String,
+            resource_type: Option<String>,
+            resource_id: Option<String>,
+            metadata: Option<String>,
+            ip_address: Option<String>,
+            created_at: String,
+            actor_username: Option<String>,
+        }
+
+        let rows = sqlx::query_as::<_, Row>(
+            "SELECT a.id, a.user_id, a.action, a.resource_type, a.resource_id, a.metadata,
+                    a.ip_address, a.created_at, u.username as actor_username
+             FROM audit_log a
+             LEFT JOIN users u ON u.id = a.user_id
+             ORDER BY a.created_at DESC
+             LIMIT ? OFFSET ?",
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let out = rows
+            .into_iter()
+            .map(|r| AuditRow {
+                id: Uuid::parse_str(&r.id).unwrap_or_default(),
+                user_id: r.user_id.and_then(|s| Uuid::parse_str(&s).ok()),
+                action: r.action,
+                resource_type: r.resource_type,
+                resource_id: r.resource_id,
+                metadata: r.metadata,
+                ip_address: r.ip_address,
+                created_at: r.created_at,
+                actor_username: r.actor_username,
+            })
+            .collect();
+        Ok((out, total.0))
+    }
 }
