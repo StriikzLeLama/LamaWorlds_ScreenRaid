@@ -25,6 +25,7 @@ Thumbs.db
 
 # Tauri
 client/src-tauri/gen/
+client/screenraid-updater.key
 
 # Logs
 *.log

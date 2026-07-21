@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { AppReceiver } from './App.receiver';
 import { loadServerUrlFromSettings } from './services/serverConfig';
+import { checkForAppUpdates } from './services/updater';
 import { isTauriRuntime, isWebApp } from './lib/platform';
 import { log } from './lib/log';
 
@@ -17,6 +18,7 @@ async function bootstrap() {
   await loadServerUrlFromSettings();
   const { getServerUrl } = await import('./services/serverConfig');
   log.info('main.tsx server url after load =', getServerUrl());
+  void checkForAppUpdates();
   createRoot(document.getElementById('root')!).render(<AppReceiver />);
 }
 

@@ -35,7 +35,7 @@ impl Default for AppSettings {
             default_animation: "fade".into(),
             cache_limit_mb: 500,
             panic_hotkey: "Ctrl+Shift+Escape".into(),
-            server_url: "http://localhost:8080".into(),
+            server_url: "https://screenraid.lama-worlds.com".into(),
             selected_monitor: "primary".into(),
             soft_mode: false,
             max_opacity: default_max_opacity(),
@@ -55,10 +55,18 @@ impl SettingsStore {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let path = dir.join("settings.json");
 
-        let settings = fs::read_to_string(&path)
+        let mut settings: AppSettings = fs::read_to_string(&path)
             .ok()
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default();
+
+        if settings.server_url == "http://localhost:8080" {
+            settings.server_url = AppSettings::default().server_url;
+            let _ = fs::write(
+                &path,
+                serde_json::to_string_pretty(&settings).unwrap_or_default(),
+            );
+        }
 
         Ok(Self {
             inner: Mutex::new(settings),

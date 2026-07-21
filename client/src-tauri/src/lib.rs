@@ -1,4 +1,5 @@
 mod commands;
+mod tray;
 
 use commands::media_cache::{clear_media_cache, remove_media_cache_file, write_media_cache};
 use commands::monitor::collect_monitors;
@@ -21,6 +22,8 @@ pub fn run() {
             Some(vec![]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(
@@ -59,6 +62,8 @@ pub fn run() {
             log::info!("[boot] Tauri log plugin initialized (level={log_level})");
 
             app.manage(SettingsStore::new(&app.handle())?);
+
+            tray::setup_tray(app)?;
 
             let handle = app.handle().clone();
             let shortcut =

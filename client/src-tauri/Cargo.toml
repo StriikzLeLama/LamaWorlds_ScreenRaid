@@ -19,11 +19,13 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 log = "0.4"
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tokio = { version = "1", features = ["time"] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }

@@ -1,0 +1,42 @@
+name: Release ScreenRaid Receiver
+
+on:
+  push:
+    tags:
+      - 'client-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          projectPath: client
+          tagName: ${{ github.ref_name }}
+          releaseName: ScreenRaid Receiver ${{ github.ref_name }}
+          releaseBody: |
+            Desktop receiver build for Windows.
+            Auto-update is enabled when `latest.json` and signatures are attached to this release.
+          releaseDraft: true
+          prerelease: false
+          args: --target x86_64-pc-windows-msvc --config "{\"bundle\":{\"createUpdaterArtifacts\":true}}"
