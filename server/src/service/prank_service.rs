@@ -203,6 +203,18 @@ impl PrankService {
                 );
         }
 
+        let online = deliverable
+            .iter()
+            .filter(|id| self.hub.is_online(**id))
+            .count();
+        if online == 0 {
+            tracing::warn!(
+                %prank_id,
+                targets = deliverable.len(),
+                "prank delivered to hub but no target has an active WS session — restart the Tauri receiver"
+            );
+        }
+
         self.pranks
             .update_status(prank_id, PrankStatus::Delivered, Some(now))
             .await?;

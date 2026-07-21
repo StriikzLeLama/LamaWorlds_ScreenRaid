@@ -22,6 +22,11 @@ async function playSoundPrank(
   }, durationMs);
 }
 
+function safeNumber(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function usePrankReceiver() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
@@ -62,18 +67,30 @@ export function usePrankReceiver() {
 
         let mediaUrl: string | null = null;
         let localPath: string | null = null;
+        let overlayType = prank.overlay_type;
+        let textContent = prank.text_content;
 
         if (prank.media) {
           log.info('prank resolving media', prank.media.id);
-          const resolved = await resolveMediaForPrank(prank.media, token);
-          if (!resolved) {
-            log.error('prank media resolve failed');
-            await ackPrank(prank.prank_id, false, prank.room_id);
-            return;
+          try {
+            const resolved = await resolveMediaForPrank(prank.media, token);
+            if (resolved) {
+              mediaUrl = resolved.mediaUrl;
+              localPath = resolved.localPath;
+              log.info('prank media resolved', { mediaUrl, localPath });
+            } else {
+              log.error('prank media resolve returned null');
+            }
+          } catch (e) {
+            log.error('prank media resolve threw', e);
           }
-          mediaUrl = resolved.mediaUrl;
-          localPath = resolved.localPath;
-          log.info('prank media resolved', { mediaUrl, localPath });
+
+          if (!mediaUrl && overlayType !== 'text') {
+            // Still show something so raids never silently disappear.
+            overlayType = 'text';
+            textContent = `${prank.sender.display_name} sent a ${prank.overlay_type} (media failed to load)`;
+          }
+
           try {
             const settings = await invoke<{ cache_limit_mb: number }>('get_settings');
             void enforceCacheLimit(settings.cache_limit_mb).catch(() => undefined);
@@ -82,19 +99,19 @@ export function usePrankReceiver() {
           }
         }
 
-        if (prank.overlay_type === 'sound') {
+        if (overlayType === 'sound') {
           if (!mediaUrl) {
             log.warn('sound prank has no media');
             await ackPrank(prank.prank_id, false, prank.room_id);
             return;
           }
-          await playSoundPrank(mediaUrl, prank.config.volume, prank.duration_ms);
+          await playSoundPrank(mediaUrl, safeNumber(prank.config?.volume, 0.8), prank.duration_ms);
           await ackPrank(prank.prank_id, true, prank.room_id);
           return;
         }
 
         // Soft mode: cap opacity from receiver settings.
-        let opacity = prank.config.opacity ?? 1;
+        let opacity = safeNumber(prank.config?.opacity, 1);
         try {
           const settings = await invoke<{
             soft_mode?: boolean;
@@ -107,32 +124,39 @@ export function usePrankReceiver() {
         } catch {
           // settings optional
         }
+        opacity = Math.min(1, Math.max(0.15, opacity));
 
-        // Unlock audio on receive path (user may have toggled Receive earlier).
         void unlockAudio();
 
-        log.info('prank invoking show_overlay', prank.prank_id);
+        const pos = prank.config?.position;
+        const positionX = safeNumber(pos?.x, 0.5);
+        const positionY = safeNumber(pos?.y, 0.5);
+        const monitorIndex = safeNumber(pos?.monitor_index, 0);
+        const scale = safeNumber(prank.config?.scale, 1);
+        const animation = prank.config?.animation || 'fade';
+
+        log.info('prank invoking show_overlay', prank.prank_id, overlayType);
         await invoke('show_overlay', {
           payload: {
             id: prank.prank_id,
-            overlay_type: prank.overlay_type,
+            overlay_type: overlayType,
             media_url: mediaUrl,
             local_path: localPath,
-            text: prank.text_content,
+            text: textContent,
             duration_ms: prank.duration_ms,
-            animation: prank.config.animation,
+            animation,
             sender_name: prank.sender.display_name,
-            position_x: prank.config.position.x,
-            position_y: prank.config.position.y,
-            monitor_index: prank.config.position.monitor_index ?? 0,
-            scale: prank.config.scale,
+            position_x: positionX,
+            position_y: positionY,
+            monitor_index: monitorIndex,
+            scale,
             opacity,
-            volume: prank.config.volume,
-            sfx: prank.config.sfx ?? 'none',
-            text_color: prank.config.text_color ?? null,
-            bg_color: prank.config.bg_color ?? null,
-            accent_color: prank.config.accent_color ?? null,
-            font_family: prank.config.font_family ?? null,
+            volume: safeNumber(prank.config?.volume, 0.8),
+            sfx: prank.config?.sfx ?? 'none',
+            text_color: prank.config?.text_color ?? null,
+            bg_color: prank.config?.bg_color ?? null,
+            accent_color: prank.config?.accent_color ?? null,
+            font_family: prank.config?.font_family ?? null,
           },
         });
         log.info('prank show_overlay ok', prank.prank_id);

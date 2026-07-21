@@ -1,8 +1,11 @@
 import Database from '@tauri-apps/plugin-sql';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { getServerUrl } from './serverConfig';
+import { log } from '../lib/log';
 
 const DB_URL = 'sqlite:screenraid-client.db';
+/** Above this size, skip IPC disk cache (Array.from blows up) and use a blob URL. */
+const BLOB_CACHE_THRESHOLD = 1_500_000;
 
 let dbPromise: Promise<Database> | null = null;
 
@@ -26,6 +29,10 @@ function extensionFromMime(mime: string): string {
     'audio/ogg': 'ogg',
   };
   return map[mime] ?? mime.split('/').pop() ?? 'bin';
+}
+
+function blobUrlFromBuffer(buffer: ArrayBuffer, mime: string): string {
+  return URL.createObjectURL(new Blob([buffer], { type: mime || 'application/octet-stream' }));
 }
 
 export interface ResolvedMedia {
@@ -101,28 +108,42 @@ export async function resolveMediaForPrank(
   const response = await fetch(remoteUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    log.warn('media download failed', response.status, remoteUrl);
+    return null;
+  }
 
   const buffer = await response.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
   const ext = extensionFromMime(media.mime_type);
-  const localPath = await invoke<string>('write_media_cache', {
-    mediaId: media.id,
-    bytes: Array.from(bytes),
-    extension: ext,
-  });
 
-  // Cache index is best-effort — never block rendering if SQL execute fails.
-  await recordCacheEntry(
-    media.id,
-    remoteUrl,
-    localPath,
-    media.mime_type,
-    buffer.byteLength,
-    media.hash_sha256 || null,
-  ).catch(() => undefined);
+  // Large GIFs: blob URL immediately — Array.from(bytes) over IPC can freeze/fail.
+  if (buffer.byteLength > BLOB_CACHE_THRESHOLD) {
+    log.info('media using blob URL (size)', buffer.byteLength);
+    return { mediaUrl: blobUrlFromBuffer(buffer, media.mime_type), localPath: null };
+  }
 
-  return { mediaUrl: convertFileSrc(localPath), localPath };
+  try {
+    const bytes = new Uint8Array(buffer);
+    const localPath = await invoke<string>('write_media_cache', {
+      mediaId: media.id,
+      bytes: Array.from(bytes),
+      extension: ext,
+    });
+
+    await recordCacheEntry(
+      media.id,
+      remoteUrl,
+      localPath,
+      media.mime_type,
+      buffer.byteLength,
+      media.hash_sha256 || null,
+    ).catch(() => undefined);
+
+    return { mediaUrl: convertFileSrc(localPath), localPath };
+  } catch (e) {
+    log.warn('media cache write failed — falling back to blob', e);
+    return { mediaUrl: blobUrlFromBuffer(buffer, media.mime_type), localPath: null };
+  }
 }
 
 export async function clearMediaCache(): Promise<number> {

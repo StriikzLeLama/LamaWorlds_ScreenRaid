@@ -1,8 +1,7 @@
 html,
 body,
 #root {
-  background: transparent !important;
-  overflow: hidden;
+  /* Shell chrome is set in overlay.html — keep this file import-safe for web preview. */
 }
 
 /* Isolate overlay repaints without size containment (size can collapse to 0). */

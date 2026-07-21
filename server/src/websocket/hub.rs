@@ -91,9 +91,18 @@ impl WsHub {
 
     pub fn send_to_user(&self, user_id: Uuid, event_type: &str, payload: serde_json::Value) {
         if let Some(sessions) = self.user_sessions.get(&user_id) {
+            if sessions.is_empty() {
+                tracing::warn!(%user_id, %event_type, "send_to_user: user has empty session set");
+            }
             for sid in sessions.iter() {
                 self.send_to_session(*sid, event_type, payload.clone());
             }
+        } else {
+            tracing::warn!(
+                %user_id,
+                %event_type,
+                "send_to_user: no active WebSocket session (receiver offline?)"
+            );
         }
     }
 
