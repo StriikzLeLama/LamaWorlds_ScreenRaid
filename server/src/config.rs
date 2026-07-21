@@ -40,7 +40,11 @@ impl Config {
                 env::var("STORAGE_PATH").unwrap_or_else(|_| "./data/media".into()),
             ),
             cors_origins: env::var("CORS_ORIGINS")
-                .unwrap_or_else(|_| "http://localhost:1420,tauri://localhost".into())
+                .unwrap_or_else(|_| {
+                    // Dev Vite + Tauri 2 custom protocol (packaged exe uses https://tauri.localhost)
+                    "http://localhost:1420,tauri://localhost,https://tauri.localhost,http://tauri.localhost"
+                        .into()
+                })
                 .split(',')
                 .map(str::trim)
                 .filter(|s| !s.is_empty())

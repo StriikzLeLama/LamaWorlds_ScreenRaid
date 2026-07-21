@@ -43,8 +43,9 @@ export function TitleBar() {
         </button>
         <button
           type="button"
-          aria-label="Close"
-          onClick={() => windowAction(() => appWindow.close())}
+          aria-label="Réduire dans la barre système"
+          title="Réduire dans la barre système (Quitter via l’icône tray)"
+          onClick={() => windowAction(() => appWindow.hide())}
           className="rounded-lg p-1.5 text-raid-text-secondary transition-colors hover:bg-raid-danger hover:text-white"
         >
           <X size={16} />
