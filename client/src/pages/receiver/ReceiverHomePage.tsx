@@ -8,6 +8,7 @@ import { useConsentStore } from '../../stores/consentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useWsConnection } from '../../hooks/useWsConnection';
 import { isTauriRuntime } from '../../lib/platform';
+import { useAppVersion } from '../../lib/version';
 import { log } from '../../lib/log';
 
 export function ReceiverHomePage() {
@@ -19,6 +20,7 @@ export function ReceiverHomePage() {
   const [queueCount, setQueueCount] = useState(0);
   const inTauri = isTauriRuntime();
   const receiving = globalConsent && !isPaused;
+  const version = useAppVersion();
 
   useEffect(() => {
     log.info('ReceiverHomePage mount', {
@@ -114,7 +116,8 @@ export function ReceiverHomePage() {
       <div>
         <h1 className="text-2xl font-bold text-raid-text">Receiver</h1>
         <p className="text-sm text-raid-text-secondary">
-          Overlay status for @{user?.username}. Rooms, media, and sending live elsewhere in this app.
+          Overlay status for @{user?.username} · v{version}. Rooms, media, and sending live elsewhere in
+          this app.
         </p>
       </div>
 

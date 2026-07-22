@@ -10,6 +10,7 @@ import { getServerUrl, setServerUrl } from '../../services/serverConfig';
 import { useAuthStore } from '../../stores/authStore';
 import { useConsentStore } from '../../stores/consentStore';
 import { isTauriRuntime } from '../../lib/platform';
+import { useAppVersion } from '../../lib/version';
 import { log } from '../../lib/log';
 import { getMySecurityPrefs, updateMySecurityPrefs } from '../../services/security';
 import type { UserSecurityPrefs } from '../../types/security';
@@ -65,6 +66,7 @@ export function ReceiverSettingsPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [cacheClearing, setCacheClearing] = useState(false);
+  const version = useAppVersion();
 
   useEffect(() => {
     log.info('ReceiverSettingsPage mount, isTauriRuntime=', isTauriRuntime());
@@ -175,7 +177,7 @@ export function ReceiverSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-raid-text">Device settings</h1>
         <p className="text-sm text-raid-text-secondary">
-          Server connection, cache, and overlay defaults for the desktop receiver.
+          Server connection, cache, and overlay defaults for the desktop receiver · v{version}
         </p>
       </div>
 

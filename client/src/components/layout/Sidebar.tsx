@@ -18,6 +18,7 @@ import { useConsentStore } from '../../stores/consentStore';
 import { isReceiverApp } from '../../lib/platform';
 import { logout as logoutApi } from '../../services/auth';
 import { clearLocalSession } from '../../services/session';
+import { useAppVersion } from '../../lib/version';
 
 const baseNavItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -40,6 +41,7 @@ export function Sidebar() {
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const pause = useConsentStore((s) => s.pause);
   const desktop = isReceiverApp();
+  const version = useAppVersion();
 
   let navItems = [...baseNavItems];
   if (desktop) {
@@ -133,6 +135,9 @@ export function Sidebar() {
           <LogOut size={18} />
           Sign out
         </Button>
+        <p className="text-center text-[11px] tabular-nums text-raid-text-secondary/80">
+          ScreenRaid v{version}
+        </p>
       </div>
     </aside>
   );
