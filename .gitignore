@@ -9,6 +9,10 @@ node_modules/
 
 # Data & secrets
 .env
+.env.*
+!.env.example
+!client/.env.receiver
+!client/.env.web
 server/data/
 *.db
 *.db-*
@@ -26,6 +30,12 @@ Thumbs.db
 # Tauri
 client/src-tauri/gen/
 client/screenraid-updater.key
+*.key
+!*.key.pub
+
+# Scraped / local research dumps (do not publish)
+.firecrawl/
+**/.firecrawl/
 
 # Logs
 *.log
