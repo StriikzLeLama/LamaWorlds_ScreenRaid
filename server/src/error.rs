@@ -10,6 +10,9 @@ use thiserror::Error;
 pub enum AppError {
     #[error("unauthorized")]
     Unauthorized,
+    /// Wrong username/password on login (same HTTP status as Unauthorized).
+    #[error("invalid username or password")]
+    InvalidCredentials,
     #[error("forbidden")]
     Forbidden,
     #[error("not found: {0}")]
@@ -38,7 +41,9 @@ struct ErrorDetail {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code) = match &self {
-            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
+            AppError::Unauthorized | AppError::InvalidCredentials => {
+                (StatusCode::UNAUTHORIZED, "UNAUTHORIZED")
+            }
             AppError::Forbidden => (StatusCode::FORBIDDEN, "FORBIDDEN"),
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, "NOT_FOUND"),
             AppError::Validation(_) => (StatusCode::BAD_REQUEST, "VALIDATION_ERROR"),

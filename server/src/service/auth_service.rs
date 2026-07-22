@@ -111,7 +111,11 @@ impl AuthService {
             return Err(AppError::Validation("username and password required".into()));
         }
 
-        let fail_key = format!("login:{}:{}", meta.ip.as_deref().unwrap_or("unknown"), req.username);
+        let fail_key = format!(
+            "login:{}:{}",
+            meta.ip.as_deref().unwrap_or("unknown"),
+            req.username.trim().to_lowercase()
+        );
         let failures = self.security.login_failure_count(&fail_key).await?;
         if self.turnstile.enabled() && failures >= self.turnstile_login_failures {
             self.turnstile
@@ -119,7 +123,7 @@ impl AuthService {
                 .await?;
         }
 
-        let user = match self.users.find_by_username(&req.username).await? {
+        let user = match self.users.find_by_username(req.username.trim()).await? {
             Some(u) => u,
             None => {
                 self.security.record_login_failure(&fail_key).await?;
@@ -133,7 +137,7 @@ impl AuthService {
                         meta.ip.as_deref(),
                     )
                     .await?;
-                return Err(AppError::Unauthorized);
+                return Err(AppError::InvalidCredentials);
             }
         };
 
@@ -153,7 +157,7 @@ impl AuthService {
                     meta.ip.as_deref(),
                 )
                 .await?;
-            return Err(AppError::Unauthorized);
+            return Err(AppError::InvalidCredentials);
         }
 
         self.security.clear_login_failures(&fail_key).await?;

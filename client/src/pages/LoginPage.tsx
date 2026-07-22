@@ -16,8 +16,12 @@ import { getServerUrl } from '../services/serverConfig';
 import { isReceiverApp, isWebApp } from '../lib/platform';
 
 function authErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
+    if (err instanceof ApiError) {
     if (err.status === 401 || err.code === 'UNAUTHORIZED') {
+      const msg = (err.message || '').toLowerCase();
+      if (msg.includes('invalid username') || msg.includes('password')) {
+        return 'Identifiants incorrects (username ou mot de passe).';
+      }
       return 'Identifiants incorrects (username ou mot de passe).';
     }
     if (err.status === 429 || err.code === 'RATE_LIMITED') {
@@ -78,6 +82,9 @@ export function LoginPage() {
     setLoading(true);
     try {
       await ensureServerUrl(isWebApp() ? getServerUrl() : serverUrl);
+      // Drop any stale session so login is a clean request.
+      useAuthStore.getState().logout();
+      const cleanUser = username.trim();
       if (requires2fa) {
         const auth = await verify2faLogin({ temp_token: tempToken, code: totpCode.trim() });
         await finishLogin(auth.access_token, auth.refresh_token);
@@ -88,7 +95,7 @@ export function LoginPage() {
         return;
       }
       const res = await loginApi({
-        username,
+        username: cleanUser,
         password,
         turnstile_token: turnstileToken ?? undefined,
       });

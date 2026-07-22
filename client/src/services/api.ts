@@ -57,7 +57,18 @@ export async function apiFetch<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const accessToken = token ?? useAuthStore.getState().accessToken;
+  // Never attach / refresh tokens on public auth endpoints — a stale Bearer on
+  // /login caused confusing Unauthorized loops (refresh + retry).
+  const isPublicAuth =
+    path.startsWith('/v1/auth/login') ||
+    path.startsWith('/v1/auth/register') ||
+    path.startsWith('/v1/auth/refresh') ||
+    path.startsWith('/v1/auth/2fa/verify') ||
+    path.startsWith('/v1/auth/security-policy');
+
+  const accessToken = isPublicAuth
+    ? null
+    : (token ?? useAuthStore.getState().accessToken);
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
@@ -66,7 +77,7 @@ export async function apiFetch<T>(
 
   let response = await doFetch();
 
-  if (response.status === 401 && accessToken) {
+  if (response.status === 401 && accessToken && !isPublicAuth) {
     const newToken = await tryRefresh();
     if (newToken) {
       headers.set('Authorization', `Bearer ${newToken}`);
