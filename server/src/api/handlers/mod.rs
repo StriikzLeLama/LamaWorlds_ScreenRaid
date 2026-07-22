@@ -12,8 +12,9 @@ pub mod rooms;
 pub mod scheduled;
 
 pub use admin::{
-    deactivate_user, delete_media_admin, force_delete_room, list_admin_audit, list_admin_media,
-    list_admin_presence, list_admin_rooms, list_admin_users, reactivate_user,
+    admin_disable_2fa, admin_revoke_sessions, admin_set_password, admin_stats, deactivate_user,
+    delete_media_admin, force_delete_room, list_admin_audit, list_admin_media, list_admin_presence,
+    list_admin_rooms, list_admin_users, reactivate_user,
 };
 pub use auth::{
     change_display_name, change_password, change_username, disable_2fa, enable_2fa, get_my_security_prefs,

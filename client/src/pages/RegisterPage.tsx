@@ -6,18 +6,9 @@ import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlFie
 import { useAuthStore } from '../stores/authStore';
 import { register as registerApi, getMe } from '../services/auth';
 import { getSecurityPolicy } from '../services/security';
-import { ApiError } from '../services/api';
 import { getServerUrl } from '../services/serverConfig';
 import { isReceiverApp, isWebApp } from '../lib/platform';
-
-function authErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error) return err.message;
-  if (err instanceof TypeError) {
-    return `Cannot reach server at ${getServerUrl()}. Check Server URL and that the CT is online.`;
-  }
-  return 'Registration failed';
-}
+import { authErrorMessage } from '../lib/authErrors';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -59,19 +50,24 @@ export function RegisterPage() {
     setLoading(true);
     try {
       await ensureServerUrl(isWebApp() ? getServerUrl() : serverUrl);
+      useAuthStore.getState().logout();
       const res = await registerApi({
-        username: form.username,
-        email: form.email,
-        display_name: form.display_name || form.username,
-        password: form.password,
+        username: form.username.trim(),
+        email: form.email.trim(),
+        display_name: (form.display_name || form.username).trim(),
+        password: form.password.trim(),
         turnstile_token: turnstileToken ?? undefined,
       });
       login({ access: res.access_token, refresh: res.refresh_token }, res.user);
-      const profile = await getMe(res.access_token);
-      setIsAdmin(Boolean(profile.is_admin));
+      try {
+        const profile = await getMe(res.access_token);
+        setIsAdmin(Boolean(profile.is_admin));
+      } catch {
+        setIsAdmin(false);
+      }
       navigate('/', { replace: true });
     } catch (err) {
-      setError(authErrorMessage(err));
+      setError(authErrorMessage(err, 'Registration failed'));
     } finally {
       setLoading(false);
     }

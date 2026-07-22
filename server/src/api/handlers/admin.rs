@@ -77,6 +77,55 @@ pub async fn reactivate_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+pub struct AdminSetPasswordBody {
+    pub new_password: String,
+}
+
+pub async fn admin_set_password(
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    Json(body): Json<AdminSetPasswordBody>,
+) -> Result<StatusCode, AppError> {
+    state
+        .auth
+        .admin_set_password(admin.user_id, user_id, &body.new_password)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn admin_revoke_sessions(
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state
+        .auth
+        .admin_revoke_sessions(admin.user_id, user_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn admin_disable_2fa(
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state
+        .auth
+        .admin_disable_2fa(admin.user_id, user_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn admin_stats(
+    _admin: AdminUser,
+    State(state): State<AppState>,
+) -> Result<Json<screenraid_types::AdminStatsResponse>, AppError> {
+    Ok(Json(state.auth.admin_stats(state.ws_hub.online_sessions().len() as u32).await?))
+}
+
 pub async fn delete_media_admin(
     _admin: AdminUser,
     State(state): State<AppState>,
@@ -154,6 +203,11 @@ pub async fn list_admin_audit(
                 resource_type: r.resource_type,
                 resource_id: r.resource_id,
                 actor_username: r.actor_username,
+                ip_address: r.ip_address,
+                metadata: r
+                    .metadata
+                    .as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok()),
                 created_at: r.created_at,
             })
             .collect(),

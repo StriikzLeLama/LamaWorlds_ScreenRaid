@@ -60,6 +60,15 @@ pub async fn login(
     if !state.login_limiter.check(&format!("login-ip:{ip}"))
         || !state.login_limiter.check(&user_key)
     {
+        tracing::warn!(
+            username = %req.username.trim(),
+            ip = %ip,
+            "login_failed: rate_limited"
+        );
+        let _ = state
+            .auth
+            .audit_login_rate_limited(&req.username, &ip)
+            .await;
         return Err(AppError::RateLimited);
     }
     let response = state.auth.login(req, client_meta(&headers)).await?;

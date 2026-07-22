@@ -75,6 +75,8 @@ export interface AdminAuditItem {
   resource_type: string | null;
   resource_id: string | null;
   actor_username: string | null;
+  ip_address?: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -83,6 +85,17 @@ export interface AdminAuditResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+export interface AdminStats {
+  users_total: number;
+  users_active: number;
+  users_inactive: number;
+  rooms_active: number;
+  media_total: number;
+  online_count: number;
+  login_failed_24h: number;
+  login_success_24h: number;
 }
 
 export async function listAdminUsers(page = 1, limit = 50): Promise<AdminUsersResponse> {
@@ -114,6 +127,25 @@ export async function deactivateUser(userId: string): Promise<void> {
 
 export async function reactivateUser(userId: string): Promise<void> {
   await apiFetch<void>(`/v1/admin/users/${userId}/reactivate`, { method: 'POST' });
+}
+
+export async function adminSetPassword(userId: string, newPassword: string): Promise<void> {
+  await apiFetch<void>(`/v1/admin/users/${userId}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
+export async function adminRevokeSessions(userId: string): Promise<void> {
+  await apiFetch<void>(`/v1/admin/users/${userId}/revoke-sessions`, { method: 'POST' });
+}
+
+export async function adminDisable2fa(userId: string): Promise<void> {
+  await apiFetch<void>(`/v1/admin/users/${userId}/disable-2fa`, { method: 'POST' });
+}
+
+export async function listAdminStats(): Promise<AdminStats> {
+  return apiFetch<AdminStats>('/v1/admin/stats');
 }
 
 export async function deleteAdminMedia(mediaId: string): Promise<void> {

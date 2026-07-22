@@ -78,6 +78,10 @@ pub struct AdminAuditItem {
     pub resource_type: Option<String>,
     pub resource_id: Option<String>,
     pub actor_username: Option<String>,
+    #[serde(default)]
+    pub ip_address: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
     pub created_at: String,
 }
 
@@ -87,4 +91,16 @@ pub struct AdminAuditResponse {
     pub total: i64,
     pub page: u32,
     pub limit: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminStatsResponse {
+    pub users_total: i64,
+    pub users_active: i64,
+    pub users_inactive: i64,
+    pub rooms_active: i64,
+    pub media_total: i64,
+    pub online_count: u32,
+    pub login_failed_24h: i64,
+    pub login_success_24h: i64,
 }

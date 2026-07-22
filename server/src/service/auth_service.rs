@@ -107,33 +107,94 @@ impl AuthService {
     }
 
     pub async fn login(&self, req: LoginRequest, meta: ClientMeta) -> Result<LoginResponse, AppError> {
-        if req.username.is_empty() || req.password.is_empty() {
+        let username_raw = req.username.clone();
+        let username = req.username.trim().to_string();
+        let password_len = req.password.len();
+        let ip = meta.ip.as_deref().unwrap_or("unknown");
+        let ua = meta
+            .user_agent
+            .as_deref()
+            .unwrap_or("-")
+            .chars()
+            .take(120)
+            .collect::<String>();
+
+        if username.is_empty() || req.password.is_empty() {
+            tracing::warn!(
+                username = %username_raw,
+                password_len,
+                ip,
+                "login rejected: empty username or password"
+            );
             return Err(AppError::Validation("username and password required".into()));
         }
 
-        let fail_key = format!(
-            "login:{}:{}",
-            meta.ip.as_deref().unwrap_or("unknown"),
-            req.username.trim().to_lowercase()
-        );
+        let fail_key = format!("login:{}:{}", ip, username.to_lowercase());
         let failures = self.security.login_failure_count(&fail_key).await?;
         if self.turnstile.enabled() && failures >= self.turnstile_login_failures {
-            self.turnstile
+            if let Err(e) = self
+                .turnstile
                 .verify(req.turnstile_token.as_deref(), meta.ip.as_deref())
-                .await?;
+                .await
+            {
+                tracing::warn!(
+                    username = %username,
+                    ip,
+                    prior_failures = failures,
+                    "login rejected: turnstile failed"
+                );
+                let _ = self
+                    .audit
+                    .insert(
+                        None,
+                        "login_failed",
+                        Some("user"),
+                        None,
+                        Some(serde_json::json!({
+                            "reason": "turnstile_failed",
+                            "username": username,
+                            "username_raw": username_raw,
+                            "password_len": password_len,
+                            "ip": ip,
+                            "user_agent": ua,
+                            "prior_failures": failures,
+                        })),
+                        meta.ip.as_deref(),
+                    )
+                    .await;
+                return Err(e);
+            }
         }
 
-        let user = match self.users.find_by_username(req.username.trim()).await? {
+        let user = match self.users.find_by_username(&username).await? {
             Some(u) => u,
             None => {
                 self.security.record_login_failure(&fail_key).await?;
+                let prior = failures + 1;
+                tracing::warn!(
+                    username = %username,
+                    username_raw = %username_raw,
+                    password_len,
+                    ip,
+                    user_agent = %ua,
+                    prior_failures = prior,
+                    "login_failed: unknown_user"
+                );
                 self.audit
                     .insert(
                         None,
                         "login_failed",
                         Some("user"),
                         None,
-                        Some(serde_json::json!({ "username": req.username })),
+                        Some(serde_json::json!({
+                            "reason": "unknown_user",
+                            "username": username,
+                            "username_raw": username_raw,
+                            "password_len": password_len,
+                            "ip": ip,
+                            "user_agent": ua,
+                            "prior_failures": prior,
+                        })),
                         meta.ip.as_deref(),
                     )
                     .await?;
@@ -142,28 +203,127 @@ impl AuthService {
         };
 
         if !user.is_active {
-            return Err(AppError::Forbidden);
-        }
-
-        if verify_password(&req.password, &user.password_hash).is_err() {
-            self.security.record_login_failure(&fail_key).await?;
+            tracing::warn!(
+                username = %user.username,
+                user_id = %user.id,
+                ip,
+                "login_failed: inactive_account"
+            );
             self.audit
                 .insert(
                     Some(user.id),
                     "login_failed",
                     Some("user"),
                     Some(&user.id.to_string()),
-                    None,
+                    Some(serde_json::json!({
+                        "reason": "inactive_account",
+                        "username": user.username,
+                        "password_len": password_len,
+                        "ip": ip,
+                        "user_agent": ua,
+                    })),
                     meta.ip.as_deref(),
                 )
                 .await?;
-            return Err(AppError::InvalidCredentials);
+            return Err(AppError::Forbidden);
+        }
+
+        let hash_alg = password_hash_alg(&user.password_hash);
+        let password_byte_len = req.password.as_bytes().len();
+        let password_has_ws = req.password != req.password.trim();
+        let password_non_ascii = req.password.chars().any(|c| !c.is_ascii());
+
+        match verify_password_flexible(&req.password, &user.password_hash) {
+            Ok(matched_via) => {
+                if matched_via != "exact" {
+                    tracing::warn!(
+                        username = %user.username,
+                        matched_via,
+                        password_len,
+                        password_byte_len,
+                        password_has_ws,
+                        "login password matched only after normalization"
+                    );
+                }
+            }
+            Err(VerifyFail::BadHash) => {
+                self.security.record_login_failure(&fail_key).await?;
+                tracing::error!(
+                    username = %user.username,
+                    user_id = %user.id,
+                    hash_alg = %hash_alg,
+                    hash_len = user.password_hash.len(),
+                    ip,
+                    "login_failed: corrupt_password_hash"
+                );
+                self.audit
+                    .insert(
+                        Some(user.id),
+                        "login_failed",
+                        Some("user"),
+                        Some(&user.id.to_string()),
+                        Some(serde_json::json!({
+                            "reason": "corrupt_password_hash",
+                            "username": user.username,
+                            "hash_alg": hash_alg,
+                            "hash_len": user.password_hash.len(),
+                            "password_len": password_len,
+                            "password_byte_len": password_byte_len,
+                            "ip": ip,
+                            "user_agent": ua,
+                        })),
+                        meta.ip.as_deref(),
+                    )
+                    .await?;
+                return Err(AppError::InvalidCredentials);
+            }
+            Err(VerifyFail::Mismatch) => {
+                self.security.record_login_failure(&fail_key).await?;
+                let prior = failures + 1;
+                tracing::warn!(
+                    username = %user.username,
+                    user_id = %user.id,
+                    hash_alg = %hash_alg,
+                    password_len,
+                    password_byte_len,
+                    password_has_ws,
+                    password_non_ascii,
+                    ip,
+                    user_agent = %ua,
+                    prior_failures = prior,
+                    "login_failed: bad_password"
+                );
+                self.audit
+                    .insert(
+                        Some(user.id),
+                        "login_failed",
+                        Some("user"),
+                        Some(&user.id.to_string()),
+                        Some(serde_json::json!({
+                            "reason": "bad_password",
+                            "username": user.username,
+                            "hash_alg": hash_alg,
+                            "password_len": password_len,
+                            "password_byte_len": password_byte_len,
+                            "password_has_whitespace": password_has_ws,
+                            "password_non_ascii": password_non_ascii,
+                            "ip": ip,
+                            "user_agent": ua,
+                            "prior_failures": prior,
+                            "hint": "User exists; submitted password does not match stored hash. Use Admin → Reset pwd if they forgot it or DB was restored.",
+                        })),
+                        meta.ip.as_deref(),
+                    )
+                    .await?;
+                return Err(AppError::InvalidCredentials);
+            }
         }
 
         self.security.clear_login_failures(&fail_key).await?;
 
         if let Some((_, enabled)) = self.users.get_totp_secret(user.id).await? {
             if enabled {
+                tracing::info!(username = %user.username, ip, "login: 2fa challenge issued");
                 let temp = generate_refresh_token();
                 let temp_hash = hash_token(&temp);
                 self.users
@@ -183,13 +343,23 @@ impl AuthService {
         }
 
         let auth = self.issue_tokens(&user, &meta, None).await?;
+        tracing::info!(
+            username = %user.username,
+            user_id = %user.id,
+            ip,
+            "login_success"
+        );
         self.audit
             .insert(
                 Some(user.id),
                 "login_success",
                 Some("user"),
                 Some(&user.id.to_string()),
-                None,
+                Some(serde_json::json!({
+                    "username": user.username,
+                    "ip": ip,
+                    "user_agent": ua,
+                })),
                 meta.ip.as_deref(),
             )
             .await?;
@@ -360,7 +530,7 @@ impl AuthService {
             .find_by_id(user_id)
             .await?
             .ok_or(AppError::NotFound("user".into()))?;
-        verify_password(&req.password, &user.password_hash)?;
+        verify_password_or_unauthorized(&req.password, &user.password_hash)?;
         if !TotpHelper::verify_recovery_or_totp(&self.users, &self.jwt_secret, user_id, &req.code)
             .await?
         {
@@ -399,7 +569,7 @@ impl AuthService {
         if !user.is_active {
             return Err(AppError::Forbidden);
         }
-        verify_password(&req.current_password, &user.password_hash)?;
+        verify_password_or_unauthorized(&req.current_password, &user.password_hash)?;
         validate_password_strength(&req.new_password, Some(&user.username))?;
         let password_hash = hash_password(&req.new_password)?;
         self.users.update_password_hash(user_id, &password_hash).await?;
@@ -436,7 +606,7 @@ impl AuthService {
         if !user.is_active {
             return Err(AppError::Forbidden);
         }
-        verify_password(&req.current_password, &user.password_hash)?;
+        verify_password_or_unauthorized(&req.current_password, &user.password_hash)?;
         if user.username.eq_ignore_ascii_case(&req.new_username) {
             if user.username == req.new_username {
                 return self.me(user_id).await;
@@ -464,7 +634,7 @@ impl AuthService {
         if !user.is_active {
             return Err(AppError::Forbidden);
         }
-        verify_password(&req.current_password, &user.password_hash)?;
+        verify_password_or_unauthorized(&req.current_password, &user.password_hash)?;
         self.users
             .update_display_name(user_id, req.new_display_name.trim())
             .await?;
@@ -478,6 +648,154 @@ impl AuthService {
 
     pub async fn reactivate_user(&self, user_id: Uuid) -> Result<bool, AppError> {
         self.users.set_active(user_id, true).await
+    }
+
+    pub async fn audit_login_rate_limited(&self, username: &str, ip: &str) -> Result<(), AppError> {
+        self.audit
+            .insert(
+                None,
+                "login_failed",
+                Some("user"),
+                None,
+                Some(serde_json::json!({
+                    "reason": "rate_limited",
+                    "username": username.trim(),
+                    "ip": ip,
+                })),
+                Some(ip),
+            )
+            .await
+    }
+
+    /// Admin-only: set a new password and revoke all sessions for the user.
+    pub async fn admin_set_password(
+        &self,
+        admin_id: Uuid,
+        user_id: Uuid,
+        new_password: &str,
+    ) -> Result<(), AppError> {
+        let user = self
+            .users
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AppError::NotFound("user".into()))?;
+        validate_password_strength(new_password, Some(&user.username))?;
+        let password_hash = hash_password(new_password)?;
+        self.users
+            .update_password_hash(user_id, &password_hash)
+            .await?;
+        self.users.revoke_all_user_tokens(user_id).await?;
+        tracing::info!(
+            admin_id = %admin_id,
+            target = %user.username,
+            target_id = %user_id,
+            "admin_set_password"
+        );
+        self.audit
+            .insert(
+                Some(admin_id),
+                "admin_set_password",
+                Some("user"),
+                Some(&user_id.to_string()),
+                Some(serde_json::json!({
+                    "target_username": user.username,
+                    "password_len": new_password.len(),
+                })),
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn admin_revoke_sessions(
+        &self,
+        admin_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<(), AppError> {
+        let user = self
+            .users
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AppError::NotFound("user".into()))?;
+        self.users.revoke_all_user_tokens(user_id).await?;
+        tracing::info!(admin_id = %admin_id, target = %user.username, "admin_revoke_sessions");
+        self.audit
+            .insert(
+                Some(admin_id),
+                "admin_revoke_sessions",
+                Some("user"),
+                Some(&user_id.to_string()),
+                Some(serde_json::json!({ "target_username": user.username })),
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn admin_disable_2fa(
+        &self,
+        admin_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<(), AppError> {
+        let user = self
+            .users
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AppError::NotFound("user".into()))?;
+        self.users.disable_totp(user_id).await?;
+        tracing::info!(admin_id = %admin_id, target = %user.username, "admin_disable_2fa");
+        self.audit
+            .insert(
+                Some(admin_id),
+                "admin_disable_2fa",
+                Some("user"),
+                Some(&user_id.to_string()),
+                Some(serde_json::json!({ "target_username": user.username })),
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn admin_stats(&self, online_count: u32) -> Result<screenraid_types::AdminStatsResponse, AppError> {
+        let (users_total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(self.users.pool())
+            .await?;
+        let (users_active,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_active = 1")
+                .fetch_one(self.users.pool())
+                .await?;
+        let (rooms_active,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM rooms WHERE is_active = 1")
+                .fetch_one(self.users.pool())
+                .await?;
+        let (media_total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM media")
+            .fetch_one(self.users.pool())
+            .await?;
+        let since = (Utc::now() - Duration::hours(24)).to_rfc3339();
+        let (login_failed_24h,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'login_failed' AND created_at >= ?",
+        )
+        .bind(&since)
+        .fetch_one(self.users.pool())
+        .await?;
+        let (login_success_24h,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'login_success' AND created_at >= ?",
+        )
+        .bind(&since)
+        .fetch_one(self.users.pool())
+        .await?;
+
+        Ok(screenraid_types::AdminStatsResponse {
+            users_total,
+            users_active,
+            users_inactive: users_total - users_active,
+            rooms_active,
+            media_total,
+            online_count,
+            login_failed_24h,
+            login_success_24h,
+        })
     }
 
     pub async fn list_users(
@@ -701,11 +1019,44 @@ fn hash_password(password: &str) -> Result<String, AppError> {
         .map_err(|e| AppError::Internal(e.to_string()))
 }
 
-fn verify_password(password: &str, hash: &str) -> Result<(), AppError> {
-    let parsed = PasswordHash::new(hash).map_err(|_| AppError::Unauthorized)?;
+fn verify_password(password: &str, hash: &str) -> Result<(), VerifyFail> {
+    let parsed = PasswordHash::new(hash).map_err(|_| VerifyFail::BadHash)?;
     Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
+        .map_err(|_| VerifyFail::Mismatch)
+}
+
+/// Try exact password, then trimmed (common paste issue).
+fn verify_password_flexible(password: &str, hash: &str) -> Result<&'static str, VerifyFail> {
+    match verify_password(password, hash) {
+        Ok(()) => return Ok("exact"),
+        Err(VerifyFail::BadHash) => return Err(VerifyFail::BadHash),
+        Err(VerifyFail::Mismatch) => {}
+    }
+
+    let trimmed = password.trim();
+    if trimmed != password && verify_password(trimmed, hash).is_ok() {
+        return Ok("trim");
+    }
+
+    Err(VerifyFail::Mismatch)
+}
+
+fn verify_password_or_unauthorized(password: &str, hash: &str) -> Result<(), AppError> {
+    verify_password_flexible(password, hash)
+        .map(|_| ())
         .map_err(|_| AppError::Unauthorized)
+}
+
+#[derive(Debug)]
+enum VerifyFail {
+    BadHash,
+    Mismatch,
+}
+
+fn password_hash_alg(hash: &str) -> String {
+    // PHC string starts with $argon2id$… — never log the full hash.
+    hash.split('$').nth(1).unwrap_or("unknown").to_string()
 }
 
 fn hash_token(token: &str) -> String {

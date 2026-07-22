@@ -65,6 +65,10 @@ impl UserRepository {
         Self { pool }
     }
 
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     pub async fn create_user(
         &self,
         id: Uuid,

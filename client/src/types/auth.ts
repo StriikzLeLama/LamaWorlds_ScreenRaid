@@ -18,15 +18,22 @@ export interface LoginResponse {
 }
 
 export function loginResponseToAuth(res: LoginResponse): AuthResponse | null {
-  if (res.requires_2fa || !res.access_token || !res.refresh_token || !res.user) {
-    return null;
+  if (res.requires_2fa) return null;
+  // Flat shape (current server).
+  if (res.access_token && res.refresh_token && res.user) {
+    return {
+      access_token: res.access_token,
+      refresh_token: res.refresh_token,
+      expires_in: res.expires_in ?? 900,
+      user: res.user,
+    };
   }
-  return {
-    access_token: res.access_token,
-    refresh_token: res.refresh_token,
-    expires_in: res.expires_in ?? 900,
-    user: res.user,
-  };
+  // Nested shape fallback (defensive).
+  const nested = (res as LoginResponse & { auth?: AuthResponse }).auth;
+  if (nested?.access_token && nested.refresh_token && nested.user) {
+    return nested;
+  }
+  return null;
 }
 
 export interface UserProfile extends UserSummary {
