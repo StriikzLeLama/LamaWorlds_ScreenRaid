@@ -16,11 +16,22 @@ import { getServerUrl } from '../services/serverConfig';
 import { isReceiverApp, isWebApp } from '../lib/platform';
 
 function authErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error) return err.message;
-  if (err instanceof TypeError) {
-    return `Cannot reach server at ${getServerUrl()}. Check Server URL and that the CT is online.`;
+  if (err instanceof ApiError) {
+    if (err.status === 401 || err.code === 'UNAUTHORIZED') {
+      return 'Identifiants incorrects (username ou mot de passe).';
+    }
+    if (err.status === 429 || err.code === 'RATE_LIMITED') {
+      return 'Trop de tentatives de connexion. Réessaie dans ~1 minute.';
+    }
+    if (err.status === 403 || err.code === 'FORBIDDEN') {
+      return 'Compte désactivé. Demande à un admin de le réactiver.';
+    }
+    return err.message || 'Login failed';
   }
+  if (err instanceof TypeError || (err instanceof Error && /fetch|network|Failed to fetch/i.test(err.message))) {
+    return `Impossible de joindre le serveur (${getServerUrl()}). Vérifie l’URL / le tunnel.`;
+  }
+  if (err instanceof Error) return err.message;
   return 'Login failed';
 }
 

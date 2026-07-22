@@ -76,10 +76,10 @@ export async function apiFetch<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({
-      error: { message: response.statusText, code: 'UNKNOWN' },
+      error: { message: response.statusText || `HTTP ${response.status}`, code: 'UNKNOWN' },
     }));
     throw new ApiError(
-      error?.error?.message ?? 'Request failed',
+      error?.error?.message ?? `Request failed (${response.status})`,
       response.status,
       error?.error?.code,
     );

@@ -49,7 +49,17 @@ pub async fn login(
     headers: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
-    if !state.login_limiter.check(&client_ip(&headers)) {
+    let ip = client_ip(&headers);
+    // Per username+IP so one locked account / typo spam doesn't block everyone
+    // behind the same NAT or a mis-forwarded proxy IP.
+    let user_key = format!(
+        "login:{}:{}",
+        ip,
+        req.username.trim().to_lowercase()
+    );
+    if !state.login_limiter.check(&format!("login-ip:{ip}"))
+        || !state.login_limiter.check(&user_key)
+    {
         return Err(AppError::RateLimited);
     }
     let response = state.auth.login(req, client_meta(&headers)).await?;

@@ -42,17 +42,32 @@ impl RateLimiter {
 }
 
 pub fn client_ip(headers: &axum::http::HeaderMap) -> String {
+    // Prefer real client IP when behind Cloudflare / Nginx Proxy Manager.
+    // Without this, every user shares one bucket ("unknown" or the proxy IP)
+    // and the login rate limit locks the whole server after a few attempts.
+    for name in ["cf-connecting-ip", "true-client-ip", "x-real-ip"] {
+        if let Some(v) = headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            return v.to_string();
+        }
+    }
     headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.split(',').next())
         .map(str::trim)
+        .filter(|s| !s.is_empty())
         .unwrap_or("unknown")
         .to_string()
 }
 
 pub fn login_limiter() -> RateLimiter {
-    RateLimiter::new(5, Duration::from_secs(60))
+    // Per-IP budget. Keyed further with username in the login handler.
+    RateLimiter::new(60, Duration::from_secs(60))
 }
 
 pub fn register_limiter() -> RateLimiter {

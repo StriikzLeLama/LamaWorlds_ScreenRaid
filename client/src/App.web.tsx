@@ -15,9 +15,11 @@ import { RoomPage } from './pages/RoomPage';
 import { AdminPage } from './pages/AdminPage';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAdminBootstrap } from './hooks/useAdminBootstrap';
+import { useSessionBootstrap } from './hooks/useSessionBootstrap';
 
 /** Web dashboard — rooms, friends, media, admin. Served by the server at `/`. */
 function WebWsProvider({ children }: { children: React.ReactNode }) {
+  useSessionBootstrap();
   useWebSocket();
   useAdminBootstrap();
   return <>{children}</>;

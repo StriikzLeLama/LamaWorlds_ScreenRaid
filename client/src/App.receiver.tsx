@@ -12,9 +12,11 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { usePanicHotkey } from './hooks/usePanicHotkey';
 import { usePrankReceiver } from './hooks/usePrankReceiver';
 import { useMonitorSync } from './hooks/useMonitorSync';
+import { useSessionBootstrap } from './hooks/useSessionBootstrap';
 
 /** Tauri receiver — overlays, panic, monitor sync only. */
 function ReceiverWsProvider({ children }: { children: React.ReactNode }) {
+  useSessionBootstrap();
   useWebSocket();
   usePanicHotkey();
   usePrankReceiver();
