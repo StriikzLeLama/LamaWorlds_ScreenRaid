@@ -12,6 +12,38 @@ pub struct MonitorDescriptor {
     pub is_primary: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CursorNormalized {
+    pub monitor_index: u32,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[cfg(windows)]
+fn raw_cursor_screen_pos() -> Option<(i32, i32)> {
+    #[repr(C)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    extern "system" {
+        fn GetCursorPos(lp_point: *mut Point) -> i32;
+    }
+    let mut point = Point { x: 0, y: 0 };
+    // SAFETY: GetCursorPos writes into a valid Point.
+    let ok = unsafe { GetCursorPos(&mut point) };
+    if ok != 0 {
+        Some((point.x, point.y))
+    } else {
+        None
+    }
+}
+
+#[cfg(not(windows))]
+fn raw_cursor_screen_pos() -> Option<(i32, i32)> {
+    None
+}
+
 #[tauri::command]
 pub fn collect_monitors(app: AppHandle) -> Result<Vec<MonitorDescriptor>, String> {
     let monitors = app.available_monitors().map_err(|e| e.to_string())?;
@@ -42,6 +74,44 @@ pub fn collect_monitors(app: AppHandle) -> Result<Vec<MonitorDescriptor>, String
             }
         })
         .collect())
+}
+
+/// Cursor position normalized 0–1 relative to the monitor that contains it.
+#[tauri::command]
+pub fn get_cursor_normalized(app: AppHandle) -> Result<CursorNormalized, String> {
+    let (cx, cy) = raw_cursor_screen_pos().ok_or_else(|| "cursor position unavailable".to_string())?;
+    let monitors = collect_monitors(app)?;
+    if monitors.is_empty() {
+        return Ok(CursorNormalized {
+            monitor_index: 0,
+            x: 0.5,
+            y: 0.5,
+        });
+    }
+
+    for m in &monitors {
+        let right = m.x.saturating_add(m.width as i32);
+        let bottom = m.y.saturating_add(m.height as i32);
+        if cx >= m.x && cx < right && cy >= m.y && cy < bottom {
+            let x = ((cx - m.x) as f32 / m.width.max(1) as f32).clamp(0.0, 1.0);
+            let y = ((cy - m.y) as f32 / m.height.max(1) as f32).clamp(0.0, 1.0);
+            return Ok(CursorNormalized {
+                monitor_index: m.id,
+                x,
+                y,
+            });
+        }
+    }
+
+    let primary = monitors
+        .iter()
+        .find(|m| m.is_primary)
+        .unwrap_or(&monitors[0]);
+    Ok(CursorNormalized {
+        monitor_index: primary.id,
+        x: 0.5,
+        y: 0.5,
+    })
 }
 
 /// Resolve `selected_monitor` setting ("primary" | "0" | "1" | …) to a monitor index.

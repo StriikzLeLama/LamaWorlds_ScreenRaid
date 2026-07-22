@@ -17,7 +17,7 @@ export function AnimationPreview({
   label = 'Preview',
   textColor = '#f5f5f5',
   bgColor = 'rgba(20,20,22,0.94)',
-  accentColor = '#f97316',
+  accentColor = '#2dd4bf',
   fontFamily,
 }: Props) {
   const anim = animationClass(animation, false);

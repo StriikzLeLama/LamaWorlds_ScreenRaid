@@ -4,13 +4,13 @@ mod tray;
 use commands::media_cache::{
     clear_media_cache, remove_media_cache_file, write_media_cache, write_media_cache_chunk,
 };
-use commands::monitor::{collect_monitors, resolve_preferred_monitor};
+use commands::monitor::{collect_monitors, get_cursor_normalized, resolve_preferred_monitor};
 use commands::overlay::{
-    debug_log, get_active_overlays, hide_overlay, overlay_surface_idle, panic_hide_all,
+    debug_log, get_active_overlays, hide_overlay, move_overlay, overlay_surface_idle, panic_hide_all,
     show_overlay, sync_overlays_for_monitor, OverlayManager,
 };
 use commands::settings::{get_settings, save_settings, SettingsStore};
-use commands::window::preload_overlay_windows;
+use commands::window::{preload_overlay_windows, set_overlay_clickthrough};
 use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -115,12 +115,15 @@ pub fn run() {
             save_settings,
             collect_monitors,
             resolve_preferred_monitor,
+            get_cursor_normalized,
             show_overlay,
+            move_overlay,
             hide_overlay,
             panic_hide_all,
             get_active_overlays,
             overlay_surface_idle,
             sync_overlays_for_monitor,
+            set_overlay_clickthrough,
             debug_log,
             write_media_cache,
             write_media_cache_chunk,

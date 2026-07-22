@@ -5,20 +5,21 @@
 
 @import 'tailwindcss';
 
+/* Lama Bible–inspired: deep navy + teal accent + amber callouts */
 @theme {
-  --color-raid-bg: #1a1a1a;
-  --color-raid-surface: #232323;
-  --color-raid-card: #2f2f2f;
-  --color-raid-border: #3a3a3a;
-  --color-raid-accent: #f97316;
-  --color-raid-accent-hover: #ea580c;
-  --color-raid-text: #ececec;
-  --color-raid-text-secondary: #b4b4b4;
-  --color-raid-success: #22c55e;
-  --color-raid-danger: #ef4444;
-  --color-raid-warning: #eab308;
-  --color-raid-info: #94a3b8;
-  --color-raid-disabled: #6b6b6b;
+  --color-raid-bg: #0b111d;
+  --color-raid-surface: #101826;
+  --color-raid-card: #151e2e;
+  --color-raid-border: #243044;
+  --color-raid-accent: #2dd4bf;
+  --color-raid-accent-hover: #14b8a6;
+  --color-raid-text: #f1f5f9;
+  --color-raid-text-secondary: #94a3b8;
+  --color-raid-success: #34d399;
+  --color-raid-danger: #f87171;
+  --color-raid-warning: #f59e0b;
+  --color-raid-info: #7dd3fc;
+  --color-raid-disabled: #475569;
 
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --radius-card: 16px;
@@ -28,6 +29,11 @@ body {
   @apply bg-raid-bg text-raid-text font-sans antialiased;
   margin: 0;
   min-height: 100vh;
+  background-image:
+    linear-gradient(rgba(45, 212, 191, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 212, 191, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
 }
 
 #root {

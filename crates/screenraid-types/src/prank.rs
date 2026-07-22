@@ -53,6 +53,18 @@ pub enum PlacementPreset {
     TopRight,
     BottomLeft,
     BottomRight,
+    /// Stick to the OS cursor (~2–3s).
+    FollowMouse,
+    /// Circle around the cursor.
+    Orbit,
+    /// Three mini copies trailing the cursor.
+    Trail,
+    /// Flee when the cursor approaches.
+    Dodge,
+    /// Fake close button that spawns a second overlay.
+    Clickbait,
+    /// Full-screen banner 1s, then media centered.
+    Takeover,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

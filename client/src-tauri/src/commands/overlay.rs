@@ -48,6 +48,9 @@ pub struct OverlayPayload {
     pub accent_color: Option<String>,
     #[serde(default)]
     pub font_family: Option<String>,
+    /// Motion / AR mode: follow_mouse | orbit | trail | dodge | clickbait | takeover | …
+    #[serde(default)]
+    pub motion: Option<String>,
 }
 
 fn default_pos() -> f32 {
@@ -299,15 +302,35 @@ pub fn show_overlay(
     // set_ignore_cursor_events (called during window creation, before the
     // webview is ready) can be dropped, which would let the fullscreen
     // always-on-top surface capture all input for the overlay's lifetime.
+    // Exception: clickbait needs real clicks on the fake "Fermer" button.
     let app_for_cursor = app.clone();
     let cursor_label = label.clone();
+    let cursor_monitor = payload.monitor_index;
+    let clickbait = payload.motion.as_deref() == Some("clickbait");
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(250)).await;
         if let Some(win) = app_for_cursor.get_webview_window(&cursor_label) {
             let _ = win.set_always_on_top(true);
-            match win.set_ignore_cursor_events(true) {
-                Ok(()) => log::info!("[overlay] re-applied ignore-cursor-events on {cursor_label}"),
-                Err(e) => log::warn!("[overlay] ignore-cursor-events re-apply failed on {cursor_label}: {e}"),
+            let keep_interactive = clickbait
+                || app_for_cursor
+                    .try_state::<OverlayManager>()
+                    .and_then(|m| {
+                        m.payloads.lock().ok().map(|map| {
+                            map.values().any(|p| {
+                                p.monitor_index == cursor_monitor
+                                    && p.motion.as_deref() == Some("clickbait")
+                            })
+                        })
+                    })
+                    .unwrap_or(false);
+            match win.set_ignore_cursor_events(!keep_interactive) {
+                Ok(()) => log::info!(
+                    "[overlay] ignore-cursor-events={} on {cursor_label} (clickbait={keep_interactive})",
+                    !keep_interactive
+                ),
+                Err(e) => log::warn!(
+                    "[overlay] ignore-cursor-events re-apply failed on {cursor_label}: {e}"
+                ),
             }
         }
     });
@@ -443,4 +466,63 @@ pub fn get_active_overlays(manager: State<'_, OverlayManager>) -> Result<Vec<Ove
         .lock()
         .map(|o| o.clone())
         .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OverlayMovePayload {
+    pub id: String,
+    pub position_x: f32,
+    pub position_y: f32,
+    pub monitor_index: u32,
+}
+
+/// Update an active overlay's position (used by follow-mouse AR mode).
+#[tauri::command]
+pub fn move_overlay(
+    app: AppHandle,
+    id: String,
+    position_x: f32,
+    position_y: f32,
+    monitor_index: Option<u32>,
+    manager: State<'_, OverlayManager>,
+) -> Result<(), String> {
+    let x = position_x.clamp(0.0, 1.0);
+    let y = position_y.clamp(0.0, 1.0);
+
+    let current_monitor = manager.monitor_for_id(&id).unwrap_or(0);
+    let target_monitor = monitor_index.unwrap_or(current_monitor);
+
+    // Keep tracking on the original monitor for simplicity (avoid window hops mid-follow).
+    let emit_monitor = current_monitor;
+
+    if let Ok(mut map) = manager.payloads.lock() {
+        if let Some(payload) = map.get_mut(&id) {
+            payload.position_x = x;
+            payload.position_y = y;
+            let _ = target_monitor;
+        } else {
+            return Ok(());
+        }
+    }
+
+    if let Ok(mut list) = manager.overlays.lock() {
+        if let Some(state) = list.iter_mut().find(|o| o.id == id) {
+            // keep monitor_index stable during follow
+            let _ = state;
+        }
+    }
+
+    let label = overlay_label(emit_monitor);
+    if let Some(window) = app.get_webview_window(&label) {
+        let _ = window.emit(
+            "overlay:move",
+            OverlayMovePayload {
+                id,
+                position_x: x,
+                position_y: y,
+                monitor_index: emit_monitor,
+            },
+        );
+    }
+    Ok(())
 }

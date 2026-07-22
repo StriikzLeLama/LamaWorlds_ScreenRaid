@@ -19,6 +19,14 @@ export async function joinRoom(invite_code: string): Promise<RoomSummary> {
   });
 }
 
+/** One-click join by room id (friends app — no invite). */
+export async function joinRoomById(roomId: string): Promise<RoomSummary> {
+  return apiFetch('/v1/rooms/join', {
+    method: 'POST',
+    body: JSON.stringify({ room_id: roomId }),
+  });
+}
+
 /** Join via guest/member invite link token (expiry + max uses). */
 export async function joinRoomByToken(invite_token: string): Promise<RoomSummary> {
   return apiFetch('/v1/rooms/join', {

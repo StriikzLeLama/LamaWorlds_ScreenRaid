@@ -208,6 +208,12 @@ impl MediaRepository {
             return Err(AppError::Forbidden);
         }
 
+        // Pranks keep history; clear the FK so media can be removed.
+        sqlx::query("UPDATE pranks SET media_id = NULL WHERE media_id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+
         sqlx::query("DELETE FROM media WHERE id = ?")
             .bind(id.to_string())
             .execute(&self.pool)
@@ -221,6 +227,11 @@ impl MediaRepository {
         let Some(row) = row else {
             return Ok(None);
         };
+
+        sqlx::query("UPDATE pranks SET media_id = NULL WHERE media_id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
 
         sqlx::query("DELETE FROM media WHERE id = ?")
             .bind(id.to_string())

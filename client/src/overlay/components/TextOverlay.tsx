@@ -15,7 +15,7 @@ export function TextOverlay({ overlay }: Props) {
 
   const textColor = overlay.text_color || '#f5f5f5';
   const bgColor = overlay.bg_color || 'rgba(20, 20, 22, 0.94)';
-  const accent = overlay.accent_color || '#f97316';
+  const accent = overlay.accent_color || '#2dd4bf';
   const font = overlay.font_family || 'inherit';
 
   return (

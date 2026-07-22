@@ -617,6 +617,7 @@ impl PrankService {
                 if req.media_id.is_none() {
                     return Err(AppError::Validation("media_id required for media pranks".into()));
                 }
+                // Optional caption (text_content) is allowed with media overlays.
             }
         }
         Ok(())

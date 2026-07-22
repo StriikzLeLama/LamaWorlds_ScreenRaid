@@ -9,7 +9,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    'bg-raid-accent hover:bg-raid-accent-hover text-white font-medium',
+    'bg-raid-accent hover:bg-raid-accent-hover text-raid-bg font-medium',
   secondary:
     'bg-raid-surface border border-raid-border hover:border-raid-text-secondary text-raid-text',
   ghost:

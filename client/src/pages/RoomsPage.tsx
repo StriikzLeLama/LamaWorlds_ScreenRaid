@@ -1,20 +1,19 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Users } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input, Badge, Modal } from '../components/ui';
 import { ApiError } from '../services/api';
-import { createRoom, joinRoom, joinRoomByToken, listRooms } from '../services/rooms';
-import { extractInvitePayload } from '../lib/invites';
+import { createRoom, joinRoomById, listRooms } from '../services/rooms';
 import type { RoomSummary } from '../types/room';
 
 export function RoomsPage() {
+  const navigate = useNavigate();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [showJoin, setShowJoin] = useState(false);
   const [roomName, setRoomName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,32 +36,26 @@ export function RoomsPage() {
 
   const handleCreate = async () => {
     try {
-      await createRoom(roomName);
+      const room = await createRoom(roomName);
       setShowCreate(false);
       setRoomName('');
-      load();
+      navigate(`/rooms/${room.id}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Create failed');
     }
   };
 
-  const handleJoin = async () => {
+  const handleJoin = async (roomId: string) => {
+    setJoiningId(roomId);
+    setError('');
     try {
-      const payload = extractInvitePayload(inviteCode);
-      if (!payload.value) {
-        setError('Enter an invite code or paste a guest link');
-        return;
-      }
-      if (payload.kind === 'token') {
-        await joinRoomByToken(payload.value);
-      } else {
-        await joinRoom(payload.value.toUpperCase());
-      }
-      setShowJoin(false);
-      setInviteCode('');
-      load();
+      await joinRoomById(roomId);
+      navigate(`/rooms/${roomId}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Join failed');
+      load();
+    } finally {
+      setJoiningId(null);
     }
   };
 
@@ -71,17 +64,14 @@ export function RoomsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-raid-text">Rooms</h1>
-          <p className="text-sm text-raid-text-secondary">Private spaces for your prank squad</p>
+          <p className="text-sm text-raid-text-secondary">
+            Toutes les rooms entre potes — rejoins en un clic
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setShowJoin(true)}>
-            Join with Code
-          </Button>
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus size={18} />
-            Create Room
-          </Button>
-        </div>
+        <Button onClick={() => setShowCreate(true)}>
+          <Plus size={18} />
+          Create Room
+        </Button>
       </div>
 
       {error && (
@@ -95,53 +85,58 @@ export function RoomsPage() {
       ) : rooms.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-raid-text-secondary">You are not in any rooms yet.</p>
-            <div className="mt-4 flex gap-3">
+            <p className="text-raid-text-secondary">Aucune room pour l’instant.</p>
+            <div className="mt-4">
               <Button onClick={() => setShowCreate(true)}>Create Room</Button>
-              <Button variant="secondary" onClick={() => setShowJoin(true)}>Join with Code</Button>
             </div>
           </div>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {rooms.map((room) => (
-            <Link key={room.id} to={`/rooms/${room.id}`}>
-              <Card interactive>
-                <div className="flex items-start justify-between">
-                  <div>
+          {rooms.map((room) => {
+            const member = room.is_member !== false;
+            return (
+              <Card key={room.id} interactive={member}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
                     <h3 className="font-semibold text-raid-text">{room.name}</h3>
-                    <p className="mt-1 text-xs text-raid-text-secondary font-mono">{room.invite_code}</p>
+                    <div className="mt-4 flex items-center gap-2 text-sm text-raid-text-secondary">
+                      <Users size={16} />
+                      {room.member_count} members
+                    </div>
                   </div>
-                  <Badge variant={room.role === 'owner' ? 'accent' : 'neutral'}>{room.role}</Badge>
+                  <Badge variant={member ? (room.role === 'owner' ? 'accent' : 'neutral') : 'warning'}>
+                    {member ? room.role : 'not joined'}
+                  </Badge>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-sm text-raid-text-secondary">
-                  <Users size={16} />
-                  {room.member_count} members
+                <div className="mt-4">
+                  {member ? (
+                    <Link to={`/rooms/${room.id}`}>
+                      <Button className="w-full" variant="secondary">
+                        Open
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      disabled={joiningId === room.id}
+                      onClick={() => void handleJoin(room.id)}
+                    >
+                      {joiningId === room.id ? 'Joining…' : 'Join'}
+                    </Button>
+                  )}
                 </div>
               </Card>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Room">
         <div className="space-y-4">
           <Input label="Room name" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="Squad" />
-          <Button className="w-full" onClick={handleCreate} disabled={!roomName.trim()}>Create</Button>
-        </div>
-      </Modal>
-
-      <Modal open={showJoin} onClose={() => setShowJoin(false)} title="Join Room">
-        <div className="space-y-4">
-          <Input
-            label="Invite code or guest link"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value)}
-            placeholder="ABC12345 or https://…/join?invite=…"
-            className="font-mono"
-          />
-          <Button className="w-full" onClick={handleJoin} disabled={inviteCode.trim().length < 4}>
-            Join
+          <Button className="w-full" onClick={() => void handleCreate()} disabled={!roomName.trim()}>
+            Create
           </Button>
         </div>
       </Modal>

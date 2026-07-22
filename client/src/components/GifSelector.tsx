@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Heart, Search, Sparkles } from 'lucide-react';
+import { Check, Heart, Search, Sparkles, X } from 'lucide-react';
 import { Button, Input, Modal } from './ui';
 import {
   importGif,
@@ -18,7 +18,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   roomId?: string;
+  /** Allow picking several GIFs (default true). */
+  multi?: boolean;
   onPicked: (media: Media, meta: GifSearchItem) => void;
+  onPickedMany?: (items: Array<{ media: Media; meta: GifSearchItem }>) => void;
 }
 
 const TABS: { id: KlipyKind | 'favorites'; label: string }[] = [
@@ -28,18 +31,33 @@ const TABS: { id: KlipyKind | 'favorites'; label: string }[] = [
   { id: 'favorites', label: 'Favoris' },
 ];
 
+const MAX_MULTI = 8;
+
+function itemKey(item: GifSearchItem, tab: string): string {
+  return `${item.kind ?? tab}-${item.id}-${item.slug}`;
+}
+
 /**
- * Full KLIPY browser: search, trending, stickers, memes, favorites.
- * Opens as a modal — pick imports into the media library then closes.
+ * KLIPY browser: search, trending, stickers, memes, favorites.
+ * Multi-select with small preview strip; confirm imports into the library.
  */
-export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
+export function GifSelector({
+  open,
+  onClose,
+  roomId,
+  multi = true,
+  onPicked,
+  onPickedMany,
+}: Props) {
   const [tab, setTab] = useState<KlipyKind | 'favorites'>('gifs');
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<GifSearchItem[]>([]);
   const [favorites, setFavorites] = useState<GifSearchItem[]>(() => loadGifFavorites());
+  const [selected, setSelected] = useState<GifSearchItem[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [attribution, setAttribution] = useState('Powered by KLIPY');
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
@@ -80,18 +98,17 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
     [],
   );
 
-  // Reset composer fields when the modal opens.
   useEffect(() => {
     if (!open) return;
     justOpenedRef.current = true;
     setFavorites(loadGifFavorites());
     setQuery('');
     setHovered(null);
+    setSelected([]);
     setPage(1);
     setError('');
   }, [open]);
 
-  // Search / trending (skips the stale-query tick right after open).
   useEffect(() => {
     if (!open) return;
 
@@ -105,7 +122,6 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
     }
 
     if (justOpenedRef.current && query !== '') {
-      // Wait for the open-reset that clears query.
       return;
     }
     justOpenedRef.current = false;
@@ -120,28 +136,73 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
     };
   }, [open, tab, query, runSearch]);
 
-  const pick = async (item: GifSearchItem) => {
+  const resolveKind = (item: GifSearchItem): KlipyKind => {
+    const rawKind = (item.kind || (tab === 'favorites' ? 'gifs' : tab)) as string;
+    return rawKind === 'stickers' || rawKind === 'memes' || rawKind === 'gifs' ? rawKind : 'gifs';
+  };
+
+  const importOne = async (item: GifSearchItem): Promise<{ media: Media; meta: GifSearchItem }> => {
+    const kind = resolveKind(item);
+    const media = await importGif({
+      url: item.gif_url,
+      title: item.title || item.slug,
+      slug: item.slug,
+      roomId,
+      kind,
+    });
+    return { media, meta: { ...item, kind } };
+  };
+
+  const pickSingle = async (item: GifSearchItem) => {
     setImportingId(item.id);
     setError('');
     try {
-      const rawKind = (item.kind || (tab === 'favorites' ? 'gifs' : tab)) as string;
-      const kind: KlipyKind =
-        rawKind === 'stickers' || rawKind === 'memes' || rawKind === 'gifs'
-          ? rawKind
-          : 'gifs';
-      const media = await importGif({
-        url: item.gif_url,
-        title: item.title || item.slug,
-        slug: item.slug,
-        roomId,
-        kind,
-      });
-      onPicked(media, { ...item, kind });
+      const { media, meta } = await importOne(item);
+      onPicked(media, meta);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import impossible');
     } finally {
       setImportingId(null);
+    }
+  };
+
+  const toggleSelect = (item: GifSearchItem) => {
+    setSelected((prev) => {
+      const key = itemKey(item, tab);
+      if (prev.some((s) => itemKey(s, tab) === key)) {
+        return prev.filter((s) => itemKey(s, tab) !== key);
+      }
+      if (prev.length >= MAX_MULTI) {
+        setError(`Maximum ${MAX_MULTI} GIFs à la fois.`);
+        return prev;
+      }
+      setError('');
+      return [...prev, { ...item, kind: resolveKind(item) }];
+    });
+  };
+
+  const confirmMulti = async () => {
+    if (selected.length === 0) return;
+    setImporting(true);
+    setError('');
+    try {
+      const results: Array<{ media: Media; meta: GifSearchItem }> = [];
+      for (const item of selected) {
+        setImportingId(item.id);
+        results.push(await importOne(item));
+      }
+      if (onPickedMany) {
+        onPickedMany(results);
+      } else {
+        for (const r of results) onPicked(r.media, r.meta);
+      }
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import impossible');
+    } finally {
+      setImportingId(null);
+      setImporting(false);
     }
   };
 
@@ -156,6 +217,8 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
   };
 
   const displayItems = tab === 'favorites' ? favorites : items;
+  const selectedKeys = new Set(selected.map((s) => itemKey(s, s.kind || tab)));
+  const busy = importing || !!importingId;
 
   return (
     <Modal open={open} onClose={onClose} title="Choisir un GIF / sticker / meme" size="full">
@@ -214,6 +277,46 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
           </p>
         )}
 
+        {multi && selected.length > 0 && (
+          <div className="rounded-xl border border-raid-accent/30 bg-raid-surface/60 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-raid-text-secondary">
+                Sélection ({selected.length}/{MAX_MULTI})
+              </p>
+              <Button variant="ghost" className="!px-2 !py-1 text-xs" onClick={() => setSelected([])}>
+                Tout retirer
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selected.map((item) => {
+                const key = itemKey(item, item.kind || tab);
+                return (
+                  <div
+                    key={key}
+                    className="group relative h-16 w-16 overflow-hidden rounded-lg border border-raid-border"
+                  >
+                    <img
+                      src={item.preview_url}
+                      alt={item.title || item.slug}
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      title="Retirer"
+                      className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition group-hover:opacity-100"
+                      onClick={() =>
+                        setSelected((prev) => prev.filter((s) => itemKey(s, s.kind || tab) !== key))
+                      }
+                    >
+                      <X size={16} className="text-white" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
           <div>
             {loading && displayItems.length === 0 ? (
@@ -225,19 +328,28 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
                   : 'Aucun résultat.'}
               </p>
             ) : (
-              <div className="grid max-h-[55vh] grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4 md:grid-cols-5">
+              <div className="grid max-h-[50vh] grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4 md:grid-cols-5">
                 {displayItems.map((item) => {
-                  const busy = importingId === item.id;
+                  const key = itemKey(item, tab);
+                  const isSelected = selectedKeys.has(key);
+                  const thisBusy = importingId === item.id;
                   const fav = isGifFavorite(item);
                   return (
                     <button
-                      key={`${item.kind ?? tab}-${item.id}-${item.slug}`}
+                      key={key}
                       type="button"
-                      disabled={busy || !!importingId}
+                      disabled={busy}
                       title={item.title || item.slug}
                       onMouseEnter={() => setHovered(item)}
-                      onClick={() => void pick(item)}
-                      className="group relative aspect-square overflow-hidden rounded-xl border border-raid-border bg-raid-bg transition hover:border-raid-accent disabled:opacity-60"
+                      onClick={() => {
+                        if (multi) toggleSelect(item);
+                        else void pickSingle(item);
+                      }}
+                      className={`group relative aspect-square overflow-hidden rounded-xl border bg-raid-bg transition disabled:opacity-60 ${
+                        isSelected
+                          ? 'border-raid-accent ring-2 ring-raid-accent/40'
+                          : 'border-raid-border hover:border-raid-accent'
+                      }`}
                     >
                       <img
                         src={item.preview_url}
@@ -245,6 +357,11 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
                         loading="lazy"
                         className="h-full w-full object-cover"
                       />
+                      {isSelected && (
+                        <span className="absolute bottom-1.5 left-1.5 rounded-full bg-raid-accent p-1 text-white">
+                          <Check size={12} />
+                        </span>
+                      )}
                       <span
                         role="presentation"
                         onClick={(e) => onToggleFavorite(item, e)}
@@ -254,7 +371,7 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
                       >
                         <Heart size={12} fill={fav ? 'currentColor' : 'none'} />
                       </span>
-                      {busy && (
+                      {thisBusy && (
                         <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-xs font-medium text-white">
                           Import…
                         </span>
@@ -269,7 +386,7 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
               <div className="mt-3 flex justify-center">
                 <Button
                   variant="secondary"
-                  disabled={loading}
+                  disabled={loading || busy}
                   onClick={() => void runSearch(query, tab as KlipyKind, page + 1, true)}
                 >
                   {loading ? '…' : 'Charger plus'}
@@ -293,12 +410,15 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
                   {hovered.title || hovered.slug}
                 </p>
                 <p className="text-xs text-raid-text-secondary">
-                  Clique pour importer et sélectionner
+                  {multi
+                    ? 'Clique pour ajouter / retirer de la sélection'
+                    : 'Clique pour importer et sélectionner'}
                 </p>
               </>
             ) : (
               <p className="text-xs text-raid-text-secondary">
-                Survole un résultat pour prévisualiser. Clique pour l’utiliser dans ton raid.
+                Survole un résultat pour prévisualiser.
+                {multi ? ' Sélectionne plusieurs GIFs puis confirme.' : ''}
               </p>
             )}
             <p className="mt-4 text-[10px] uppercase tracking-wide text-raid-text-secondary">
@@ -307,6 +427,24 @@ export function GifSelector({ open, onClose, roomId, onPicked }: Props) {
             </p>
           </aside>
         </div>
+
+        {multi && (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-raid-border pt-3">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>
+              Annuler
+            </Button>
+            <Button
+              disabled={selected.length === 0 || busy}
+              onClick={() => void confirmMulti()}
+            >
+              {importing
+                ? `Import ${importingId ? '…' : ''} (${selected.length})`
+                : selected.length <= 1
+                  ? 'Utiliser ce GIF'
+                  : `Utiliser ${selected.length} GIFs`}
+            </Button>
+          </div>
+        )}
       </div>
     </Modal>
   );

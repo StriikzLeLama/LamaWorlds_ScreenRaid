@@ -114,6 +114,26 @@ export function OverlayApp() {
         }
         unlisteners.push(hideUnsub);
 
+        const moveUnsub = await listen<{
+          id: string;
+          position_x: number;
+          position_y: number;
+        }>('overlay:move', (event) => {
+          const { id, position_x, position_y } = event.payload;
+          setOverlays((prev) =>
+            prev.map((o) =>
+              o.id === id
+                ? { ...o, position_x, position_y }
+                : o,
+            ),
+          );
+        });
+        if (cancelled) {
+          moveUnsub();
+          return;
+        }
+        unlisteners.push(moveUnsub);
+
         const clearUnsub = await listen('overlay:clear', () => {
           exitingCountRef.current = 0;
           playedSfxRef.current.clear();

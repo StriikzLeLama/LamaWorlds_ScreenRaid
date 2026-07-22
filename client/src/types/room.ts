@@ -4,6 +4,8 @@ export interface RoomSummary {
   invite_code: string;
   role: string;
   member_count: number;
+  /** False when visible but not joined yet. Defaults true for older payloads. */
+  is_member?: boolean;
 }
 
 export interface RoomMember {

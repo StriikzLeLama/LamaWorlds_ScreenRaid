@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, LogOut, Send, Trash2, Clock, Link2 } from 'lucide-react';
+import { LogOut, Send, Trash2, Clock } from 'lucide-react';
 import { Card, Button, Badge, Input } from '../components/ui';
 import { GifSelector } from '../components/GifSelector';
 import { AnimationPreview } from '../components/AnimationPreview';
@@ -19,19 +19,14 @@ import {
   type PrankHistoryItem,
 } from '../services/pranks';
 import {
-  createRoomInvite,
-  deactivateRoomInvite,
   deleteRoom,
   getRoom,
   leaveRoom,
-  listRoomInvites,
-  type RoomInvite,
 } from '../services/rooms';
 import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
-import { inviteShareUrl } from '../lib/invites';
 import { RoomSecurityPanel } from '../components/settings/RoomSecurityPanel';
 import { RoomMembersPanel } from '../components/room/RoomMembersPanel';
 import {
@@ -51,6 +46,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { useWsConnection } from '../hooks/useWsConnection';
 import { isTauriRuntime } from '../lib/platform';
+import { MOTION_OPTIONS, type MotionPreset } from '../lib/cursorMotion';
 import type { RoomDetail } from '../types/room';
 import type { MediaType } from '../types';
 
@@ -65,28 +61,29 @@ const SFX_OPTIONS: { value: SfxOption; label: string }[] = [
 ];
 
 const TEXT_COLOR_PRESETS = [
-  { value: '#f5f5f5', label: 'Blanc' },
+  { value: '#f1f5f9', label: 'Blanc' },
   { value: '#ffffff', label: 'Blanc pur' },
-  { value: '#f97316', label: 'Orange' },
+  { value: '#2dd4bf', label: 'Teal' },
+  { value: '#f59e0b', label: 'Ambre' },
   { value: '#22c55e', label: 'Vert' },
   { value: '#ef4444', label: 'Rouge' },
-  { value: '#38bdf8', label: 'Cyan' },
+  { value: '#7dd3fc', label: 'Cyan' },
 ];
 
 const BG_COLOR_PRESETS = [
-  { value: 'rgba(20,20,22,0.94)', label: 'Sombre' },
+  { value: 'rgba(11,17,29,0.94)', label: 'Navy' },
   { value: 'rgba(0,0,0,0.85)', label: 'Noir' },
-  { value: 'rgba(249,115,22,0.92)', label: 'Orange' },
+  { value: 'rgba(45,212,191,0.88)', label: 'Teal' },
   { value: 'rgba(30,58,138,0.92)', label: 'Bleu' },
-  { value: 'rgba(22,101,52,0.92)', label: 'Vert' },
+  { value: 'rgba(245,158,11,0.9)', label: 'Ambre' },
 ];
 
 const ACCENT_COLOR_PRESETS = [
-  { value: '#f97316', label: 'Orange' },
-  { value: '#eab308', label: 'Jaune' },
+  { value: '#2dd4bf', label: 'Teal' },
+  { value: '#f59e0b', label: 'Ambre' },
   { value: '#22c55e', label: 'Vert' },
-  { value: '#38bdf8', label: 'Cyan' },
-  { value: '#a855f7', label: 'Violet' },
+  { value: '#7dd3fc', label: 'Cyan' },
+  { value: '#f97316', label: 'Orange' },
   { value: '#ef4444', label: 'Rouge' },
 ];
 
@@ -134,12 +131,10 @@ export function RoomPage() {
   const wsConnected = useWsConnection();
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
   const [history, setHistory] = useState<PrankHistoryItem[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledPrankItem[]>([]);
-  const [invites, setInvites] = useState<RoomInvite[]>([]);
   const [templates, setTemplates] = useState<RaidTemplate[]>([]);
   const [sending, setSending] = useState(false);
   const [gifSelectorOpen, setGifSelectorOpen] = useState(false);
@@ -148,7 +143,7 @@ export function RoomPage() {
   const [overlayType, setOverlayType] = useState<OverlayType>('text');
   const [targetId, setTargetId] = useState<string>('');
   const [textContent, setTextContent] = useState('');
-  const [mediaId, setMediaId] = useState('');
+  const [mediaIds, setMediaIds] = useState<string[]>([]);
   const [durationMs, setDurationMs] = useState(5000);
   const [animation, setAnimation] = useState<Animation>('fade');
   const [volume, setVolume] = useState(0.8);
@@ -156,6 +151,7 @@ export function RoomPage() {
   const [opacity, setOpacity] = useState(1);
   const [raidBomb, setRaidBomb] = useState(false);
   const [multiMonitorBomb, setMultiMonitorBomb] = useState(false);
+  const [motionPreset, setMotionPreset] = useState<MotionPreset>('exact');
   const [textColor, setTextColor] = useState(TEXT_COLOR_PRESETS[0].value);
   const [bgColor, setBgColor] = useState(BG_COLOR_PRESETS[0].value);
   const [accentColor, setAccentColor] = useState(ACCENT_COLOR_PRESETS[0].value);
@@ -258,21 +254,6 @@ export function RoomPage() {
     return () => window.removeEventListener('screenraid:monitors', onMonitorsChanged);
   }, [targetId, currentUserId]);
 
-  useEffect(() => {
-    if (!id || !room) return;
-    const myRole = room.members.find((m) => m.user_id === currentUserId)?.role;
-    if (myRole === 'owner' || myRole === 'admin') {
-      listRoomInvites(id).then(setInvites).catch(() => undefined);
-    }
-  }, [id, room, currentUserId]);
-
-  const copyCode = () => {
-    if (!room) return;
-    void navigator.clipboard.writeText(room.invite_code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
   const handleLeave = async () => {
     if (!id) return;
     await leaveRoom(id);
@@ -291,7 +272,7 @@ export function RoomPage() {
     config.opacity = opacity;
     config.volume = volume;
     config.sfx = sfx;
-    if (overlayType === 'text') {
+    if (overlayType === 'text' || textContent.trim()) {
       config.text_color = textColor;
       config.bg_color = bgColor;
       config.accent_color = accentColor;
@@ -301,19 +282,36 @@ export function RoomPage() {
       monitor_index: pos?.monitor_index ?? placement.monitor_index,
       x: pos?.x ?? placement.x,
       y: pos?.y ?? placement.y,
-      preset: 'exact',
+      preset: motionPreset,
     };
     return config;
   };
 
-  const buildRequest = (pos?: { x: number; y: number; monitor_index?: number }) => ({
-    target_id: targetId || null,
-    media_id: overlayType === 'text' ? null : mediaId || null,
-    overlay_type: overlayType,
-    text_content: overlayType === 'text' ? textContent : null,
-    duration_ms: durationMs,
-    config: buildConfig(pos),
-  });
+  const buildRequest = (
+    mediaIdOverride?: string | null,
+    pos?: { x: number; y: number; monitor_index?: number },
+  ) => {
+    const mid =
+      overlayType === 'text'
+        ? null
+        : mediaIdOverride !== undefined
+          ? mediaIdOverride
+          : mediaIds[0] || null;
+    const caption =
+      overlayType === 'text'
+        ? textContent
+        : textContent.trim()
+          ? textContent.trim()
+          : null;
+    return {
+      target_id: targetId || null,
+      media_id: mid,
+      overlay_type: overlayType,
+      text_content: caption,
+      duration_ms: durationMs,
+      config: buildConfig(pos),
+    };
+  };
 
   const handleSendError = (e: unknown) => {
     const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Send failed';
@@ -328,11 +326,11 @@ export function RoomPage() {
     }
   };
 
-  const fireShots = async (
-    positions: Array<{ x: number; y: number; monitor_index?: number }>,
+  const fireRequests = async (
+    requests: ReturnType<typeof buildRequest>[],
   ) => {
     if (!id) return;
-    const shots = positions.map((pos) => sendPrank(id, buildRequest(pos)));
+    const shots = requests.map((req) => sendPrank(id, req));
     const results = await Promise.allSettled(shots);
     const failed = results.filter((r) => r.status === 'rejected');
     const ok = results.length - failed.length;
@@ -347,13 +345,23 @@ export function RoomPage() {
     }
   };
 
+  const fireShots = async (
+    positions: Array<{ x: number; y: number; monitor_index?: number }>,
+  ) => {
+    const ids = overlayType === 'text' ? [null] : mediaIds.length ? mediaIds : [null];
+    const requests = ids.flatMap((mid) =>
+      positions.map((pos) => buildRequest(mid, pos)),
+    );
+    await fireRequests(requests);
+  };
+
   const handleSend = async () => {
     if (!id) return;
     const needsMedia = overlayType !== 'text';
-    if (needsMedia && !mediaId) {
+    if (needsMedia && mediaIds.length === 0) {
       setError(
         showGifSelector
-          ? 'Choisis un GIF ou un media de la bibliothèque.'
+          ? 'Choisis un ou plusieurs GIFs / medias.'
           : 'Choisis un media avant d’envoyer.',
       );
       return;
@@ -367,12 +375,16 @@ export function RoomPage() {
       setSending(true);
       setError('');
       try {
-        await schedulePrank(id, {
-          ...buildRequest(),
-          trigger_type: scheduleMode,
-          run_at: scheduleMode === 'at_time' ? new Date(scheduleAt).toISOString() : null,
-          online_user_id: scheduleMode === 'on_online' ? onlineUserId || null : null,
-        });
+        // Schedule one job per selected media (or a single text raid).
+        const ids = overlayType === 'text' ? [null] : mediaIds;
+        for (const mid of ids) {
+          await schedulePrank(id, {
+            ...buildRequest(mid),
+            trigger_type: scheduleMode,
+            run_at: scheduleMode === 'at_time' ? new Date(scheduleAt).toISOString() : null,
+            online_user_id: scheduleMode === 'on_online' ? onlineUserId || null : null,
+          });
+        }
         setScheduleMode('now');
         loadExtras();
       } catch (e) {
@@ -408,6 +420,8 @@ export function RoomPage() {
             monitor_index: mi,
           })),
         );
+      } else if (mediaIds.length > 1 && needsMedia) {
+        await fireRequests(mediaIds.map((mid) => buildRequest(mid)));
       } else {
         await sendPrank(id, buildRequest());
         setTextContent('');
@@ -427,14 +441,14 @@ export function RoomPage() {
     setSfx(pack.sfx);
     setRaidBomb(Boolean(pack.bomb));
     if (pack.text) setTextContent(pack.text);
-    setMediaId('');
+    setMediaIds([]);
     if (pack.needsGif) setGifSelectorOpen(true);
   };
 
   const applyTemplate = (t: RaidTemplate) => {
     setOverlayType(t.overlayType);
     setTextContent(t.textContent);
-    setMediaId(t.mediaId);
+    setMediaIds(t.mediaId ? [t.mediaId] : []);
     setDurationMs(t.durationMs);
     setAnimation(t.animation);
     setVolume(t.volume);
@@ -455,7 +469,7 @@ export function RoomPage() {
       roomId: id,
       overlayType,
       textContent,
-      mediaId,
+      mediaId: mediaIds[0] ?? '',
       durationMs,
       animation,
       volume,
@@ -472,16 +486,22 @@ export function RoomPage() {
     setTemplateName('');
   };
 
-  const selectedMedia = mediaItems.find((m) => m.id === mediaId) ?? null;
+  const selectedMediaList = mediaIds
+    .map((mid) => mediaItems.find((m) => m.id === mid))
+    .filter((m): m is Media => Boolean(m));
   const selectableMedia = mediaForOverlay(overlayType, mediaItems);
   const needsMedia = overlayType !== 'text';
   const isSoundOnly = overlayType === 'sound';
-  const showPlacement = Boolean(targetId) && !isSoundOnly;
+  const showPlacement =
+    Boolean(targetId) && !isSoundOnly && motionPreset === 'exact';
   const showGifSelector = overlayType === 'gif' || overlayType === 'image';
+  const showCaption = showGifSelector || overlayType === 'video';
   const previewText =
     overlayType === 'text'
       ? textContent.trim() || 'Aperçu'
-      : selectedMedia?.original_name || previewLabel(overlayType);
+      : textContent.trim() ||
+        selectedMediaList[0]?.original_name ||
+        previewLabel(overlayType);
 
   if (!room) {
     return (
@@ -504,15 +524,9 @@ export function RoomPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-raid-text">{room.name}</h1>
-          <div className="mt-2 flex items-center gap-2">
-            <code className="rounded-lg bg-raid-surface px-2 py-1 text-sm text-raid-accent">
-              {room.invite_code}
-            </code>
-            <Button variant="ghost" className="!p-2" onClick={copyCode}>
-              <Copy size={16} />
-            </Button>
-            {copied && <span className="text-xs text-raid-success">Copied!</span>}
-          </div>
+          <p className="mt-1 text-sm text-raid-text-secondary">
+            {room.members.length} member{room.members.length === 1 ? '' : 's'}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={handleLeave}>
@@ -697,7 +711,7 @@ export function RoomPage() {
                     variant={overlayType === t ? 'primary' : 'secondary'}
                     onClick={() => {
                       setOverlayType(t);
-                      setMediaId('');
+                      setMediaIds([]);
                     }}
                   >
                     {t}
@@ -716,28 +730,49 @@ export function RoomPage() {
                 <div className="space-y-3">
                   {showGifSelector && (
                     <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
-                      Ouvrir le sélecteur GIF
+                      Choisir un ou plusieurs GIFs
                     </Button>
                   )}
                   <MediaPicker
                     items={selectableMedia}
-                    value={mediaId}
-                    onChange={setMediaId}
+                    value={mediaIds[0] ?? ''}
+                    onChange={(id) => setMediaIds(id ? [id] : [])}
                     emptyHint={
                       showGifSelector
                         ? 'Bibliothèque vide — utilise le sélecteur GIF ou upload dans Media.'
                         : `Upload ${overlayType} media in the Media library first.`
                     }
                   />
-                  {selectedMedia && (
-                    <div className="flex items-center gap-3 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
-                      <MediaThumb media={selectedMedia} sizeClass="h-16 w-16" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-raid-text">
-                          {selectedMedia.original_name}
-                        </p>
-                      </div>
+                  {selectedMediaList.length > 0 && (
+                    <div className="flex flex-wrap gap-2 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
+                      {selectedMediaList.map((m) => (
+                        <div key={m.id} className="group relative">
+                          <MediaThumb media={m} sizeClass="h-14 w-14" />
+                          <button
+                            type="button"
+                            title="Retirer"
+                            className="absolute -right-1 -top-1 rounded-full bg-raid-danger px-1 text-[10px] text-white opacity-0 transition group-hover:opacity-100"
+                            onClick={() =>
+                              setMediaIds((prev) => prev.filter((x) => x !== m.id))
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <p className="self-center text-xs text-raid-text-secondary">
+                        {selectedMediaList.length} sélectionné
+                        {selectedMediaList.length > 1 ? 's' : ''}
+                      </p>
                     </div>
+                  )}
+                  {showCaption && (
+                    <Input
+                      label="Légende (optionnel)"
+                      value={textContent}
+                      onChange={(e) => setTextContent(e.target.value)}
+                      placeholder="Texte affiché sous le GIF / image…"
+                    />
                   )}
                 </div>
               )}
@@ -785,7 +820,7 @@ export function RoomPage() {
                 />
               )}
 
-              {overlayType === 'text' && (
+              {(overlayType === 'text' || showCaption) && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs text-raid-text-secondary">Couleur texte</label>
@@ -920,6 +955,21 @@ export function RoomPage() {
                       : '(pick a target with 2+ screens)'}
                   </span>
                 </label>
+                <label className="flex min-w-[14rem] flex-col gap-1 text-sm text-raid-text">
+                  <span className="text-raid-text-secondary">Mouvement AR</span>
+                  <select
+                    value={motionPreset}
+                    onChange={(e) => setMotionPreset(e.target.value as MotionPreset)}
+                    disabled={isSoundOnly}
+                    className="rounded-xl border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text outline-none focus:border-raid-accent"
+                  >
+                    {MOTION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label} — {opt.hint}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               {showPlacement && (
@@ -942,7 +992,7 @@ export function RoomPage() {
                 disabled={
                   sending ||
                   (overlayType === 'text' && !textContent.trim()) ||
-                  (needsMedia && !mediaId) ||
+                  (needsMedia && mediaIds.length === 0) ||
                   (scheduleMode === 'at_time' && !scheduleAt) ||
                   (scheduleMode === 'on_online' && !onlineUserId)
                 }
@@ -1026,110 +1076,6 @@ export function RoomPage() {
             </ul>
           )}
         </Card>
-
-        {canModerate && (
-          <Card className="lg:col-span-2">
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-raid-text">
-              <Link2 size={18} /> Guest invite links
-            </h2>
-            <p className="mb-3 text-xs text-raid-text-secondary">
-              One-time or limited links with expiry. Guests join without the main room code.
-            </p>
-            <div className="mb-4 flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  if (!id) return;
-                  void createRoomInvite(id, {
-                    role: 'guest',
-                    expires_in_hours: 24,
-                    max_uses: 1,
-                  })
-                    .then((inv) => setInvites((prev) => [inv, ...prev]))
-                    .catch((e) =>
-                      setError(e instanceof Error ? e.message : 'Invite create failed'),
-                    );
-                }}
-              >
-                Create 1-use / 24h guest link
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  if (!id) return;
-                  void createRoomInvite(id, {
-                    role: 'guest',
-                    expires_in_hours: 168,
-                    max_uses: 10,
-                  })
-                    .then((inv) => setInvites((prev) => [inv, ...prev]))
-                    .catch((e) =>
-                      setError(e instanceof Error ? e.message : 'Invite create failed'),
-                    );
-                }}
-              >
-                Create 10-use / 7d guest link
-              </Button>
-            </div>
-            {invites.filter((i) => i.is_active).length === 0 ? (
-              <p className="text-sm text-raid-text-secondary">No active invite links.</p>
-            ) : (
-              <ul className="space-y-2">
-                {invites
-                  .filter((i) => i.is_active)
-                  .map((inv) => (
-                    <li
-                      key={inv.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-raid-surface px-3 py-2 text-sm"
-                    >
-                      <div className="min-w-0">
-                        <code className="break-all text-xs text-raid-accent">
-                          {inviteShareUrl(inv.token)}
-                        </code>
-                        <p className="text-xs text-raid-text-secondary">
-                          {inv.role} · {inv.use_count}/{inv.max_uses} uses
-                          {inv.expires_at
-                            ? ` · expires ${new Date(inv.expires_at).toLocaleString()}`
-                            : ''}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          className="!px-2 !py-1 text-xs"
-                          onClick={() =>
-                            void navigator.clipboard.writeText(inviteShareUrl(inv.token))
-                          }
-                        >
-                          Copy link
-                        </Button>
-                        <Button
-                          variant="danger"
-                          className="!px-2 !py-1 text-xs"
-                          onClick={() => {
-                            if (!id) return;
-                            void deactivateRoomInvite(id, inv.id)
-                              .then(() =>
-                                setInvites((prev) =>
-                                  prev.map((x) =>
-                                    x.id === inv.id ? { ...x, is_active: false } : x,
-                                  ),
-                                ),
-                              )
-                              .catch((e) =>
-                                setError(e instanceof Error ? e.message : 'Revoke failed'),
-                              );
-                          }}
-                        >
-                          Revoke
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </Card>
-        )}
       </div>
 
       {history.length > 0 && (
@@ -1173,11 +1119,25 @@ export function RoomPage() {
         open={gifSelectorOpen}
         onClose={() => setGifSelectorOpen(false)}
         roomId={id}
+        multi
         onPicked={(media) => {
           setMediaItems((prev) =>
             prev.some((m) => m.id === media.id) ? prev : [media, ...prev],
           );
-          setMediaId(media.id);
+          setMediaIds([media.id]);
+          setOverlayType((prev) => (prev === 'image' ? 'image' : 'gif'));
+          refreshMedia();
+        }}
+        onPickedMany={(picked) => {
+          const medias = picked.map((p) => p.media);
+          setMediaItems((prev) => {
+            const next = [...prev];
+            for (const media of medias) {
+              if (!next.some((m) => m.id === media.id)) next.unshift(media);
+            }
+            return next;
+          });
+          setMediaIds(medias.map((m) => m.id));
           setOverlayType((prev) => (prev === 'image' ? 'image' : 'gif'));
           refreshMedia();
         }}

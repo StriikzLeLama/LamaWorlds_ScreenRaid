@@ -18,6 +18,8 @@ export interface OverlayShowPayload {
   bg_color?: string | null;
   accent_color?: string | null;
   font_family?: string | null;
+  /** AR / motion mode forwarded from the raid preset. */
+  motion?: string | null;
 }
 
 export interface ActiveOverlay extends OverlayShowPayload {

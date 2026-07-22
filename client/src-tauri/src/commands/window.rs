@@ -128,6 +128,23 @@ pub fn overlay_label(monitor_index: u32) -> String {
     format!("overlay-{monitor_index}")
 }
 
+/// Toggle click-through on an overlay surface (needed for clickbait buttons).
+#[tauri::command]
+pub fn set_overlay_clickthrough(
+    app: AppHandle,
+    monitor_index: u32,
+    ignore: bool,
+) -> Result<(), String> {
+    let label = overlay_label(monitor_index);
+    let Some(window) = app.get_webview_window(&label) else {
+        return Ok(());
+    };
+    window
+        .set_ignore_cursor_events(ignore)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Hide every overlay webview (panic / clear).
 pub fn hide_all_overlay_surfaces(app: &AppHandle, max_monitors: u32) {
     for i in 0..max_monitors {

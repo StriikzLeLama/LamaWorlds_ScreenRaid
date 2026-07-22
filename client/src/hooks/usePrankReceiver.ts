@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { sendNotification } from '@tauri-apps/plugin-notification';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { enforceCacheLimit, resolveMediaForPrank } from '../services/mediaCache';
@@ -7,6 +6,12 @@ import { ackPrank, type PrankIncomingPayload } from '../services/pranks';
 import { onWsMessage } from '../services/websocket';
 import { unlockAudio } from '../lib/sfx';
 import { log } from '../lib/log';
+import {
+  isCursorMotion,
+  runCursorMotion,
+  sampleCursor,
+  type MotionPreset,
+} from '../lib/cursorMotion';
 
 async function playSoundPrank(
   mediaUrl: string,
@@ -27,6 +32,33 @@ function safeNumber(value: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => window.setTimeout(r, ms));
+}
+
+type OverlayInvokePayload = {
+  id: string;
+  overlay_type: string;
+  media_url: string | null;
+  local_path: string | null;
+  text: string | null;
+  duration_ms: number;
+  animation: string;
+  sender_name: string;
+  position_x: number;
+  position_y: number;
+  monitor_index: number;
+  scale: number;
+  opacity: number;
+  volume: number;
+  sfx: string;
+  text_color: string | null;
+  bg_color: string | null;
+  accent_color: string | null;
+  font_family: string | null;
+  motion: string | null;
+};
+
 export function usePrankReceiver() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
@@ -46,7 +78,6 @@ export function usePrankReceiver() {
         return;
       }
 
-      // Quiet hours — local clock window (supports overnight, e.g. 22:00–08:00).
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         const settings = await invoke<{
@@ -86,15 +117,6 @@ export function usePrankReceiver() {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
 
-        try {
-          await sendNotification({
-            title: 'ScreenRaid',
-            body: `${prank.sender.display_name} sent you a prank`,
-          });
-        } catch (e) {
-          log.warn('notification failed', e);
-        }
-
         let mediaUrl: string | null = null;
         let localPath: string | null = null;
         let overlayType = prank.overlay_type;
@@ -116,7 +138,6 @@ export function usePrankReceiver() {
           }
 
           if (!mediaUrl && overlayType !== 'text') {
-            // Still show something so raids never silently disappear.
             overlayType = 'text';
             textContent = `${prank.sender.display_name} sent a ${prank.overlay_type} (media failed to load)`;
           }
@@ -140,7 +161,6 @@ export function usePrankReceiver() {
           return;
         }
 
-        // Soft mode + preferred monitor from receiver settings.
         let opacity = safeNumber(prank.config?.opacity, 1);
         let preferredMonitor: number | null = null;
         let forcePreferred = false;
@@ -167,12 +187,15 @@ export function usePrankReceiver() {
         void unlockAudio();
 
         const pos = prank.config?.position;
-        const positionX = safeNumber(pos?.x, 0.5);
-        const positionY = safeNumber(pos?.y, 0.5);
+        const preset = (pos?.preset || 'exact') as MotionPreset;
+        let positionX = safeNumber(pos?.x, 0.5);
+        let positionY = safeNumber(pos?.y, 0.5);
         let monitorIndex = safeNumber(pos?.monitor_index, preferredMonitor ?? 0);
+        const cursorDriven = isCursorMotion(preset);
+
         if (forcePreferred && preferredMonitor != null) {
           monitorIndex = preferredMonitor;
-        } else if (preferredMonitor != null) {
+        } else if (preferredMonitor != null && !cursorDriven) {
           try {
             const monitors = await invoke<Array<{ id: number }>>('collect_monitors');
             if (!monitors.some((m) => m.id === monitorIndex)) {
@@ -182,34 +205,152 @@ export function usePrankReceiver() {
             // keep sender index
           }
         }
+
+        if (cursorDriven || preset === 'clickbait') {
+          try {
+            const cursor = await sampleCursor();
+            monitorIndex = cursor.monitor_index;
+            if (preset === 'follow_mouse' || preset === 'orbit' || preset === 'trail') {
+              positionX = cursor.x;
+              positionY = cursor.y;
+            } else if (preset === 'dodge') {
+              // Start away from cursor so dodge has room to flee
+              positionX = cursor.x < 0.5 ? 0.75 : 0.25;
+              positionY = cursor.y < 0.5 ? 0.7 : 0.3;
+            }
+          } catch (e) {
+            log.warn('cursor sample failed', e);
+          }
+        }
+
+        if (preset === 'takeover' || preset === 'clickbait') {
+          positionX = 0.5;
+          positionY = 0.5;
+        }
+
         const scale = safeNumber(prank.config?.scale, 1);
         const animation = prank.config?.animation || 'fade';
+        const volume = safeNumber(prank.config?.volume, 0.8);
 
-        log.info('prank invoking show_overlay', prank.prank_id, overlayType);
+        const basePayload = (): Omit<OverlayInvokePayload, 'id' | 'position_x' | 'position_y' | 'scale' | 'duration_ms' | 'motion' | 'text' | 'overlay_type'> => ({
+          media_url: mediaUrl,
+          local_path: localPath,
+          animation,
+          sender_name: prank.sender.display_name,
+          monitor_index: monitorIndex,
+          opacity,
+          volume,
+          sfx: prank.config?.sfx ?? 'none',
+          text_color: prank.config?.text_color ?? null,
+          bg_color: prank.config?.bg_color ?? null,
+          accent_color: prank.config?.accent_color ?? null,
+          font_family: prank.config?.font_family ?? null,
+        });
+
+        // Screen takeover: full-bleed banner ~1s, then main content centered.
+        if (preset === 'takeover') {
+          await invoke('show_overlay', {
+            payload: {
+              ...basePayload(),
+              id: `${prank.prank_id}-banner`,
+              overlay_type: 'text',
+              text: '⚠ RAID INCOMING',
+              duration_ms: 1100,
+              animation: 'fade',
+              position_x: 0.5,
+              position_y: 0.5,
+              scale: 1,
+              motion: 'takeover_banner',
+              bg_color: 'rgba(11,17,29,0.92)',
+              accent_color: '#2dd4bf',
+              text_color: '#f1f5f9',
+            } satisfies OverlayInvokePayload,
+          });
+          await sleep(1000);
+        }
+
+        if (preset === 'clickbait') {
+          try {
+            await invoke('set_overlay_clickthrough', {
+              monitorIndex,
+              ignore: false,
+            });
+          } catch (e) {
+            log.warn('clickthrough disable failed', e);
+          }
+        }
+
+        log.info('prank invoking show_overlay', prank.prank_id, overlayType, preset);
         await invoke('show_overlay', {
           payload: {
+            ...basePayload(),
             id: prank.prank_id,
             overlay_type: overlayType,
-            media_url: mediaUrl,
-            local_path: localPath,
             text: textContent,
             duration_ms: prank.duration_ms,
-            animation,
-            sender_name: prank.sender.display_name,
             position_x: positionX,
             position_y: positionY,
-            monitor_index: monitorIndex,
             scale,
-            opacity,
-            volume: safeNumber(prank.config?.volume, 0.8),
-            sfx: prank.config?.sfx ?? 'none',
-            text_color: prank.config?.text_color ?? null,
-            bg_color: prank.config?.bg_color ?? null,
-            accent_color: prank.config?.accent_color ?? null,
-            font_family: prank.config?.font_family ?? null,
-          },
+            motion: preset === 'exact' ? null : preset,
+          } satisfies OverlayInvokePayload,
         });
         log.info('prank show_overlay ok', prank.prank_id);
+
+        if (preset === 'clickbait') {
+          // Re-disable after show_overlay's delayed click-through re-apply (~250ms).
+          window.setTimeout(() => {
+            void invoke('set_overlay_clickthrough', {
+              monitorIndex,
+              ignore: false,
+            }).catch(() => undefined);
+          }, 350);
+        }
+
+        // Trail: three mini clones lagging behind the cursor.
+        const trailIds: string[] = [];
+        if (preset === 'trail' && mediaUrl) {
+          for (let i = 0; i < 3; i++) {
+            const tid = `${prank.prank_id}-trail-${i}`;
+            trailIds.push(tid);
+            await invoke('show_overlay', {
+              payload: {
+                ...basePayload(),
+                id: tid,
+                overlay_type: overlayType,
+                text: null,
+                duration_ms: prank.duration_ms,
+                position_x: positionX,
+                position_y: positionY,
+                scale: Math.max(0.35, scale * 0.45),
+                opacity: Math.min(opacity, 0.75),
+                motion: 'trail',
+                sfx: 'none',
+              } satisfies OverlayInvokePayload,
+            });
+          }
+        }
+
+        if (cursorDriven) {
+          void runCursorMotion({
+            preset,
+            overlayId: prank.prank_id,
+            durationMs: prank.duration_ms,
+            trailIds: trailIds.length ? trailIds : undefined,
+            startX: positionX,
+            startY: positionY,
+          });
+        }
+
+        if (preset === 'clickbait') {
+          // Restore click-through after overlay duration (+ small buffer).
+          const restoreMs = Math.min(Math.max(prank.duration_ms, 1500), 12000) + 400;
+          window.setTimeout(() => {
+            void invoke('set_overlay_clickthrough', {
+              monitorIndex,
+              ignore: true,
+            }).catch(() => undefined);
+          }, restoreMs);
+        }
 
         await ackPrank(prank.prank_id, true, prank.room_id);
       } catch (e) {

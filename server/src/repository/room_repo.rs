@@ -142,6 +142,42 @@ impl RoomRepository {
             .collect())
     }
 
+    /// All active rooms (friends app). `role` is empty string when caller is not a member.
+    pub async fn list_all_active(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<(RoomRow, Option<String>, i32)>, AppError> {
+        let rows = sqlx::query_as::<_, (String, String, String, String, i32, i64, String, String, Option<String>, i64)>(
+            "SELECT r.id, r.name, r.invite_code, r.owner_id, r.max_members, r.is_active,
+                    r.created_at, r.updated_at, rm.role,
+                    (SELECT COUNT(*) FROM room_members mc WHERE mc.room_id = r.id) AS member_count
+             FROM rooms r
+             LEFT JOIN room_members rm ON r.id = rm.room_id AND rm.user_id = ?
+             WHERE r.is_active = 1
+             ORDER BY CASE WHEN rm.role IS NULL THEN 1 ELSE 0 END, r.name",
+        )
+        .bind(user_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, invite_code, owner_id, max_members, is_active, created_at, updated_at, role, count)| {
+                let room = RoomRow {
+                    id,
+                    name,
+                    invite_code,
+                    owner_id,
+                    max_members,
+                    is_active,
+                    created_at,
+                    updated_at,
+                };
+                (room, role, count as i32)
+            })
+            .collect())
+    }
+
     pub async fn find_by_id(&self, room_id: Uuid) -> Result<Option<RoomRow>, AppError> {
         let row = sqlx::query_as::<_, RoomRow>("SELECT * FROM rooms WHERE id = ? AND is_active = 1")
             .bind(room_id.to_string())

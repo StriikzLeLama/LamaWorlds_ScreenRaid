@@ -55,19 +55,27 @@ impl RoomService {
             invite_code,
             role: RoomRole::Owner,
             member_count: 1,
+            is_member: true,
         })
     }
 
     pub async fn list(&self, user_id: Uuid) -> Result<RoomsListResponse, AppError> {
-        let rows = self.rooms.list_for_user(user_id).await?;
+        let rows = self.rooms.list_all_active(user_id).await?;
         let rooms = rows
             .into_iter()
-            .map(|(room, role_str, count)| RoomSummary {
-                id: Uuid::parse_str(&room.id).unwrap_or_default(),
-                name: room.name,
-                invite_code: room.invite_code,
-                role: parse_role(&role_str),
-                member_count: count,
+            .map(|(room, role_opt, count)| {
+                let is_member = role_opt.is_some();
+                RoomSummary {
+                    id: Uuid::parse_str(&room.id).unwrap_or_default(),
+                    name: room.name,
+                    invite_code: room.invite_code,
+                    role: role_opt
+                        .as_deref()
+                        .map(parse_role)
+                        .unwrap_or(RoomRole::Guest),
+                    member_count: count,
+                    is_member,
+                }
             })
             .collect();
         Ok(RoomsListResponse { rooms })
@@ -102,6 +110,10 @@ impl RoomService {
     }
 
     pub async fn join(&self, user_id: Uuid, req: JoinRoomRequest) -> Result<RoomSummary, AppError> {
+        if let Some(room_id) = req.room_id {
+            return self.join_by_id(user_id, room_id).await;
+        }
+
         if let Some(token) = req.invite_token.as_deref().filter(|t| !t.is_empty()) {
             return self.join_via_invite(user_id, token).await;
         }
@@ -123,9 +135,33 @@ impl RoomService {
             .ok_or_else(|| AppError::NotFound("room".into()))?;
 
         let room_id = Uuid::parse_str(&room.id).unwrap_or_default();
+        self.join_existing(user_id, room_id, room).await
+    }
 
-        if self.rooms.is_member(room_id, user_id).await?.is_some() {
-            return Err(AppError::Conflict("already in room".into()));
+    async fn join_by_id(&self, user_id: Uuid, room_id: Uuid) -> Result<RoomSummary, AppError> {
+        let room = self
+            .rooms
+            .find_by_id(room_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("room".into()))?;
+        self.join_existing(user_id, room_id, room).await
+    }
+
+    async fn join_existing(
+        &self,
+        user_id: Uuid,
+        room_id: Uuid,
+        room: crate::repository::room_repo::RoomRow,
+    ) -> Result<RoomSummary, AppError> {
+        if let Some(role) = self.rooms.is_member(room_id, user_id).await? {
+            return Ok(RoomSummary {
+                id: room_id,
+                name: room.name,
+                invite_code: room.invite_code,
+                role,
+                member_count: self.rooms.member_count(room_id).await?,
+                is_member: true,
+            });
         }
 
         let count = self.rooms.member_count(room_id).await?;
@@ -145,6 +181,7 @@ impl RoomService {
             invite_code: room.invite_code,
             role: RoomRole::Member,
             member_count: count + 1,
+            is_member: true,
         })
     }
 
@@ -205,6 +242,7 @@ impl RoomService {
             invite_code: room.invite_code,
             role,
             member_count: count + 1,
+            is_member: true,
         })
     }
 

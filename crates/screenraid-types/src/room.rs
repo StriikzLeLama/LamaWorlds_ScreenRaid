@@ -23,6 +23,13 @@ pub struct RoomSummary {
     pub invite_code: String,
     pub role: RoomRole,
     pub member_count: i32,
+    /// False when the caller can see the room but has not joined yet.
+    #[serde(default = "default_true")]
+    pub is_member: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,6 +39,9 @@ pub struct CreateRoomRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinRoomRequest {
+    /// One-click join (friends app — no invite code needed).
+    #[serde(default)]
+    pub room_id: Option<Uuid>,
     #[serde(default)]
     pub invite_code: Option<String>,
     /// When set, join via a guest/member invite link instead of the room's
