@@ -21,12 +21,15 @@ jobs:
           cache-dependency-path: client/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         working-directory: client
         run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -36,7 +39,9 @@ jobs:
           releaseName: ScreenRaid Receiver ${{ github.ref_name }}
           releaseBody: |
             Desktop receiver build for Windows.
-            Auto-update is enabled when `latest.json` and signatures are attached to this release.
+            Auto-update is enabled when latest.json and signatures are attached to this release.
           releaseDraft: true
           prerelease: false
-          args: --target x86_64-pc-windows-msvc --config "{\"bundle\":{\"createUpdaterArtifacts\":true}}"
+          # Use a config *file* — inline JSON in --config breaks on Windows runners
+          # (path becomes client\{\ and the build fails).
+          args: --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.conf.json

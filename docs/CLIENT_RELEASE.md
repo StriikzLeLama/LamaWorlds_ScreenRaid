@@ -46,11 +46,20 @@ Installateur Windows :
 3. **Publier une release** :
 
    ```bash
+   git add .github/workflows/release-receiver.yml client/src-tauri/tauri.release.conf.json
+   git commit -m "fix(ci): release workflow config path on Windows"
+   git push origin HEAD
+
+   # Retag si le tag pointe déjà sur un commit cassé :
+   git tag -d client-v0.1.2
+   git push origin :refs/tags/client-v0.1.2
    git tag client-v0.1.2
    git push origin client-v0.1.2
    ```
 
    Le workflow `.github/workflows/release-receiver.yml` build l’installateur, signe les artefacts et crée une release draft sur GitHub.
+
+   **Note Windows CI :** ne pas passer de JSON inline à `--config` (ça casse l’échappement). On merge `src-tauri/tauri.release.conf.json` à la place.
 
 4. **Au démarrage**, l’app vérifie  
    `https://github.com/StriikzLeLama/LamaWorlds_ScreenRaid/releases/latest/download/latest.json`  
