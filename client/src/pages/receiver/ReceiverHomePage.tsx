@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ExternalLink, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
+import { Activity, DoorOpen, Image, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
 import { Card, Button, Badge } from '../../components/ui';
 import { ReceiveRaidsToggle } from '../../components/ReceiveRaidsToggle';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-shell';
-import { getServerUrl } from '../../services/serverConfig';
 import { useConsentStore } from '../../stores/consentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useWsConnection } from '../../hooks/useWsConnection';
@@ -17,24 +15,20 @@ export function ReceiverHomePage() {
   const user = useAuthStore((s) => s.user);
   const wsConnected = useWsConnection();
   const { globalConsent, isPaused, grant, resume, pause } = useConsentStore();
-  const [webUrl, setWebUrl] = useState(getServerUrl());
   const [statusMsg, setStatusMsg] = useState('');
   const [queueCount, setQueueCount] = useState(0);
   const inTauri = isTauriRuntime();
   const receiving = globalConsent && !isPaused;
 
   useEffect(() => {
-    setWebUrl(getServerUrl());
     log.info('ReceiverHomePage mount', {
       inTauri,
       wsConnected,
       globalConsent,
       isPaused,
-      serverUrl: getServerUrl(),
     });
   }, []);
 
-  // Poll active overlay queue (stacked raids on screen).
   useEffect(() => {
     if (!inTauri) return;
     let cancelled = false;
@@ -71,7 +65,6 @@ export function ReceiverHomePage() {
     setStatusMsg('');
     log.info('test overlay button clicked, inTauri=', inTauri);
     try {
-      // Ensure consent is on so a follow-up real prank also works.
       if (!globalConsent) {
         await grant().catch(() => undefined);
       }
@@ -109,9 +102,7 @@ export function ReceiverHomePage() {
         },
       });
       log.info('test overlay invoke ok');
-      setStatusMsg(
-        'Test overlay sent for 8s — look at the center of your primary screen. If nothing appears, check the tauri:dev terminal for [overlay] / [SR] logs.',
-      );
+      setStatusMsg('Test overlay sent for 8s — look at the center of your primary screen.');
     } catch (e) {
       log.error('test overlay invoke failed', e);
       setStatusMsg(`Test overlay failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -121,9 +112,9 @@ export function ReceiverHomePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-raid-text">ScreenRaid Receiver</h1>
+        <h1 className="text-2xl font-bold text-raid-text">Receiver</h1>
         <p className="text-sm text-raid-text-secondary">
-          This app displays overlays on your screen. Manage rooms and send pranks in the web dashboard.
+          Overlay status for @{user?.username}. Rooms, media, and sending live elsewhere in this app.
         </p>
       </div>
 
@@ -131,8 +122,7 @@ export function ReceiverHomePage() {
         <Card className="border-raid-warning/40 bg-raid-warning/10">
           <p className="text-sm text-raid-text">
             <strong>Browser mode detected.</strong> Overlays and the panic button only work inside the
-            desktop receiver. Stop the Vite dev server and run{' '}
-            <code className="text-raid-accent">npm run tauri:dev</code> to launch the real app window.
+            desktop app. Run <code className="text-raid-accent">npm run tauri:dev</code>.
           </p>
         </Card>
       )}
@@ -154,7 +144,7 @@ export function ReceiverHomePage() {
           </div>
           {!wsConnected && (
             <p className="mt-3 text-xs text-raid-text-secondary">
-              Check server URL in Settings, then sign out and sign in again.
+              Check server URL in Device settings, then sign out and sign in again.
             </p>
           )}
         </Card>
@@ -184,16 +174,21 @@ export function ReceiverHomePage() {
       </div>
 
       <Card accentHeader>
-        <h2 className="mb-2 text-lg font-semibold text-raid-text">Web dashboard</h2>
+        <h2 className="mb-2 text-lg font-semibold text-raid-text">Quick actions</h2>
         <p className="mb-4 text-sm text-raid-text-secondary">
-          Create rooms, upload media, and send pranks from your browser — signed in as{' '}
-          <strong>@{user?.username}</strong>.
+          Send raids and manage media without leaving the app.
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <code className="rounded-lg bg-raid-surface px-2 py-1 text-sm text-raid-accent">{webUrl}</code>
-          <Button variant="secondary" onClick={() => void open(webUrl).catch(() => undefined)}>
-            <ExternalLink size={16} />
-            Open dashboard
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => navigate('/rooms')}>
+            <DoorOpen size={16} />
+            Rooms
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/media')}>
+            <Image size={16} />
+            Media library
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/device')}>
+            Device settings
           </Button>
         </div>
       </Card>
@@ -211,9 +206,6 @@ export function ReceiverHomePage() {
         </Button>
         <Button variant="secondary" onClick={() => void handleTestOverlay()} disabled={!inTauri}>
           Test overlay
-        </Button>
-        <Button variant="secondary" onClick={() => navigate('/settings')}>
-          Receiver settings
         </Button>
       </div>
 

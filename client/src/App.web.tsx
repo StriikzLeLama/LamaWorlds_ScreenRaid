@@ -13,6 +13,7 @@ import { MediaLibraryPage } from './pages/MediaLibraryPage';
 import { WebSettingsPage } from './pages/WebSettingsPage';
 import { RoomPage } from './pages/RoomPage';
 import { AdminPage } from './pages/AdminPage';
+import { JoinInvitePage } from './pages/JoinInvitePage';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAdminBootstrap } from './hooks/useAdminBootstrap';
 import { useSessionBootstrap } from './hooks/useSessionBootstrap';
@@ -33,7 +34,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) {
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (next?.startsWith('/')) return <Navigate to={next} replace />;
+    return <Navigate to="/" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -51,6 +56,7 @@ export function AppWeb() {
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
         </Route>
+        <Route path="/join" element={<JoinInvitePage />} />
         <Route
           element={
             <ProtectedRoute>

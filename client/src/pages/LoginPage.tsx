@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { Card, Button, Input } from '../components/ui';
 import { TurnstileWidget } from '../components/auth/TurnstileWidget';
@@ -19,6 +19,7 @@ import {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const login = useAuthStore((s) => s.login);
   const setIsAdmin = useAuthStore((s) => s.setIsAdmin);
   const [serverUrl, setServerUrl] = useState(getServerUrl());
@@ -79,7 +80,8 @@ export function LoginPage() {
     } catch {
       setIsAdmin(false);
     }
-    navigate('/', { replace: true });
+    const next = searchParams.get('next');
+    navigate(next?.startsWith('/') ? next : '/', { replace: true });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -146,12 +148,10 @@ export function LoginPage() {
             className="mx-auto mb-4 h-16 w-16 rounded-2xl object-cover shadow-lg shadow-black/40"
             draggable={false}
           />
-          <h1 className="text-2xl font-bold text-raid-text">
-            {isReceiverApp() ? 'ScreenRaid Receiver' : 'Welcome to ScreenRaid'}
-          </h1>
+          <h1 className="text-2xl font-bold text-raid-text">Welcome to ScreenRaid</h1>
           <p className="mt-1 text-sm text-raid-text-secondary">
             {isReceiverApp()
-              ? 'Sign in to receive overlays on this PC'
+              ? 'Sign in to manage rooms, send raids, and receive overlays on this PC'
               : 'Sign in to your prank dashboard'}
           </p>
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-raid-border bg-raid-surface px-2.5 py-1 text-[11px]">

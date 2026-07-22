@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Card, Button, Input, Badge, Modal } from '../components/ui';
 import { ApiError } from '../services/api';
 import { createRoom, joinRoom, joinRoomByToken, listRooms } from '../services/rooms';
+import { extractInvitePayload } from '../lib/invites';
 import type { RoomSummary } from '../types/room';
 
 export function RoomsPage() {
@@ -47,12 +48,15 @@ export function RoomsPage() {
 
   const handleJoin = async () => {
     try {
-      const raw = inviteCode.trim();
-      // Long tokens are guest invite links; short codes are classic room codes.
-      if (raw.length > 10) {
-        await joinRoomByToken(raw);
+      const payload = extractInvitePayload(inviteCode);
+      if (!payload.value) {
+        setError('Enter an invite code or paste a guest link');
+        return;
+      }
+      if (payload.kind === 'token') {
+        await joinRoomByToken(payload.value);
       } else {
-        await joinRoom(raw.toUpperCase());
+        await joinRoom(payload.value.toUpperCase());
       }
       setShowJoin(false);
       setInviteCode('');
@@ -130,13 +134,13 @@ export function RoomsPage() {
       <Modal open={showJoin} onClose={() => setShowJoin(false)} title="Join Room">
         <div className="space-y-4">
           <Input
-            label="Invite code or guest link token"
+            label="Invite code or guest link"
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
-            placeholder="ABC12345 or long guest token"
+            placeholder="ABC12345 or https://…/join?invite=…"
             className="font-mono"
           />
-          <Button className="w-full" onClick={handleJoin} disabled={inviteCode.trim().length < 6}>
+          <Button className="w-full" onClick={handleJoin} disabled={inviteCode.trim().length < 4}>
             Join
           </Button>
         </div>

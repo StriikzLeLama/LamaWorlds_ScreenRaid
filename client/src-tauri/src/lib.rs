@@ -1,7 +1,9 @@
 mod commands;
 mod tray;
 
-use commands::media_cache::{clear_media_cache, remove_media_cache_file, write_media_cache};
+use commands::media_cache::{
+    clear_media_cache, remove_media_cache_file, write_media_cache, write_media_cache_chunk,
+};
 use commands::monitor::{collect_monitors, resolve_preferred_monitor};
 use commands::overlay::{
     debug_log, get_active_overlays, hide_overlay, overlay_surface_idle, panic_hide_all,
@@ -121,6 +123,7 @@ pub fn run() {
             sync_overlays_for_monitor,
             debug_log,
             write_media_cache,
+            write_media_cache_chunk,
             remove_media_cache_file,
             clear_media_cache,
         ])

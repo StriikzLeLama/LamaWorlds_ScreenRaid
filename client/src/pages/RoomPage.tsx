@@ -31,6 +31,7 @@ import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
+import { inviteShareUrl } from '../lib/invites';
 import { RoomSecurityPanel } from '../components/settings/RoomSecurityPanel';
 import { RoomMembersPanel } from '../components/room/RoomMembersPanel';
 import {
@@ -1082,7 +1083,9 @@ export function RoomPage() {
                       className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-raid-surface px-3 py-2 text-sm"
                     >
                       <div className="min-w-0">
-                        <code className="text-raid-accent">{inv.token}</code>
+                        <code className="break-all text-xs text-raid-accent">
+                          {inviteShareUrl(inv.token)}
+                        </code>
                         <p className="text-xs text-raid-text-secondary">
                           {inv.role} · {inv.use_count}/{inv.max_uses} uses
                           {inv.expires_at
@@ -1094,9 +1097,11 @@ export function RoomPage() {
                         <Button
                           variant="ghost"
                           className="!px-2 !py-1 text-xs"
-                          onClick={() => void navigator.clipboard.writeText(inv.token)}
+                          onClick={() =>
+                            void navigator.clipboard.writeText(inviteShareUrl(inv.token))
+                          }
                         >
-                          Copy
+                          Copy link
                         </Button>
                         <Button
                           variant="danger"

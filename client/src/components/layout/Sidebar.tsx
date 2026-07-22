@@ -8,6 +8,8 @@ import {
   DoorOpen,
   LogOut,
   Shield,
+  Monitor,
+  Radio,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BrandLogo } from '../BrandLogo';
@@ -25,6 +27,11 @@ const baseNavItems = [
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
+const desktopExtraNav = [
+  { to: '/receiver', icon: Radio, label: 'Receiver' },
+  { to: '/device', icon: Monitor, label: 'Device' },
+];
+
 export function Sidebar() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -32,14 +39,29 @@ export function Sidebar() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const pause = useConsentStore((s) => s.pause);
+  const desktop = isReceiverApp();
 
-  const navItems = isAdmin
-    ? [...baseNavItems.slice(0, 4), { to: '/admin', icon: Shield, label: 'Admin' }, ...baseNavItems.slice(4)]
-    : baseNavItems;
+  let navItems = [...baseNavItems];
+  if (desktop) {
+    navItems = [
+      ...baseNavItems.slice(0, 4),
+      ...desktopExtraNav,
+      ...baseNavItems.slice(4),
+    ];
+  }
+  if (isAdmin) {
+    const settingsIdx = navItems.findIndex((i) => i.to === '/settings');
+    const insertAt = settingsIdx >= 0 ? settingsIdx : navItems.length;
+    navItems = [
+      ...navItems.slice(0, insertAt),
+      { to: '/admin', icon: Shield, label: 'Admin' },
+      ...navItems.slice(insertAt),
+    ];
+  }
 
   const handlePanic = async () => {
     try {
-      if (isReceiverApp()) {
+      if (desktop) {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('panic_hide_all');
       }
@@ -62,10 +84,10 @@ export function Sidebar() {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-raid-border bg-raid-surface">
       <div className="border-b border-raid-border px-4 py-3">
-        <BrandLogo size={36} withWordmark subtitle="Dashboard" />
+        <BrandLogo size={36} withWordmark subtitle={desktop ? 'Desktop' : 'Dashboard'} />
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -105,7 +127,7 @@ export function Sidebar() {
         )}
         <Button variant="danger" className="w-full" onClick={handlePanic}>
           <ShieldAlert size={18} />
-          {isReceiverApp() ? 'Panic — Hide All' : 'Pause receiving'}
+          {desktop ? 'Panic — Hide All' : 'Pause receiving'}
         </Button>
         <Button variant="ghost" className="w-full" onClick={handleLogout}>
           <LogOut size={18} />

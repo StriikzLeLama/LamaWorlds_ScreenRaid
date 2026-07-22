@@ -105,8 +105,16 @@ impl PrankService {
                 if media_room != Some(room_id) {
                     return Err(AppError::Forbidden);
                 }
+            } else if media_room.is_none() {
+                // Share personal uploads with the room so targets can download the file.
+                self.media.set_room_id(media_id, room_id).await?;
             }
 
+            let row = self
+                .media
+                .find_by_id(media_id)
+                .await?
+                .ok_or_else(|| AppError::NotFound("media".into()))?;
             let m = row_to_media(row, "");
             Some(MediaRef {
                 id: m.id,

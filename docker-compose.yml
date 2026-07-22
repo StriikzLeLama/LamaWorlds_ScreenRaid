@@ -11,7 +11,7 @@ services:
       - DATABASE_URL=sqlite:///data/screenraid.db
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
       - STORAGE_PATH=/data/media
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:1420,tauri://localhost}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:1420,https://tauri.localhost,tauri://localhost,https://screenraid.lama-worlds.com}
       - ADMIN_USERNAMES=${ADMIN_USERNAMES:-}
       - ALLOW_SELF_PRANK=${ALLOW_SELF_PRANK:-false}
       - KLIPY_API_KEY=${KLIPY_API_KEY:-}

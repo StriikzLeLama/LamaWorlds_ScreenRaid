@@ -164,7 +164,7 @@ export function ReceiverSettingsPage() {
   if (!settings) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-raid-text">Receiver settings</h1>
+        <h1 className="text-2xl font-bold text-raid-text">Device settings</h1>
         <p className="text-sm text-raid-text-secondary">Loading settings…</p>
       </div>
     );
@@ -173,7 +173,7 @@ export function ReceiverSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-raid-text">Receiver settings</h1>
+        <h1 className="text-2xl font-bold text-raid-text">Device settings</h1>
         <p className="text-sm text-raid-text-secondary">
           Server connection, cache, and overlay defaults for the desktop receiver.
         </p>

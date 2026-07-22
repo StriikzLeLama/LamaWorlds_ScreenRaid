@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
 import { TurnstileWidget } from '../components/auth/TurnstileWidget';
 import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
@@ -12,6 +12,7 @@ import { authErrorMessage } from '../lib/authErrors';
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const login = useAuthStore((s) => s.login);
   const setIsAdmin = useAuthStore((s) => s.setIsAdmin);
   const [serverUrl, setServerUrl] = useState(getServerUrl());
@@ -65,7 +66,8 @@ export function RegisterPage() {
       } catch {
         setIsAdmin(false);
       }
-      navigate('/', { replace: true });
+      const next = searchParams.get('next');
+      navigate(next?.startsWith('/') ? next : '/', { replace: true });
     } catch (err) {
       setError(authErrorMessage(err, 'Registration failed'));
     } finally {

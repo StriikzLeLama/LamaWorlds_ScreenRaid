@@ -75,6 +75,20 @@ impl MediaService {
         let hash = format!("{:x}", Sha256::digest(data));
 
         if let Some(existing) = self.repo.find_by_hash(user_id, &hash).await? {
+            // Dedup can return an older personal copy — bind it to the room when needed.
+            if let Some(rid) = room_id {
+                if existing.room_id.is_none() {
+                    let existing_id = Uuid::parse_str(&existing.id)
+                        .map_err(|_| AppError::Internal("bad media id".into()))?;
+                    self.repo.set_room_id(existing_id, rid).await?;
+                    let updated = self
+                        .repo
+                        .find_by_id(existing_id)
+                        .await?
+                        .unwrap_or(existing);
+                    return Ok(row_to_media(updated, ""));
+                }
+            }
             return Ok(row_to_media(existing, ""));
         }
 
@@ -186,6 +200,15 @@ impl MediaService {
             self.rooms.is_member(room_id, user_id).await?.is_some()
         } else {
             false
+        };
+
+        // Personal library media used in a room prank — allow room members to download.
+        let can_access = if can_access {
+            true
+        } else {
+            self.repo
+                .is_accessible_via_prank(media_id, user_id)
+                .await?
         };
 
         if !can_access {

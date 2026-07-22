@@ -93,6 +93,38 @@ impl MediaRepository {
         Ok(row)
     }
 
+    /// Bind personal media to a room so other members can download it for pranks.
+    pub async fn set_room_id(&self, id: Uuid, room_id: Uuid) -> Result<(), AppError> {
+        sqlx::query(
+            "UPDATE media SET room_id = ? WHERE id = ? AND (room_id IS NULL OR room_id = ?)",
+        )
+        .bind(room_id.to_string())
+        .bind(id.to_string())
+        .bind(room_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// True if `user_id` is in a room that already used this media in a prank.
+    pub async fn is_accessible_via_prank(
+        &self,
+        media_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<bool, AppError> {
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT 1 FROM pranks p
+             INNER JOIN room_members rm ON rm.room_id = p.room_id AND rm.user_id = ?
+             WHERE p.media_id = ?
+             LIMIT 1",
+        )
+        .bind(user_id.to_string())
+        .bind(media_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.is_some())
+    }
+
     pub async fn list_for_user(
         &self,
         uploader_id: Uuid,

@@ -4244,7 +4244,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "screenraid-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "log",
@@ -4268,7 +4268,7 @@ dependencies = [
 
 [[package]]
 name = "screenraid-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argon2",
  "axum",
@@ -4301,7 +4301,7 @@ dependencies = [
 
 [[package]]
 name = "screenraid-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
@@ -4311,7 +4311,7 @@ dependencies = [
 
 [[package]]
 name = "screenraid-validation"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "screenraid-types",
  "thiserror 2.0.18",

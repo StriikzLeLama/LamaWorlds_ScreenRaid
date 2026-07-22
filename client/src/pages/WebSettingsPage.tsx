@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
 import { ReceiveRaidsToggle } from '../components/ReceiveRaidsToggle';
 import { ApiError } from '../services/api';
@@ -15,6 +15,7 @@ import { clearLocalSession } from '../services/session';
 import { useConsentStore } from '../stores/consentStore';
 import { useAuthStore } from '../stores/authStore';
 import { SecuritySettingsPanels } from '../components/settings/SecuritySettingsPanels';
+import { isReceiverApp } from '../lib/platform';
 
 function errMsg(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -180,7 +181,9 @@ export function WebSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-raid-text">Settings</h1>
         <p className="text-sm text-raid-text-secondary">
-          Compte, sécurité et réception des raids. Les overlays passent par l’app desktop.
+          {isReceiverApp()
+            ? 'Compte, sécurité et réception des raids. Réglages moniteur / cache → Device.'
+            : 'Compte, sécurité et réception des raids. Les overlays passent par l’app desktop.'}
         </p>
       </div>
 
@@ -312,14 +315,37 @@ export function WebSettingsPage() {
           </form>
         </Card>
 
-        <Card className="lg:col-span-2" accentHeader>
-          <h2 className="mb-2 text-lg font-semibold text-raid-text">Desktop receiver</h2>
-          <p className="text-sm text-raid-text-secondary">
-            Overlays are rendered by the ScreenRaid desktop app (Tauri). This website manages rooms,
-            friends, media, and sending pranks. Run <code className="text-raid-accent">npm run tauri:dev</code>{' '}
-            on your PC, sign in with the same account, and turn on Receive raids in the receiver.
-          </p>
-        </Card>
+        {isReceiverApp() ? (
+          <Card className="lg:col-span-2" accentHeader>
+            <h2 className="mb-2 text-lg font-semibold text-raid-text">Overlays & device</h2>
+            <p className="mb-3 text-sm text-raid-text-secondary">
+              Moniteur, cache média, autostart et quiet hours sont dans Device. Le statut live est
+              sous Receiver.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                to="/device"
+                className="rounded-xl border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-accent hover:bg-raid-card"
+              >
+                Device settings
+              </Link>
+              <Link
+                to="/receiver"
+                className="rounded-xl border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-accent hover:bg-raid-card"
+              >
+                Receiver status
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <Card className="lg:col-span-2" accentHeader>
+            <h2 className="mb-2 text-lg font-semibold text-raid-text">Desktop app</h2>
+            <p className="text-sm text-raid-text-secondary">
+              Les overlays s’affichent via l’app ScreenRaid desktop. Installe-la, connecte-toi avec
+              le même compte, et active Receive raids.
+            </p>
+          </Card>
+        )}
 
         {accessToken && (
           <SecuritySettingsPanels

@@ -5,8 +5,8 @@ import { appFetch } from './appFetch';
 import { log } from '../lib/log';
 
 const DB_URL = 'sqlite:screenraid-client.db';
-/** Above this size, skip IPC disk cache (Array.from blows up) and use a blob URL. */
-const BLOB_CACHE_THRESHOLD = 1_500_000;
+/** Chunk size for IPC disk writes (avoid freezing on large GIFs). */
+const WRITE_CHUNK = 256 * 1024;
 
 let dbPromise: Promise<Database> | null = null;
 
@@ -32,12 +32,8 @@ function extensionFromMime(mime: string): string {
   return map[mime] ?? mime.split('/').pop() ?? 'bin';
 }
 
-function blobUrlFromBuffer(buffer: ArrayBuffer, mime: string): string {
-  return URL.createObjectURL(new Blob([buffer], { type: mime || 'application/octet-stream' }));
-}
-
 export interface ResolvedMedia {
-  /** URL for WebView (asset protocol or blob). */
+  /** URL for WebView (asset protocol). Must be convertFileSrc — blob URLs fail in overlay webviews. */
   mediaUrl: string;
   /** Absolute path on disk when cached locally. */
   localPath: string | null;
@@ -89,6 +85,34 @@ async function touchCacheEntry(mediaId: string): Promise<void> {
   );
 }
 
+/** Write bytes to disk in chunks so large GIFs don't freeze on Array.from(IPC). */
+async function writeToDiskCache(
+  mediaId: string,
+  buffer: ArrayBuffer,
+  extension: string,
+): Promise<string> {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.byteLength <= WRITE_CHUNK) {
+    return invoke<string>('write_media_cache', {
+      mediaId,
+      bytes: Array.from(bytes),
+      extension,
+    });
+  }
+
+  let localPath = '';
+  for (let offset = 0; offset < bytes.byteLength; offset += WRITE_CHUNK) {
+    const slice = bytes.subarray(offset, Math.min(offset + WRITE_CHUNK, bytes.byteLength));
+    localPath = await invoke<string>('write_media_cache_chunk', {
+      mediaId,
+      bytes: Array.from(slice),
+      extension,
+      append: offset > 0,
+    });
+  }
+  return localPath;
+}
+
 /** Download (or reuse) authenticated media and return a displayable URL. */
 export async function resolveMediaForPrank(
   media: {
@@ -117,19 +141,8 @@ export async function resolveMediaForPrank(
   const buffer = await response.arrayBuffer();
   const ext = extensionFromMime(media.mime_type);
 
-  // Large GIFs: blob URL immediately — Array.from(bytes) over IPC can freeze/fail.
-  if (buffer.byteLength > BLOB_CACHE_THRESHOLD) {
-    log.info('media using blob URL (size)', buffer.byteLength);
-    return { mediaUrl: blobUrlFromBuffer(buffer, media.mime_type), localPath: null };
-  }
-
   try {
-    const bytes = new Uint8Array(buffer);
-    const localPath = await invoke<string>('write_media_cache', {
-      mediaId: media.id,
-      bytes: Array.from(bytes),
-      extension: ext,
-    });
+    const localPath = await writeToDiskCache(media.id, buffer, ext);
 
     await recordCacheEntry(
       media.id,
@@ -142,8 +155,8 @@ export async function resolveMediaForPrank(
 
     return { mediaUrl: convertFileSrc(localPath), localPath };
   } catch (e) {
-    log.warn('media cache write failed — falling back to blob', e);
-    return { mediaUrl: blobUrlFromBuffer(buffer, media.mime_type), localPath: null };
+    log.warn('media cache write failed', e);
+    return null;
   }
 }
 

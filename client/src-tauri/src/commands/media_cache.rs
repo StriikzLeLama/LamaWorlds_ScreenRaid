@@ -1,14 +1,8 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use tauri::{AppHandle, Manager};
 
-/// Write downloaded media bytes to the app cache directory.
-#[tauri::command]
-pub fn write_media_cache(
-    app: AppHandle,
-    media_id: String,
-    bytes: Vec<u8>,
-    extension: String,
-) -> Result<String, String> {
+fn media_cache_path(app: &AppHandle, media_id: &str, extension: &str) -> Result<std::path::PathBuf, String> {
     let dir = app
         .path()
         .app_cache_dir()
@@ -18,12 +12,46 @@ pub fn write_media_cache(
 
     let ext = extension.trim_start_matches('.');
     let filename = if ext.is_empty() {
-        media_id.clone()
+        media_id.to_string()
     } else {
         format!("{media_id}.{ext}")
     };
-    let path = dir.join(filename);
+    Ok(dir.join(filename))
+}
+
+/// Write downloaded media bytes to the app cache directory.
+#[tauri::command]
+pub fn write_media_cache(
+    app: AppHandle,
+    media_id: String,
+    bytes: Vec<u8>,
+    extension: String,
+) -> Result<String, String> {
+    let path = media_cache_path(&app, &media_id, &extension)?;
     fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Append (or create) a media cache file in chunks — avoids huge IPC arrays freezing the UI.
+#[tauri::command]
+pub fn write_media_cache_chunk(
+    app: AppHandle,
+    media_id: String,
+    bytes: Vec<u8>,
+    extension: String,
+    append: bool,
+) -> Result<String, String> {
+    let path = media_cache_path(&app, &media_id, &extension)?;
+    if !append {
+        fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    } else {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        file.write_all(&bytes).map_err(|e| e.to_string())?;
+    }
     Ok(path.to_string_lossy().into_owned())
 }
 
