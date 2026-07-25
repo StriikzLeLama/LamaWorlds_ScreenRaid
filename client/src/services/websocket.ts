@@ -1,4 +1,4 @@
-import { getWebSocketUrl, onServerUrlChange } from './serverConfig';
+import { getWebSocketUrl, hasServerUrl, onServerUrlChange } from './serverConfig';
 import { useAuthStore } from '../stores/authStore';
 import { refreshToken } from './auth';
 import { log } from '../lib/log';
@@ -88,8 +88,18 @@ export function connectWebSocket(): void {
     log.warn('connectWebSocket: no token, abort');
     return;
   }
+  if (!hasServerUrl()) {
+    log.warn('connectWebSocket: no server URL configured, abort');
+    return;
+  }
 
-  const base = getWebSocketUrl();
+  let base: string;
+  try {
+    base = getWebSocketUrl();
+  } catch (e) {
+    log.warn('connectWebSocket: invalid server URL', e);
+    return;
+  }
   if (
     socket?.readyState === WebSocket.OPEN &&
     connectedServerBase === base &&

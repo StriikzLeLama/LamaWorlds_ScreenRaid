@@ -1,4 +1,4 @@
-import { isWebApp } from '../lib/platform';
+import { isTauriRuntime, isWebApp } from '../lib/platform';
 
 function defaultServerUrl(): string {
   if (isWebApp() && typeof window !== 'undefined') {
@@ -39,6 +39,9 @@ export function setServerUrl(url: string): void {
 /** Derive WebSocket base URL from HTTP(S) server URL. */
 export function toWebSocketBase(httpBase: string): string {
   const trimmed = httpBase.trim().replace(/\/$/, '');
+  if (!trimmed) {
+    throw new Error('Server URL is empty — set it in Device settings');
+  }
   if (trimmed.startsWith('https://')) {
     return trimmed.replace(/^https:\/\//, 'wss://');
   }
@@ -53,6 +56,12 @@ export function toWebSocketBase(httpBase: string): string {
 
 export function getWebSocketUrl(): string {
   return toWebSocketBase(getServerUrl());
+}
+
+/** True when a usable API base URL is configured. */
+export function hasServerUrl(): boolean {
+  const url = getServerUrl().trim();
+  return url.startsWith('http://') || url.startsWith('https://');
 }
 
 export function normalizeServerUrl(
@@ -97,6 +106,7 @@ export async function persistServerUrl(url: string): Promise<string> {
 
 /** Apply persisted Tauri settings before the first API call. */
 export async function loadServerUrlFromSettings(): Promise<void> {
+  if (!isTauriRuntime()) return;
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     const settings = await invoke<{ server_url?: string }>('get_settings');
@@ -104,6 +114,6 @@ export async function loadServerUrlFromSettings(): Promise<void> {
       setServerUrl(settings.server_url);
     }
   } catch {
-    // Non-Tauri dev (browser-only) falls back to VITE_SERVER_URL.
+    // Settings unavailable — keep VITE_SERVER_URL / empty default.
   }
 }

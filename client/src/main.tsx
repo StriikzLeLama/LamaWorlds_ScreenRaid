@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { AppReceiver } from './App.receiver';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { loadServerUrlFromSettings } from './services/serverConfig';
 import { checkForAppUpdates } from './services/updater';
 import { isTauriRuntime, isWebApp } from './lib/platform';
@@ -15,11 +16,18 @@ async function bootstrap() {
   if (!isTauriRuntime()) {
     log.warn('main.tsx: NOT running in Tauri runtime — overlays/invoke will fail. Run npm run tauri:dev');
   }
-  await loadServerUrlFromSettings();
+  await Promise.race([
+    loadServerUrlFromSettings(),
+    new Promise<void>((resolve) => window.setTimeout(resolve, 2000)),
+  ]);
   const { getServerUrl } = await import('./services/serverConfig');
   log.info('main.tsx server url after load =', getServerUrl());
   void checkForAppUpdates();
-  createRoot(document.getElementById('root')!).render(<AppReceiver />);
+  createRoot(document.getElementById('root')!).render(
+    <ErrorBoundary>
+      <AppReceiver />
+    </ErrorBoundary>,
+  );
 }
 
 void bootstrap();

@@ -1,8 +1,9 @@
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, type Window } from '@tauri-apps/api/window';
 import { Minus, Square, X } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { useAppVersion } from '../../lib/version';
 import { useT } from '../../hooks/useT';
+import { isTauriRuntime } from '../../lib/platform';
 
 function windowAction(action: () => Promise<void>): void {
   void action().catch((err) => {
@@ -10,10 +11,25 @@ function windowAction(action: () => Promise<void>): void {
   });
 }
 
+function tryGetWindow(): Window | null {
+  if (!isTauriRuntime()) return null;
+  try {
+    return getCurrentWindow();
+  } catch {
+    return null;
+  }
+}
+
 export function TitleBar() {
-  const appWindow = getCurrentWindow();
   const version = useAppVersion();
   const t = useT();
+  // Guard: getCurrentWindow() throws outside Tauri and blanks the whole UI.
+  const appWindow = tryGetWindow();
+
+  const run = (fn: (w: Window) => Promise<void>) => {
+    if (!appWindow) return;
+    windowAction(() => fn(appWindow));
+  };
 
   return (
     <div className="flex h-10 shrink-0 items-center justify-between border-b border-raid-border bg-raid-surface px-3">
@@ -35,7 +51,7 @@ export function TitleBar() {
         <button
           type="button"
           aria-label="Minimize"
-          onClick={() => windowAction(() => appWindow.minimize())}
+          onClick={() => run((w) => w.minimize())}
           className="rounded-lg p-1.5 text-raid-text-secondary transition-colors hover:bg-raid-card hover:text-raid-text"
         >
           <Minus size={16} />
@@ -43,7 +59,7 @@ export function TitleBar() {
         <button
           type="button"
           aria-label="Maximize"
-          onClick={() => windowAction(() => appWindow.toggleMaximize())}
+          onClick={() => run((w) => w.toggleMaximize())}
           className="rounded-lg p-1.5 text-raid-text-secondary transition-colors hover:bg-raid-card hover:text-raid-text"
         >
           <Square size={14} />
@@ -52,7 +68,7 @@ export function TitleBar() {
           type="button"
           aria-label={t('titleBar.minimizeToTray')}
           title={t('titleBar.minimizeToTrayTitle')}
-          onClick={() => windowAction(() => appWindow.hide())}
+          onClick={() => run((w) => w.hide())}
           className="rounded-lg p-1.5 text-raid-text-secondary transition-colors hover:bg-raid-danger hover:text-white"
         >
           <X size={16} />
