@@ -4,7 +4,7 @@ function defaultServerUrl(): string {
   if (isWebApp() && typeof window !== 'undefined') {
     return window.location.origin;
   }
-  return import.meta.env.VITE_SERVER_URL?.replace(/\/$/, '') ?? 'https://screenraid.lama-worlds.com';
+  return import.meta.env.VITE_SERVER_URL?.replace(/\/$/, '') ?? '';
 }
 
 const DEFAULT_SERVER = defaultServerUrl();

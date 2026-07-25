@@ -4,6 +4,7 @@ import { Eye, EyeOff, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { Card, Button, Input } from '../components/ui';
 import { TurnstileWidget } from '../components/auth/TurnstileWidget';
 import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { useAuthStore } from '../stores/authStore';
 import { getMe, login as loginApi, verify2faLogin } from '../services/auth';
 import { loginResponseToAuth } from '../types/auth';
@@ -16,8 +17,10 @@ import {
   loadLastUsername,
   saveLastUsername,
 } from '../lib/authErrors';
+import { useT } from '../hooks/useT';
 
 export function LoginPage() {
+  const t = useT();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const login = useAuthStore((s) => s.login);
@@ -94,7 +97,7 @@ export function LoginPage() {
       const cleanUser = username.trim();
       const cleanPassword = password.trim();
       if (!cleanUser || !cleanPassword) {
-        setError('Username et mot de passe requis.');
+        setError(t('auth.usernamePasswordRequired'));
         return;
       }
       if (requires2fa) {
@@ -103,7 +106,7 @@ export function LoginPage() {
         return;
       }
       if (showTurnstile && turnstileSiteKey && !turnstileToken) {
-        setError('Complète le captcha.');
+        setError(t('auth.completeCaptcha'));
         return;
       }
       const res = await loginApi({
@@ -119,9 +122,7 @@ export function LoginPage() {
       }
       const auth = loginResponseToAuth(res);
       if (!auth) {
-        setError(
-          'Réponse serveur inattendue. Redéploie le server / rebuild le client.',
-        );
+        setError(t('auth.unexpectedServerResponse'));
         return;
       }
       await finishLogin(auth);
@@ -142,6 +143,9 @@ export function LoginPage() {
     <div className="flex min-h-full w-full items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <div className="mb-6 text-center">
+          <div className="mb-3 flex justify-end">
+            <LanguageSelector compact />
+          </div>
           <img
             src="/logo.png"
             alt="LamaWorlds"
@@ -209,10 +213,10 @@ export function LoginPage() {
           ) : (
             <>
               <p className="rounded-xl border border-raid-accent/30 bg-raid-accent/10 px-3 py-2 text-sm text-raid-text">
-                2FA requis pour <strong>@{username.trim() || '…'}</strong> — code app ou recovery.
+                {t('auth.twoFaRequired', { user: username.trim() || '…' })}
               </p>
               <Input
-                label="Code 2FA"
+                label={t('auth.twoFaCode')}
                 value={totpCode}
                 onChange={(e) => setTotpCode(e.target.value)}
                 placeholder="123456"

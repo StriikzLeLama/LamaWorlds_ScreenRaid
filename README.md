@@ -2,7 +2,7 @@
 
 Consent-based social prank platform for friends: send temporary overlays (GIF, image, video, sound, text) to each other’s screens — only if they opted in.
 
-**Live stack (Lama Worlds):** dashboard at [screenraid.lama-worlds.com](https://screenraid.lama-worlds.com) · Windows receiver with auto-update.
+Self-host the server, then point the web dashboard and desktop receiver at your own URL (no default remote server).
 
 ## How it works
 

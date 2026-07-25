@@ -5,8 +5,10 @@ import { Card, Button, Input, Badge, Modal } from '../components/ui';
 import { ApiError } from '../services/api';
 import { createRoom, joinRoomById, listRooms } from '../services/rooms';
 import type { RoomSummary } from '../types/room';
+import { useT } from '../hooks/useT';
 
 export function RoomsPage() {
+  const t = useT();
   const navigate = useNavigate();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,9 +66,7 @@ export function RoomsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-raid-text">Rooms</h1>
-          <p className="text-sm text-raid-text-secondary">
-            Toutes les rooms entre potes — rejoins en un clic
-          </p>
+          <p className="text-sm text-raid-text-secondary">{t('rooms.subtitle')}</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>
           <Plus size={18} />
@@ -85,7 +85,7 @@ export function RoomsPage() {
       ) : rooms.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-raid-text-secondary">Aucune room pour l’instant.</p>
+            <p className="text-raid-text-secondary">{t('rooms.empty')}</p>
             <div className="mt-4">
               <Button onClick={() => setShowCreate(true)}>Create Room</Button>
             </div>

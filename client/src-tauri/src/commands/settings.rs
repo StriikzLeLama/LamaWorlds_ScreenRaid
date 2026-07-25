@@ -55,7 +55,7 @@ impl Default for AppSettings {
             default_animation: "fade".into(),
             cache_limit_mb: 500,
             panic_hotkey: "Ctrl+Shift+Escape".into(),
-            server_url: "https://screenraid.lama-worlds.com".into(),
+            server_url: String::new(),
             selected_monitor: "primary".into(),
             force_preferred_monitor: false,
             soft_mode: false,
@@ -84,8 +84,9 @@ impl SettingsStore {
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default();
 
-        if settings.server_url == "http://localhost:8080" {
-            settings.server_url = AppSettings::default().server_url;
+        // Clear former private-stack default so public builds don't auto-connect there.
+        if settings.server_url == "https://screenraid.lama-worlds.com" {
+            settings.server_url = String::new();
             let _ = fs::write(
                 &path,
                 serde_json::to_string_pretty(&settings).unwrap_or_default(),

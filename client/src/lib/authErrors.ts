@@ -1,23 +1,30 @@
 import { ApiError } from '../services/api';
 import { getServerUrl } from '../services/serverConfig';
+import { translate, type Locale } from '../i18n';
+import { useLocaleStore } from '../stores/localeStore';
+
+function currentLocale(): Locale {
+  return useLocaleStore.getState().locale;
+}
 
 /** Shared auth error copy for login / register. */
 export function authErrorMessage(err: unknown, fallback = 'Request failed'): string {
+  const locale = currentLocale();
   if (err instanceof ApiError) {
     if (err.status === 401 || err.code === 'UNAUTHORIZED') {
-      return 'Identifiants incorrects (username ou mot de passe).';
+      return translate(locale, 'auth.invalidCredentials');
     }
     if (err.status === 429 || err.code === 'RATE_LIMITED') {
-      return 'Trop de tentatives. Réessaie dans ~1 minute.';
+      return translate(locale, 'auth.rateLimited');
     }
     if (err.status === 403 || err.code === 'FORBIDDEN') {
-      return 'Compte désactivé. Demande à un admin de le réactiver.';
+      return translate(locale, 'auth.accountDisabled');
     }
     if (err.status === 409 || err.code === 'CONFLICT') {
-      return err.message || 'Ce username ou email est déjà pris.';
+      return err.message || translate(locale, 'auth.usernameTaken');
     }
     if (err.status === 400 || err.code === 'VALIDATION_ERROR') {
-      return err.message || 'Données invalides.';
+      return err.message || translate(locale, 'auth.invalidData');
     }
     return err.message || fallback;
   }
@@ -25,7 +32,7 @@ export function authErrorMessage(err: unknown, fallback = 'Request failed'): str
     err instanceof TypeError ||
     (err instanceof Error && /fetch|network|Failed to fetch/i.test(err.message))
   ) {
-    return `Impossible de joindre le serveur (${getServerUrl()}). Vérifie l’URL / le tunnel.`;
+    return translate(locale, 'auth.cannotReachServer', { url: getServerUrl() || '—' });
   }
   if (err instanceof Error) return err.message;
   return fallback;

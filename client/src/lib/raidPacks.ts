@@ -3,7 +3,7 @@ import type { Animation, OverlayType } from '../services/pranks';
 export interface RaidPack {
   id: string;
   label: string;
-  description: string;
+  descriptionKey: string;
   overlayType: OverlayType;
   animation: Animation;
   durationMs: number;
@@ -19,7 +19,7 @@ export const RAID_PACKS: RaidPack[] = [
   {
     id: 'hello-text',
     label: 'Hello pop',
-    description: 'Texte + pop + son',
+    descriptionKey: 'packs.helloDesc',
     overlayType: 'text',
     animation: 'pop',
     durationMs: 4000,
@@ -29,7 +29,7 @@ export const RAID_PACKS: RaidPack[] = [
   {
     id: 'shake-alert',
     label: 'Shake alert',
-    description: 'Texte secoué',
+    descriptionKey: 'packs.shakeDesc',
     overlayType: 'text',
     animation: 'shake',
     durationMs: 3500,
@@ -39,7 +39,7 @@ export const RAID_PACKS: RaidPack[] = [
   {
     id: 'gif-bounce',
     label: 'GIF bounce',
-    description: 'Choisir un GIF + bounce',
+    descriptionKey: 'packs.gifBounceDesc',
     overlayType: 'gif',
     animation: 'bounce',
     durationMs: 6000,
@@ -49,7 +49,7 @@ export const RAID_PACKS: RaidPack[] = [
   {
     id: 'gif-bomb',
     label: 'GIF bomb',
-    description: '5 GIFs en rafale',
+    descriptionKey: 'packs.gifBombDesc',
     overlayType: 'gif',
     animation: 'zoom',
     durationMs: 4500,
@@ -60,7 +60,7 @@ export const RAID_PACKS: RaidPack[] = [
   {
     id: 'slide-meme',
     label: 'Slide meme',
-    description: 'GIF qui slide',
+    descriptionKey: 'packs.slideMemeDesc',
     overlayType: 'gif',
     animation: 'slide_left',
     durationMs: 5000,

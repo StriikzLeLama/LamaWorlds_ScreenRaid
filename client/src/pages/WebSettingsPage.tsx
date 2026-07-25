@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
 import { ReceiveRaidsToggle } from '../components/ReceiveRaidsToggle';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { ApiError } from '../services/api';
 import {
   changeDisplayName,
@@ -16,6 +17,7 @@ import { useConsentStore } from '../stores/consentStore';
 import { useAuthStore } from '../stores/authStore';
 import { SecuritySettingsPanels } from '../components/settings/SecuritySettingsPanels';
 import { isReceiverApp } from '../lib/platform';
+import { useT } from '../hooks/useT';
 
 function errMsg(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -25,6 +27,7 @@ function errMsg(err: unknown): string {
 
 /** Web dashboard settings — account, receive-raids toggle, sign out. */
 export function WebSettingsPage() {
+  const t = useT();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isAdmin = useAuthStore((s) => s.isAdmin);
@@ -113,7 +116,7 @@ export function WebSettingsPage() {
     setMessage('');
     try {
       if (!profilePassword) {
-        setError('Entre ton mot de passe actuel pour confirmer.');
+        setError(t('settings.enterPasswordToConfirm'));
         return;
       }
       let profile = await getMe(accessToken);
@@ -137,7 +140,7 @@ export function WebSettingsPage() {
       });
       setIsAdmin(Boolean(profile.is_admin));
       setProfilePassword('');
-      setMessage('Profil mis à jour.');
+      setMessage(t('settings.profileUpdated'));
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -153,7 +156,7 @@ export function WebSettingsPage() {
     setMessage('');
     try {
       if (newPassword !== confirmPassword) {
-        setError('Les nouveaux mots de passe ne correspondent pas.');
+        setError(t('settings.passwordsMismatch'));
         return;
       }
       const res = await changePassword(accessToken, {
@@ -166,9 +169,7 @@ export function WebSettingsPage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setMessage(
-        'Mot de passe changé. Les autres appareils ont été déconnectés.',
-      );
+      setMessage(t('settings.passwordChanged'));
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -179,11 +180,9 @@ export function WebSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-raid-text">Settings</h1>
+        <h1 className="text-2xl font-bold text-raid-text">{t('settings.title')}</h1>
         <p className="text-sm text-raid-text-secondary">
-          {isReceiverApp()
-            ? 'Compte, sécurité et réception des raids. Réglages moniteur / cache → Device.'
-            : 'Compte, sécurité et réception des raids. Les overlays passent par l’app desktop.'}
+          {isReceiverApp() ? t('settings.subtitleDesktop') : t('settings.subtitleWeb')}
         </p>
       </div>
 
@@ -202,10 +201,11 @@ export function WebSettingsPage() {
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">Account</h2>
           <p className="text-sm text-raid-text">
-            Connecté en tant que <strong>@{user?.username ?? '—'}</strong>
+            {t('settings.signedInAs')} <strong>@{user?.username ?? '—'}</strong>
           </p>
           <p className="mt-1 text-sm text-raid-text-secondary">
-            Pseudo affiché : <strong className="text-raid-text">{user?.display_name ?? '—'}</strong>
+            {t('settings.displayNameShown')}{' '}
+            <strong className="text-raid-text">{user?.display_name ?? '—'}</strong>
           </p>
           <p className="mt-2 text-sm text-raid-text-secondary">
             Admin panel:{' '}
@@ -227,9 +227,14 @@ export function WebSettingsPage() {
               Sign out
             </Button>
             <Button variant="danger" disabled={busy} onClick={() => void handleLogoutAll()}>
-              Déconnecter tous les appareils
+              {t('settings.signOutAllDevices')}
             </Button>
           </div>
+        </Card>
+
+        <Card>
+          <h2 className="mb-4 text-lg font-semibold text-raid-text">{t('common.language')}</h2>
+          <LanguageSelector />
         </Card>
 
         <Card>
@@ -238,21 +243,18 @@ export function WebSettingsPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-1 text-lg font-semibold text-raid-text">Pseudo & identifiant</h2>
-          <p className="mb-4 text-xs text-raid-text-secondary">
-            Le pseudo est visible dans les rooms. L’identifiant sert à te connecter (3–32, lettres /
-            chiffres / _). Confirmation par mot de passe obligatoire.
-          </p>
+          <h2 className="mb-1 text-lg font-semibold text-raid-text">{t('settings.profileTitle')}</h2>
+          <p className="mb-4 text-xs text-raid-text-secondary">{t('settings.profileHint')}</p>
           <form onSubmit={(e) => void handleSaveProfile(e)} className="space-y-3">
             <Input
-              label="Pseudo (display name)"
+              label={t('settings.displayName')}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               maxLength={64}
               autoComplete="nickname"
             />
             <Input
-              label="Identifiant (username)"
+              label={t('settings.username')}
               value={newUsername}
               onChange={(e) => setNewUsername(e.target.value)}
               minLength={3}
@@ -260,7 +262,7 @@ export function WebSettingsPage() {
               autoComplete="username"
             />
             <Input
-              label="Mot de passe actuel"
+              label={t('settings.currentPassword')}
               type="password"
               value={profilePassword}
               onChange={(e) => setProfilePassword(e.target.value)}
@@ -268,20 +270,17 @@ export function WebSettingsPage() {
               autoComplete="current-password"
             />
             <Button type="submit" disabled={busy}>
-              {busy ? 'Enregistrement…' : 'Enregistrer le profil'}
+              {busy ? t('settings.saving') : t('settings.saveProfile')}
             </Button>
           </form>
         </Card>
 
         <Card>
-          <h2 className="mb-1 text-lg font-semibold text-raid-text">Mot de passe</h2>
-          <p className="mb-4 text-xs text-raid-text-secondary">
-            Min. 10 caractères, au moins une lettre et un chiffre. Change ton mdp déconnecte tous
-            les autres appareils.
-          </p>
+          <h2 className="mb-1 text-lg font-semibold text-raid-text">{t('settings.passwordTitle')}</h2>
+          <p className="mb-4 text-xs text-raid-text-secondary">{t('settings.passwordHint')}</p>
           <form onSubmit={(e) => void handleChangePassword(e)} className="space-y-3">
             <Input
-              label="Mot de passe actuel"
+              label={t('settings.currentPassword')}
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -289,7 +288,7 @@ export function WebSettingsPage() {
               autoComplete="current-password"
             />
             <Input
-              label="Nouveau mot de passe"
+              label={t('settings.newPassword')}
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -297,10 +296,10 @@ export function WebSettingsPage() {
               minLength={10}
               maxLength={128}
               autoComplete="new-password"
-              placeholder="Min. 10 car. · lettre + chiffre"
+              placeholder={t('settings.passwordPlaceholder')}
             />
             <Input
-              label="Confirmer le nouveau mot de passe"
+              label={t('settings.confirmNewPassword')}
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -310,7 +309,7 @@ export function WebSettingsPage() {
               autoComplete="new-password"
             />
             <Button type="submit" disabled={busy}>
-              {busy ? 'Mise à jour…' : 'Changer le mot de passe'}
+              {busy ? t('settings.updating') : t('settings.changePassword')}
             </Button>
           </form>
         </Card>
@@ -318,10 +317,7 @@ export function WebSettingsPage() {
         {isReceiverApp() ? (
           <Card className="lg:col-span-2" accentHeader>
             <h2 className="mb-2 text-lg font-semibold text-raid-text">Overlays & device</h2>
-            <p className="mb-3 text-sm text-raid-text-secondary">
-              Moniteur, cache média, autostart et quiet hours sont dans Device. Le statut live est
-              sous Receiver.
-            </p>
+            <p className="mb-3 text-sm text-raid-text-secondary">{t('settings.overlaysDeviceHint')}</p>
             <div className="flex flex-wrap gap-3">
               <Link
                 to="/device"
@@ -340,10 +336,7 @@ export function WebSettingsPage() {
         ) : (
           <Card className="lg:col-span-2" accentHeader>
             <h2 className="mb-2 text-lg font-semibold text-raid-text">Desktop app</h2>
-            <p className="text-sm text-raid-text-secondary">
-              Les overlays s’affichent via l’app ScreenRaid desktop. Installe-la, connecte-toi avec
-              le même compte, et active Receive raids.
-            </p>
+            <p className="text-sm text-raid-text-secondary">{t('settings.desktopAppHint')}</p>
           </Card>
         )}
 

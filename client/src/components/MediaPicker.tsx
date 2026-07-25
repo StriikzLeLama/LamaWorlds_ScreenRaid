@@ -1,5 +1,6 @@
 import { MediaThumb } from './MediaThumb';
 import { formatBytes, type Media } from '../services/media';
+import { useT } from '../hooks/useT';
 
 interface Props {
   items: Media[];
@@ -9,10 +10,11 @@ interface Props {
 }
 
 export function MediaPicker({ items, value, onChange, emptyHint }: Props) {
+  const t = useT();
   if (items.length === 0) {
     return (
       <p className="text-xs text-raid-text-secondary">
-        {emptyHint ?? 'Aucun media dans la bibliothèque pour ce type.'}
+        {emptyHint ?? t('media.emptyLibrary')}
       </p>
     );
   }

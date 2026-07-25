@@ -38,10 +38,12 @@ import {
 import { formatBytes } from '../services/media';
 import { useAuthStore } from '../stores/authStore';
 import { generateTempPassword } from '../lib/authErrors';
+import { useT } from '../hooks/useT';
 
 type Tab = 'overview' | 'users' | 'rooms' | 'media' | 'audit';
 
 export function AdminPage() {
+  const t = useT();
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const [tab, setTab] = useState<Tab>('overview');
   const [users, setUsers] = useState<AdminUserItem[]>([]);
@@ -130,7 +132,7 @@ export function AdminPage() {
     const generated = generateTempPassword();
     const pwd =
       prompt(
-        `Nouveau mdp pour @${user.username}\n(laisser vide = générer: ${generated})`,
+        t('admin.newPasswordPrompt', { user: user.username, generated }),
         generated,
       ) ?? '';
     if (!pwd.trim()) return;

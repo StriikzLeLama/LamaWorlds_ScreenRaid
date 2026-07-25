@@ -67,8 +67,4 @@ Installateur Windows :
 
 ## Serveur par défaut
 
-Nouvelles installs et migration depuis `http://localhost:8080` :
-
-`https://screenraid.lama-worlds.com`
-
-Modifiable dans Receiver Settings → Server URL.
+Aucune URL distante n’est préremplie. L’utilisateur saisit son serveur (ex. `http://localhost:8080` en local) dans Receiver Settings → Server URL.

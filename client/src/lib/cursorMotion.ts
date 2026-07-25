@@ -11,15 +11,40 @@ export type MotionPreset =
   | 'clickbait'
   | 'takeover';
 
-export const MOTION_OPTIONS: { value: MotionPreset; label: string; hint: string }[] = [
-  { value: 'exact', label: 'Fixe', hint: 'Position choisie / centre' },
-  { value: 'follow_mouse', label: 'Suit souris', hint: 'Colle au curseur ~3s' },
-  { value: 'orbit', label: 'Orbit', hint: 'Tourne autour de la souris' },
-  { value: 'trail', label: 'Trail', hint: '3 mini-GIFs qui suivent' },
-  { value: 'dodge', label: 'Dodge', hint: 'Fuit quand tu approches' },
-  { value: 'clickbait', label: 'Click bait', hint: 'Faux bouton Fermer → 2e raid' },
-  { value: 'takeover', label: 'Takeover', hint: 'Bandeau plein écran puis GIF' },
-];
+type TFn = (key: string) => string;
+
+export function getMotionOptions(t: TFn): { value: MotionPreset; label: string; hint: string }[] {
+  return [
+    { value: 'exact', label: t('motion.exact'), hint: t('motion.exactHint') },
+    { value: 'follow_mouse', label: t('motion.followMouse'), hint: t('motion.followMouseHint') },
+    { value: 'orbit', label: t('motion.orbit'), hint: t('motion.orbitHint') },
+    { value: 'trail', label: t('motion.trail'), hint: t('motion.trailHint') },
+    { value: 'dodge', label: t('motion.dodge'), hint: t('motion.dodgeHint') },
+    { value: 'clickbait', label: t('motion.clickbait'), hint: t('motion.clickbaitHint') },
+    { value: 'takeover', label: t('motion.takeover'), hint: t('motion.takeoverHint') },
+  ];
+}
+
+/** @deprecated Prefer getMotionOptions(t) for localized labels. */
+export const MOTION_OPTIONS = getMotionOptions((k) => {
+  const fallback: Record<string, string> = {
+    'motion.exact': 'Fixed',
+    'motion.exactHint': 'Chosen position / center',
+    'motion.followMouse': 'Follow mouse',
+    'motion.followMouseHint': 'Sticks to cursor ~3s',
+    'motion.orbit': 'Orbit',
+    'motion.orbitHint': 'Circles around the mouse',
+    'motion.trail': 'Trail',
+    'motion.trailHint': '3 mini-GIFs that follow',
+    'motion.dodge': 'Dodge',
+    'motion.dodgeHint': 'Flees when you approach',
+    'motion.clickbait': 'Click bait',
+    'motion.clickbaitHint': 'Fake Close button → 2nd raid',
+    'motion.takeover': 'Takeover',
+    'motion.takeoverHint': 'Full-screen banner then GIF',
+  };
+  return fallback[k] ?? k;
+});
 
 export function isCursorMotion(preset: string | undefined): boolean {
   return (

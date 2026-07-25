@@ -1,5 +1,6 @@
 import { animationClass } from '../lib/overlayAnimation';
 import type { Animation } from '../services/pranks';
+import { useT } from '../hooks/useT';
 import '../overlay/overlay.css';
 
 interface Props {
@@ -20,12 +21,13 @@ export function AnimationPreview({
   accentColor = '#2dd4bf',
   fontFamily,
 }: Props) {
+  const t = useT();
   const anim = animationClass(animation, false);
   const previewKey = `${animation}|${label}|${textColor}|${bgColor}|${accentColor}|${fontFamily ?? ''}`;
 
   return (
     <div className="overflow-hidden rounded-xl border border-raid-border bg-raid-bg/80 p-4">
-      <p className="mb-3 text-xs text-raid-text-secondary">Aperçu animation</p>
+      <p className="mb-3 text-xs text-raid-text-secondary">{t('animation.preview')}</p>
       <div className="relative flex h-28 items-center justify-center">
         <div key={previewKey} className={anim}>
           <div

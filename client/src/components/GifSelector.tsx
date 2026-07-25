@@ -13,6 +13,7 @@ import {
   toggleGifFavorite,
 } from '../services/gifFavorites';
 import type { Media } from '../services/media';
+import { useT } from '../hooks/useT';
 
 interface Props {
   open: boolean;
@@ -23,13 +24,6 @@ interface Props {
   onPicked: (media: Media, meta: GifSearchItem) => void;
   onPickedMany?: (items: Array<{ media: Media; meta: GifSearchItem }>) => void;
 }
-
-const TABS: { id: KlipyKind | 'favorites'; label: string }[] = [
-  { id: 'gifs', label: 'GIFs' },
-  { id: 'stickers', label: 'Stickers' },
-  { id: 'memes', label: 'Memes' },
-  { id: 'favorites', label: 'Favoris' },
-];
 
 const MAX_MULTI = 8;
 
@@ -49,6 +43,13 @@ export function GifSelector({
   onPicked,
   onPickedMany,
 }: Props) {
+  const t = useT();
+  const tabs: { id: KlipyKind | 'favorites'; label: string }[] = [
+    { id: 'gifs', label: 'GIFs' },
+    { id: 'stickers', label: 'Stickers' },
+    { id: 'memes', label: 'Memes' },
+    { id: 'favorites', label: t('gif.favorites') },
+  ];
   const [tab, setTab] = useState<KlipyKind | 'favorites'>('gifs');
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<GifSearchItem[]>([]);
@@ -83,19 +84,17 @@ export function GifSelector({
         setPage(pageNum);
         setItems((prev) => (append ? [...prev, ...res.items] : res.items));
         if (!res.enabled) {
-          setError(
-            'KLIPY non configuré. Ajoute KLIPY_API_KEY dans le .env serveur (partner.klipy.com), puis redémarre.',
-          );
+          setError(t('gif.klipyNotConfigured'));
         }
       } catch (e) {
         if (seq !== requestSeq.current || !openRef.current) return;
-        setError(e instanceof Error ? e.message : 'Recherche GIF échouée');
+        setError(e instanceof Error ? e.message : t('gif.searchFailed'));
         if (!append) setItems([]);
       } finally {
         if (seq === requestSeq.current) setLoading(false);
       }
     },
-    [],
+    [t],
   );
 
   useEffect(() => {
@@ -161,7 +160,7 @@ export function GifSelector({
       onPicked(media, meta);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Import impossible');
+      setError(e instanceof Error ? e.message : t('gif.importFailed'));
     } finally {
       setImportingId(null);
     }
@@ -174,7 +173,7 @@ export function GifSelector({
         return prev.filter((s) => itemKey(s, tab) !== key);
       }
       if (prev.length >= MAX_MULTI) {
-        setError(`Maximum ${MAX_MULTI} GIFs à la fois.`);
+        setError(t('gif.maxGifs', { max: MAX_MULTI }));
         return prev;
       }
       setError('');
@@ -199,7 +198,7 @@ export function GifSelector({
       }
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Import impossible');
+      setError(e instanceof Error ? e.message : t('gif.importFailed'));
     } finally {
       setImportingId(null);
       setImporting(false);
@@ -221,19 +220,19 @@ export function GifSelector({
   const busy = importing || !!importingId;
 
   return (
-    <Modal open={open} onClose={onClose} title="Choisir un GIF / sticker / meme" size="full">
+    <Modal open={open} onClose={onClose} title={t('gif.title')} size="full">
       <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
-          {TABS.map((t) => (
+          {tabs.map((tabItem) => (
             <Button
-              key={t.id}
-              variant={tab === t.id ? 'primary' : 'secondary'}
+              key={tabItem.id}
+              variant={tab === tabItem.id ? 'primary' : 'secondary'}
               className="text-xs"
-              onClick={() => setTab(t.id)}
+              onClick={() => setTab(tabItem.id)}
             >
-              {t.id === 'favorites' ? <Heart size={14} /> : null}
-              {t.label}
-              {t.id === 'favorites' ? ` (${favorites.length})` : ''}
+              {tabItem.id === 'favorites' ? <Heart size={14} /> : null}
+              {tabItem.label}
+              {tabItem.id === 'favorites' ? ` (${favorites.length})` : ''}
             </Button>
           ))}
         </div>
@@ -242,10 +241,10 @@ export function GifSelector({
           <div className="flex items-end gap-2">
             <div className="flex-1">
               <Input
-                label="Rechercher"
+                label={t('gif.searchLabel')}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="rire, chat, wow, hello…"
+                placeholder={t('gif.searchPlaceholder')}
                 autoFocus
               />
             </div>
@@ -255,7 +254,7 @@ export function GifSelector({
               onClick={() => void runSearch(query, tab as KlipyKind, 1, false)}
             >
               <Search size={16} />
-              Chercher
+              {t('gif.searchBtn')}
             </Button>
             <Button
               variant="ghost"
@@ -266,7 +265,7 @@ export function GifSelector({
               }}
             >
               <Sparkles size={16} />
-              Tendances
+              {t('gif.trending')}
             </Button>
           </div>
         )}
@@ -281,10 +280,10 @@ export function GifSelector({
           <div className="rounded-xl border border-raid-accent/30 bg-raid-surface/60 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-xs font-medium uppercase tracking-wide text-raid-text-secondary">
-                Sélection ({selected.length}/{MAX_MULTI})
+                {t('gif.selection', { n: selected.length, max: MAX_MULTI })}
               </p>
               <Button variant="ghost" className="!px-2 !py-1 text-xs" onClick={() => setSelected([])}>
-                Tout retirer
+                {t('gif.clearAll')}
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -302,7 +301,7 @@ export function GifSelector({
                     />
                     <button
                       type="button"
-                      title="Retirer"
+                      title={t('gif.remove')}
                       className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition group-hover:opacity-100"
                       onClick={() =>
                         setSelected((prev) => prev.filter((s) => itemKey(s, s.kind || tab) !== key))
@@ -320,12 +319,10 @@ export function GifSelector({
         <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
           <div>
             {loading && displayItems.length === 0 ? (
-              <p className="text-sm text-raid-text-secondary">Chargement…</p>
+              <p className="text-sm text-raid-text-secondary">{t('gif.loading')}</p>
             ) : displayItems.length === 0 ? (
               <p className="text-sm text-raid-text-secondary">
-                {tab === 'favorites'
-                  ? 'Aucun favori — clique le cœur sur un GIF pour l’enregistrer.'
-                  : 'Aucun résultat.'}
+                {tab === 'favorites' ? t('gif.noFavorites') : t('gif.noResults')}
               </p>
             ) : (
               <div className="grid max-h-[50vh] grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4 md:grid-cols-5">
@@ -389,7 +386,7 @@ export function GifSelector({
                   disabled={loading || busy}
                   onClick={() => void runSearch(query, tab as KlipyKind, page + 1, true)}
                 >
-                  {loading ? '…' : 'Charger plus'}
+                  {loading ? '…' : t('gif.loadMore')}
                 </Button>
               </div>
             )}
@@ -397,7 +394,7 @@ export function GifSelector({
 
           <aside className="hidden rounded-xl border border-raid-border bg-raid-surface/50 p-3 lg:block">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-raid-text-secondary">
-              Aperçu
+              {t('gif.preview')}
             </p>
             {hovered ? (
               <>
@@ -410,20 +407,18 @@ export function GifSelector({
                   {hovered.title || hovered.slug}
                 </p>
                 <p className="text-xs text-raid-text-secondary">
-                  {multi
-                    ? 'Clique pour ajouter / retirer de la sélection'
-                    : 'Clique pour importer et sélectionner'}
+                  {multi ? t('gif.clickToggleSelect') : t('gif.clickImport')}
                 </p>
               </>
             ) : (
               <p className="text-xs text-raid-text-secondary">
-                Survole un résultat pour prévisualiser.
-                {multi ? ' Sélectionne plusieurs GIFs puis confirme.' : ''}
+                {t('gif.hoverHint')}
+                {multi ? t('gif.hoverHintMulti') : ''}
               </p>
             )}
             <p className="mt-4 text-[10px] uppercase tracking-wide text-raid-text-secondary">
               {attribution}
-              {enabled ? '' : ' · désactivé'}
+              {enabled ? '' : ` · ${t('common.disabled')}`}
             </p>
           </aside>
         </div>
@@ -431,7 +426,7 @@ export function GifSelector({
         {multi && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-raid-border pt-3">
             <Button variant="ghost" onClick={onClose} disabled={busy}>
-              Annuler
+              {t('gif.cancel')}
             </Button>
             <Button
               disabled={selected.length === 0 || busy}
@@ -440,8 +435,8 @@ export function GifSelector({
               {importing
                 ? `Import ${importingId ? '…' : ''} (${selected.length})`
                 : selected.length <= 1
-                  ? 'Utiliser ce GIF'
-                  : `Utiliser ${selected.length} GIFs`}
+                  ? t('gif.useThisGif')
+                  : t('gif.useNGifs', { n: selected.length })}
             </Button>
           </div>
         )}

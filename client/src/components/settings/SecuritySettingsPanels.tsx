@@ -13,6 +13,7 @@ import {
   updateMySecurityPrefs,
 } from '../../services/security';
 import type { AuditEntry, SessionInfo, UserSecurityPrefs } from '../../types/security';
+import { useT } from '../../hooks/useT';
 
 function errMsg(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -59,6 +60,7 @@ interface Props {
 }
 
 export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Props) {
+  const t = useT();
   const [policyLoaded, setPolicyLoaded] = useState(false);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -181,7 +183,11 @@ export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Prop
     try {
       const next = await updateMySecurityPrefs(accessToken, { preset });
       setPrefs(next);
-      onMessage(preset === 'friends' ? 'Preset Friends appliqué.' : 'Preset Strict appliqué.');
+      onMessage(
+        preset === 'friends'
+          ? t('security.presetFriendsApplied')
+          : t('security.presetStrictApplied'),
+      );
     } catch (e) {
       onError(errMsg(e));
     } finally {
@@ -202,7 +208,7 @@ export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Prop
         local_cooldown_ms: prefs.local_cooldown_ms,
       });
       setPrefs(next);
-      onMessage('Préférences raids enregistrées.');
+      onMessage(t('security.prefsSaved'));
     } catch (e) {
       onError(errMsg(e));
     } finally {
@@ -213,14 +219,15 @@ export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Prop
   return (
     <>
       <Card>
-        <h2 className="mb-1 text-lg font-semibold text-raid-text">Sécurité</h2>
+        <h2 className="mb-1 text-lg font-semibold text-raid-text">{t('security.title')}</h2>
         <p className="mb-4 text-xs text-raid-text-secondary">
-          Turnstile {turnstileEnabled ? 'actif' : 'désactivé (dev/LAN)'}. 2FA opt-in — recommandé si
-          ton serveur est exposé sur Internet.
+          {t('security.turnstileHint', {
+            status: turnstileEnabled ? t('security.turnstileOn') : t('security.turnstileOff'),
+          })}
         </p>
         {policyLoaded && (
           <p className="mb-4 text-sm text-raid-text-secondary">
-            Captcha Cloudflare :{' '}
+            {t('security.cloudflareCaptcha')}{' '}
             <span className={turnstileEnabled ? 'text-raid-success' : 'text-raid-text'}>
               {turnstileEnabled ? 'configured' : 'not configured'}
             </span>
@@ -280,7 +287,7 @@ export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Prop
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-lg font-semibold text-raid-text">Appareils connectés</h2>
+        <h2 className="mb-4 text-lg font-semibold text-raid-text">{t('security.devicesTitle')}</h2>
         {sessions.length === 0 ? (
           <p className="text-sm text-raid-text-secondary">No active sessions.</p>
         ) : (
@@ -317,10 +324,8 @@ export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Prop
       </Card>
 
       <Card>
-        <h2 className="mb-1 text-lg font-semibold text-raid-text">Raids reçus</h2>
-        <p className="mb-4 text-xs text-raid-text-secondary">
-          Friends = peu de friction entre potes. Strict = cooldowns plus longs et volume plafonné.
-        </p>
+        <h2 className="mb-1 text-lg font-semibold text-raid-text">{t('security.raidsReceivedTitle')}</h2>
+        <p className="mb-4 text-xs text-raid-text-secondary">{t('security.raidsReceivedHint')}</p>
         {prefs && (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
@@ -375,7 +380,7 @@ export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Prop
       </Card>
 
       <Card className="lg:col-span-2">
-        <h2 className="mb-4 text-lg font-semibold text-raid-text">Activité récente</h2>
+        <h2 className="mb-4 text-lg font-semibold text-raid-text">{t('security.recentActivity')}</h2>
         {audit.length === 0 ? (
           <p className="text-sm text-raid-text-secondary">No recent events.</p>
         ) : (

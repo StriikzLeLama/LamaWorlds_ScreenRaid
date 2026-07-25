@@ -19,6 +19,7 @@ import { isReceiverApp } from '../../lib/platform';
 import { logout as logoutApi } from '../../services/auth';
 import { clearLocalSession } from '../../services/session';
 import { useAppVersion } from '../../lib/version';
+import { LanguageSelector } from '../LanguageSelector';
 
 const baseNavItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -135,6 +136,9 @@ export function Sidebar() {
           <LogOut size={18} />
           Sign out
         </Button>
+        <div className="flex items-center justify-center">
+          <LanguageSelector compact />
+        </div>
         <p className="text-center text-[11px] tabular-nums text-raid-text-secondary/80">
           ScreenRaid v{version}
         </p>

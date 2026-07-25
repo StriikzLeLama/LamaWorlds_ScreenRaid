@@ -3,14 +3,17 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
 import { TurnstileWidget } from '../components/auth/TurnstileWidget';
 import { ensureServerUrl, ServerUrlField } from '../components/auth/ServerUrlField';
+import { LanguageSelector } from '../components/LanguageSelector';
 import { useAuthStore } from '../stores/authStore';
 import { register as registerApi, getMe } from '../services/auth';
 import { getSecurityPolicy } from '../services/security';
 import { getServerUrl } from '../services/serverConfig';
 import { isReceiverApp, isWebApp } from '../lib/platform';
 import { authErrorMessage } from '../lib/authErrors';
+import { useT } from '../hooks/useT';
 
 export function RegisterPage() {
+  const t = useT();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const login = useAuthStore((s) => s.login);
@@ -45,7 +48,7 @@ export function RegisterPage() {
     e.preventDefault();
     setError('');
     if (turnstileRequired && !turnstileToken) {
-      setError('Complete the captcha verification.');
+      setError(t('auth.completeCaptcha'));
       return;
     }
     setLoading(true);
@@ -79,6 +82,9 @@ export function RegisterPage() {
     <div className="flex min-h-full w-full items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <div className="mb-6 text-center">
+          <div className="mb-3 flex justify-end">
+            <LanguageSelector compact />
+          </div>
           <img
             src="/logo.png"
             alt="LamaWorlds"
@@ -128,9 +134,7 @@ export function RegisterPage() {
             maxLength={128}
             autoComplete="new-password"
           />
-          <p className="text-xs text-raid-text-secondary">
-            Au moins 10 caractères, une lettre et un chiffre. Évite les mots de passe trop courants.
-          </p>
+          <p className="text-xs text-raid-text-secondary">{t('auth.passwordHint')}</p>
           {turnstileRequired && turnstileSiteKey && (
             <TurnstileWidget siteKey={turnstileSiteKey} onToken={onTurnstileToken} />
           )}

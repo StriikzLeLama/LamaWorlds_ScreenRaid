@@ -5,6 +5,7 @@ import { ImageOverlay } from './ImageOverlay';
 import { TextOverlay } from './TextOverlay';
 import { VideoOverlay } from './VideoOverlay';
 import { log } from '../../lib/log';
+import { useT } from '../../hooks/useT';
 
 interface Props {
   overlays: ActiveOverlay[];
@@ -46,6 +47,7 @@ function ClickbaitChrome({
   overlay: ActiveOverlay;
   children: ReactNode;
 }) {
+  const t = useT();
   const [spawned, setSpawned] = useState(false);
 
   const onFakeClose = useCallback(async () => {
@@ -94,7 +96,7 @@ function ClickbaitChrome({
         className="pointer-events-auto cursor-pointer rounded-md border border-slate-500 bg-slate-800 px-4 py-1.5 text-sm font-semibold text-slate-100 shadow-lg hover:bg-slate-700"
         style={{ fontFamily: 'Segoe UI, system-ui, sans-serif' }}
       >
-        Fermer
+        {t('overlay.close')}
       </button>
       {spawned && (
         <span className="pointer-events-none text-xs font-bold text-teal-300">gotcha ✨</span>

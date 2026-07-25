@@ -28,6 +28,8 @@ import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
 import { RoomSecurityPanel } from '../components/settings/RoomSecurityPanel';
+import { useT } from '../hooks/useT';
+import { getMotionOptions } from '../lib/cursorMotion';
 import { RoomMembersPanel } from '../components/room/RoomMembersPanel';
 import {
   deleteRaidTemplate,
@@ -46,7 +48,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
 import { useWsConnection } from '../hooks/useWsConnection';
 import { isTauriRuntime } from '../lib/platform';
-import { MOTION_OPTIONS, type MotionPreset } from '../lib/cursorMotion';
+import type { MotionPreset } from '../lib/cursorMotion';
 import type { RoomDetail } from '../types/room';
 import type { MediaType } from '../types';
 
@@ -54,46 +56,40 @@ const OVERLAY_TYPES: OverlayType[] = ['text', 'image', 'gif', 'video', 'sound'];
 
 type SfxOption = NonNullable<OverlayConfig['sfx']>;
 
-const SFX_OPTIONS: { value: SfxOption; label: string }[] = [
-  { value: 'none', label: 'Aucun' },
-  { value: 'pop', label: 'Pop' },
-  { value: 'whoosh', label: 'Whoosh' },
-];
+const TEXT_COLOR_VALUES = [
+  '#f1f5f9',
+  '#ffffff',
+  '#2dd4bf',
+  '#f59e0b',
+  '#22c55e',
+  '#ef4444',
+  '#7dd3fc',
+] as const;
 
-const TEXT_COLOR_PRESETS = [
-  { value: '#f1f5f9', label: 'Blanc' },
-  { value: '#ffffff', label: 'Blanc pur' },
-  { value: '#2dd4bf', label: 'Teal' },
-  { value: '#f59e0b', label: 'Ambre' },
-  { value: '#22c55e', label: 'Vert' },
-  { value: '#ef4444', label: 'Rouge' },
-  { value: '#7dd3fc', label: 'Cyan' },
-];
+const BG_COLOR_VALUES = [
+  'rgba(11,17,29,0.94)',
+  'rgba(0,0,0,0.85)',
+  'rgba(45,212,191,0.88)',
+  'rgba(30,58,138,0.92)',
+  'rgba(245,158,11,0.9)',
+] as const;
 
-const BG_COLOR_PRESETS = [
-  { value: 'rgba(11,17,29,0.94)', label: 'Navy' },
-  { value: 'rgba(0,0,0,0.85)', label: 'Noir' },
-  { value: 'rgba(45,212,191,0.88)', label: 'Teal' },
-  { value: 'rgba(30,58,138,0.92)', label: 'Bleu' },
-  { value: 'rgba(245,158,11,0.9)', label: 'Ambre' },
-];
+const ACCENT_COLOR_VALUES = [
+  '#2dd4bf',
+  '#f59e0b',
+  '#22c55e',
+  '#7dd3fc',
+  '#f97316',
+  '#ef4444',
+] as const;
 
-const ACCENT_COLOR_PRESETS = [
-  { value: '#2dd4bf', label: 'Teal' },
-  { value: '#f59e0b', label: 'Ambre' },
-  { value: '#22c55e', label: 'Vert' },
-  { value: '#7dd3fc', label: 'Cyan' },
-  { value: '#f97316', label: 'Orange' },
-  { value: '#ef4444', label: 'Rouge' },
-];
-
-const FONT_FAMILY_PRESETS = [
-  { value: 'system-ui, sans-serif', label: 'Système' },
-  { value: 'Georgia, serif', label: 'Serif' },
-  { value: 'ui-monospace, monospace', label: 'Mono' },
-  { value: '"Segoe UI", sans-serif', label: 'Segoe' },
-  { value: 'Impact, sans-serif', label: 'Impact' },
-];
+const FONT_FAMILY_VALUES = [
+  'system-ui, sans-serif',
+  'Georgia, serif',
+  'ui-monospace, monospace',
+  '"Segoe UI", sans-serif',
+  'Impact, sans-serif',
+] as const;
 
 function mediaForOverlay(type: OverlayType, items: Media[]): Media[] {
   const map: Partial<Record<OverlayType, MediaType>> = {
@@ -125,6 +121,45 @@ function randomBombCoord(): number {
 export function RoomPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const t = useT();
+
+  const sfxOptions: { value: SfxOption; label: string }[] = [
+    { value: 'none', label: t('room.none') },
+    { value: 'pop', label: 'Pop' },
+    { value: 'whoosh', label: 'Whoosh' },
+  ];
+  const textColorPresets = [
+    { value: TEXT_COLOR_VALUES[0], label: t('room.white') },
+    { value: TEXT_COLOR_VALUES[1], label: t('room.pureWhite') },
+    { value: TEXT_COLOR_VALUES[2], label: 'Teal' },
+    { value: TEXT_COLOR_VALUES[3], label: t('room.amber') },
+    { value: TEXT_COLOR_VALUES[4], label: t('room.green') },
+    { value: TEXT_COLOR_VALUES[5], label: t('room.red') },
+    { value: TEXT_COLOR_VALUES[6], label: 'Cyan' },
+  ];
+  const bgColorPresets = [
+    { value: BG_COLOR_VALUES[0], label: 'Navy' },
+    { value: BG_COLOR_VALUES[1], label: t('room.black') },
+    { value: BG_COLOR_VALUES[2], label: 'Teal' },
+    { value: BG_COLOR_VALUES[3], label: t('room.blue') },
+    { value: BG_COLOR_VALUES[4], label: t('room.amber') },
+  ];
+  const accentColorPresets = [
+    { value: ACCENT_COLOR_VALUES[0], label: 'Teal' },
+    { value: ACCENT_COLOR_VALUES[1], label: t('room.amber') },
+    { value: ACCENT_COLOR_VALUES[2], label: t('room.green') },
+    { value: ACCENT_COLOR_VALUES[3], label: 'Cyan' },
+    { value: ACCENT_COLOR_VALUES[4], label: 'Orange' },
+    { value: ACCENT_COLOR_VALUES[5], label: t('room.red') },
+  ];
+  const fontFamilyPresets = [
+    { value: FONT_FAMILY_VALUES[0], label: t('room.system') },
+    { value: FONT_FAMILY_VALUES[1], label: 'Serif' },
+    { value: FONT_FAMILY_VALUES[2], label: 'Mono' },
+    { value: FONT_FAMILY_VALUES[3], label: 'Segoe' },
+    { value: FONT_FAMILY_VALUES[4], label: 'Impact' },
+  ];
+  const motionOptions = getMotionOptions(t);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const accessToken = useAuthStore((s) => s.accessToken);
   const { globalConsent, isPaused } = useConsentStore();
@@ -152,10 +187,10 @@ export function RoomPage() {
   const [raidBomb, setRaidBomb] = useState(false);
   const [multiMonitorBomb, setMultiMonitorBomb] = useState(false);
   const [motionPreset, setMotionPreset] = useState<MotionPreset>('exact');
-  const [textColor, setTextColor] = useState(TEXT_COLOR_PRESETS[0].value);
-  const [bgColor, setBgColor] = useState(BG_COLOR_PRESETS[0].value);
-  const [accentColor, setAccentColor] = useState(ACCENT_COLOR_PRESETS[0].value);
-  const [fontFamily, setFontFamily] = useState(FONT_FAMILY_PRESETS[0].value);
+  const [textColor, setTextColor] = useState<string>(TEXT_COLOR_VALUES[0]);
+  const [bgColor, setBgColor] = useState<string>(BG_COLOR_VALUES[0]);
+  const [accentColor, setAccentColor] = useState<string>(ACCENT_COLOR_VALUES[0]);
+  const [fontFamily, setFontFamily] = useState<string>(FONT_FAMILY_VALUES[0]);
   const [placement, setPlacement] = useState<PlacementPosition>({
     monitor_index: 0,
     x: 0.5,
@@ -361,13 +396,13 @@ export function RoomPage() {
     if (needsMedia && mediaIds.length === 0) {
       setError(
         showGifSelector
-          ? 'Choisis un ou plusieurs GIFs / medias.'
-          : 'Choisis un media avant d’envoyer.',
+          ? 'Pick one or more GIFs / media.'
+          : 'Pick media before sending.',
       );
       return;
     }
     if (overlayType === 'text' && !textContent.trim()) {
-      setError('Écris un message texte.');
+      setError(t('room.writeText'));
       return;
     }
 
@@ -445,21 +480,21 @@ export function RoomPage() {
     if (pack.needsGif) setGifSelectorOpen(true);
   };
 
-  const applyTemplate = (t: RaidTemplate) => {
-    setOverlayType(t.overlayType);
-    setTextContent(t.textContent);
-    setMediaIds(t.mediaId ? [t.mediaId] : []);
-    setDurationMs(t.durationMs);
-    setAnimation(t.animation);
-    setVolume(t.volume);
-    setSfx(t.sfx);
-    setOpacity(t.opacity);
-    setRaidBomb(t.raidBomb);
-    setMultiMonitorBomb(t.multiMonitorBomb);
-    setTextColor(t.textColor);
-    setBgColor(t.bgColor);
-    setAccentColor(t.accentColor);
-    setFontFamily(t.fontFamily);
+  const applyTemplate = (tpl: RaidTemplate) => {
+    setOverlayType(tpl.overlayType);
+    setTextContent(tpl.textContent);
+    setMediaIds(tpl.mediaId ? [tpl.mediaId] : []);
+    setDurationMs(tpl.durationMs);
+    setAnimation(tpl.animation);
+    setVolume(tpl.volume);
+    setSfx(tpl.sfx);
+    setOpacity(tpl.opacity);
+    setRaidBomb(tpl.raidBomb);
+    setMultiMonitorBomb(tpl.multiMonitorBomb);
+    setTextColor(tpl.textColor);
+    setBgColor(tpl.bgColor);
+    setAccentColor(tpl.accentColor);
+    setFontFamily(tpl.fontFamily);
   };
 
   const saveCurrentTemplate = () => {
@@ -498,7 +533,7 @@ export function RoomPage() {
   const showCaption = showGifSelector || overlayType === 'video';
   const previewText =
     overlayType === 'text'
-      ? textContent.trim() || 'Aperçu'
+      ? textContent.trim() || t('room.preview')
       : textContent.trim() ||
         selectedMediaList[0]?.original_name ||
         previewLabel(overlayType);
@@ -658,7 +693,7 @@ export function RoomPage() {
                       variant="secondary"
                       className="!px-3 !py-1.5 text-sm"
                       onClick={() => applyPack(pack)}
-                      title={pack.description}
+                      title={t(pack.descriptionKey)}
                     >
                       {pack.label}
                     </Button>
@@ -739,7 +774,7 @@ export function RoomPage() {
                     onChange={(id) => setMediaIds(id ? [id] : [])}
                     emptyHint={
                       showGifSelector
-                        ? 'Bibliothèque vide — utilise le sélecteur GIF ou upload dans Media.'
+                        ? t('room.emptyLibrary')
                         : `Upload ${overlayType} media in the Media library first.`
                     }
                   />
@@ -761,17 +796,17 @@ export function RoomPage() {
                         </div>
                       ))}
                       <p className="self-center text-xs text-raid-text-secondary">
-                        {selectedMediaList.length} sélectionné
+                        {selectedMediaList.length} {t('room.selected')}
                         {selectedMediaList.length > 1 ? 's' : ''}
                       </p>
                     </div>
                   )}
                   {showCaption && (
                     <Input
-                      label="Légende (optionnel)"
+                      label={t('room.caption')}
                       value={textContent}
                       onChange={(e) => setTextContent(e.target.value)}
-                      placeholder="Texte affiché sous le GIF / image…"
+                      placeholder={t('room.captionPlaceholder')}
                     />
                   )}
                 </div>
@@ -800,7 +835,7 @@ export function RoomPage() {
                     value={sfx}
                     onChange={(e) => setSfx(e.target.value as SfxOption)}
                   >
-                    {SFX_OPTIONS.map((opt) => (
+                    {sfxOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
@@ -823,13 +858,13 @@ export function RoomPage() {
               {(overlayType === 'text' || showCaption) && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs text-raid-text-secondary">Couleur texte</label>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Text color</label>
                     <select
                       className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
                       value={textColor}
                       onChange={(e) => setTextColor(e.target.value)}
                     >
-                      {TEXT_COLOR_PRESETS.map((p) => (
+                      {textColorPresets.map((p) => (
                         <option key={p.value} value={p.value}>
                           {p.label}
                         </option>
@@ -837,13 +872,13 @@ export function RoomPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-raid-text-secondary">Fond</label>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Background</label>
                     <select
                       className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
                       value={bgColor}
                       onChange={(e) => setBgColor(e.target.value)}
                     >
-                      {BG_COLOR_PRESETS.map((p) => (
+                      {bgColorPresets.map((p) => (
                         <option key={p.value} value={p.value}>
                           {p.label}
                         </option>
@@ -857,7 +892,7 @@ export function RoomPage() {
                       value={accentColor}
                       onChange={(e) => setAccentColor(e.target.value)}
                     >
-                      {ACCENT_COLOR_PRESETS.map((p) => (
+                      {accentColorPresets.map((p) => (
                         <option key={p.value} value={p.value}>
                           {p.label}
                         </option>
@@ -865,13 +900,13 @@ export function RoomPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-raid-text-secondary">Police</label>
+                    <label className="mb-1 block text-xs text-raid-text-secondary">Font</label>
                     <select
                       className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
                       value={fontFamily}
                       onChange={(e) => setFontFamily(e.target.value)}
                     >
-                      {FONT_FAMILY_PRESETS.map((p) => (
+                      {fontFamilyPresets.map((p) => (
                         <option key={p.value} value={p.value}>
                           {p.label}
                         </option>
@@ -901,7 +936,7 @@ export function RoomPage() {
               {!isSoundOnly && (
                 <div>
                   <label className="mb-1 block text-xs text-raid-text-secondary">
-                    Soft (opacité): {Math.round(opacity * 100)}%
+                    Soft (opacity): {Math.round(opacity * 100)}%
                   </label>
                   <input
                     type="range"
@@ -963,7 +998,7 @@ export function RoomPage() {
                     disabled={isSoundOnly}
                     className="rounded-xl border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text outline-none focus:border-raid-accent"
                   >
-                    {MOTION_OPTIONS.map((opt) => (
+                    {motionOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label} — {opt.hint}
                       </option>

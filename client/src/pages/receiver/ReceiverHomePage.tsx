@@ -10,8 +10,10 @@ import { useWsConnection } from '../../hooks/useWsConnection';
 import { isTauriRuntime } from '../../lib/platform';
 import { useAppVersion } from '../../lib/version';
 import { log } from '../../lib/log';
+import { useT } from '../../hooks/useT';
 
 export function ReceiverHomePage() {
+  const t = useT();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const wsConnected = useWsConnection();
@@ -157,9 +159,12 @@ export function ReceiverHomePage() {
             <div>
               <p className="text-sm text-raid-text-secondary">Queue overlays</p>
               <p className="mt-1 text-lg font-semibold text-raid-text">
-                {queueCount} actif{queueCount === 1 ? '' : 's'}
+                {t('receiver.activeOverlays', {
+                  n: queueCount,
+                  s: queueCount === 1 ? '' : 's',
+                })}
               </p>
-              <p className="mt-1 text-xs text-raid-text-muted">Max 8 empilés à l’écran</p>
+              <p className="mt-1 text-xs text-raid-text-muted">{t('receiver.maxStacked')}</p>
             </div>
             <Activity className="text-raid-accent" size={24} />
           </div>

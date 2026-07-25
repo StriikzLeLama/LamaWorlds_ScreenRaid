@@ -2,6 +2,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Minus, Square, X } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { useAppVersion } from '../../lib/version';
+import { useT } from '../../hooks/useT';
 
 function windowAction(action: () => Promise<void>): void {
   void action().catch((err) => {
@@ -12,6 +13,7 @@ function windowAction(action: () => Promise<void>): void {
 export function TitleBar() {
   const appWindow = getCurrentWindow();
   const version = useAppVersion();
+  const t = useT();
 
   return (
     <div className="flex h-10 shrink-0 items-center justify-between border-b border-raid-border bg-raid-surface px-3">
@@ -48,8 +50,8 @@ export function TitleBar() {
         </button>
         <button
           type="button"
-          aria-label="Réduire dans la barre système"
-          title="Réduire dans la barre système (Quitter via l’icône tray)"
+          aria-label={t('titleBar.minimizeToTray')}
+          title={t('titleBar.minimizeToTrayTitle')}
           onClick={() => windowAction(() => appWindow.hide())}
           className="rounded-lg p-1.5 text-raid-text-secondary transition-colors hover:bg-raid-danger hover:text-white"
         >
