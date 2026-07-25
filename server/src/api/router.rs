@@ -126,6 +126,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health/ready", get(handlers::ready))
         .route("/v1/health", get(handlers::health))
         .route("/v1/health/ready", get(handlers::ready))
+        .route("/v1/invites/{token}/preview", get(handlers::get_invite_preview))
         .route("/v1/ws", get(ws_handler))
         .nest("/v1/auth", auth_routes)
         .nest("/v1/rooms", room_routes)

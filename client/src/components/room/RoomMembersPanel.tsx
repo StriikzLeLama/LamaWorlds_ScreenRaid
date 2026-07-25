@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { UserMinus } from 'lucide-react';
 import { Badge, Button } from '../ui';
 import type { RoomMember } from '../../types/room';
@@ -12,6 +13,7 @@ interface Props {
   isOwner: boolean;
   onChanged: () => void;
   onError: (msg: string) => void;
+  headerAction?: ReactNode;
 }
 
 export function RoomMembersPanel({
@@ -23,6 +25,7 @@ export function RoomMembersPanel({
   isOwner,
   onChanged,
   onError,
+  headerAction,
 }: Props) {
   const kick = async (userId: string, username: string) => {
     if (!confirm(`Kick @${username} from this room?`)) return;
@@ -45,9 +48,12 @@ export function RoomMembersPanel({
 
   return (
     <div>
-      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-raid-text">
-        Members ({members.length}/{maxMembers})
-      </h2>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-raid-text">
+          Members ({members.length}/{maxMembers})
+        </h2>
+        {headerAction}
+      </div>
       <div className="divide-y divide-raid-border">
         {members.map((m) => {
           const isSelf = m.user_id === currentUserId;

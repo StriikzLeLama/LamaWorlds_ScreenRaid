@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../components/ui';
 import { ReceiveRaidsToggle } from '../components/ReceiveRaidsToggle';
 import { LanguageSelector } from '../components/LanguageSelector';
+import { useThemeStore } from '../stores/themeStore';
 import { ApiError } from '../services/api';
 import {
   changeDisplayName,
@@ -38,6 +39,8 @@ export function WebSettingsPage() {
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { loadFromServer } = useConsentStore();
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -235,6 +238,25 @@ export function WebSettingsPage() {
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-raid-text">{t('common.language')}</h2>
           <LanguageSelector />
+        </Card>
+
+        <Card>
+          <h2 className="mb-2 text-lg font-semibold text-raid-text">{t('theme.title')}</h2>
+          <p className="mb-4 text-xs text-raid-text-secondary">{t('theme.hint')}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={theme === 'dark' ? 'primary' : 'secondary'}
+              onClick={() => setTheme('dark')}
+            >
+              {t('theme.dark')}
+            </Button>
+            <Button
+              variant={theme === 'light' ? 'primary' : 'secondary'}
+              onClick={() => setTheme('light')}
+            >
+              {t('theme.light')}
+            </Button>
+          </div>
         </Card>
 
         <Card>

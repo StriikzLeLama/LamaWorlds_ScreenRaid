@@ -5,6 +5,7 @@ import { checkServerHealth } from '../services/api';
 import { listFriends } from '../services/friends';
 import { listRooms } from '../services/rooms';
 import { useConsentStore } from '../stores/consentStore';
+import { WsLatencyBadge } from '../components/WsLatencyBadge';
 import { useWsConnection } from '../hooks/useWsConnection';
 
 export function DashboardPage() {
@@ -12,7 +13,7 @@ export function DashboardPage() {
   const [roomCount, setRoomCount] = useState(0);
   const [friendsOnline, setFriendsOnline] = useState(0);
   const { globalConsent, isPaused } = useConsentStore();
-  const wsConnected = useWsConnection();
+  const { connected: wsConnected, rttMs } = useWsConnection();
 
   useEffect(() => {
     checkServerHealth().then(setServerOk);
@@ -27,7 +28,7 @@ export function DashboardPage() {
     { label: 'Friends Online', value: String(friendsOnline), icon: Users },
     { label: 'Pranks Today', value: '0', icon: Zap },
     { label: 'Server Status', value: serverOk ? 'Online' : 'Offline', icon: Activity },
-    { label: 'Live Connection', value: wsConnected ? 'Connected' : 'Disconnected', icon: wsConnected ? Wifi : WifiOff },
+    { label: 'Live Connection', value: wsConnected ? (rttMs != null ? `${rttMs}ms` : 'Connected') : 'Disconnected', icon: wsConnected ? Wifi : WifiOff },
   ];
 
   return (
@@ -38,11 +39,7 @@ export function DashboardPage() {
           <p className="text-sm text-raid-text-secondary">Overview of your ScreenRaid activity</p>
         </div>
         <div className="flex gap-2">
-          {wsConnected ? (
-            <Badge variant="success">Live</Badge>
-          ) : (
-            <Badge variant="warning">WS offline</Badge>
-          )}
+          <WsLatencyBadge />
           {isPaused ? (
             <Badge variant="warning">Paused</Badge>
           ) : globalConsent ? (

@@ -48,18 +48,22 @@ export function VideoOverlay({ overlay }: Props) {
 
   return (
     <div className={animClass}>
-      <video
-        ref={ref}
-        src={src}
-        loop
-        playsInline
-        preload="metadata"
-        className="overlay-media pointer-events-none max-h-[70vh] max-w-[70vw] object-contain"
+      <div
+        className="overlay-media pointer-events-none"
         style={{
           transform: `scale3d(${overlay.scale}, ${overlay.scale}, 1)`,
           opacity: overlay.opacity,
         }}
-      />
+      >
+        <video
+          ref={ref}
+          src={src}
+          loop
+          playsInline
+          preload="metadata"
+          className="max-h-[70vh] max-w-[70vw] object-contain"
+        />
+      </div>
     </div>
   );
 }

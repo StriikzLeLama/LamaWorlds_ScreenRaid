@@ -12,6 +12,7 @@ export interface RaidTemplate {
   volume: number;
   sfx: 'none' | 'pop' | 'whoosh';
   opacity: number;
+  scale?: number;
   raidBomb: boolean;
   multiMonitorBomb: boolean;
   textColor: string;

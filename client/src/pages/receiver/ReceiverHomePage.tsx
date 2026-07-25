@@ -16,7 +16,7 @@ export function ReceiverHomePage() {
   const t = useT();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const wsConnected = useWsConnection();
+  const { connected: wsConnected } = useWsConnection();
   const { globalConsent, isPaused, grant, resume, pause } = useConsentStore();
   const [statusMsg, setStatusMsg] = useState('');
   const [queueCount, setQueueCount] = useState(0);

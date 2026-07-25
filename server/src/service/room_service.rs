@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use screenraid_types::{
-    ConsentState, CreateRoomInviteRequest, CreateRoomRequest, JoinRoomRequest, PresenceStatus,
-    RoomDetail, RoomInviteResponse, RoomInvitesListResponse, RoomMember, RoomRole, RoomSummary,
-    RoomsListResponse, UserSummary,
+    ConsentState, CreateRoomInviteRequest, CreateRoomRequest, InvitePreviewResponse,
+    JoinRoomRequest, PresenceStatus, RoomDetail, RoomInviteResponse, RoomInvitesListResponse,
+    RoomMember, RoomRole, RoomSummary, RoomsListResponse, UserSummary,
 };
 use uuid::Uuid;
 
@@ -204,7 +204,7 @@ impl RoomService {
             }
         }
 
-        if invite.use_count >= invite.max_uses {
+        if invite.max_uses > 0 && invite.use_count >= invite.max_uses {
             return Err(AppError::Validation("invite has reached its use limit".into()));
         }
 
@@ -230,7 +230,7 @@ impl RoomService {
         let invite_id = Uuid::parse_str(&invite.id).unwrap_or_default();
         self.rooms.increment_invite_use(invite_id).await?;
         let new_use_count = invite.use_count + 1;
-        if new_use_count >= invite.max_uses {
+        if invite.max_uses > 0 && new_use_count >= invite.max_uses {
             self.rooms.deactivate_invite(invite_id).await?;
         }
 
@@ -294,16 +294,33 @@ impl RoomService {
             ));
         }
 
-        let max_uses = req.max_uses.unwrap_or(1).clamp(1, 1000);
-        let expires_at = req
-            .expires_in_hours
-            .map(|h| Utc::now() + Duration::hours(h.clamp(1, 24 * 365) as i64));
+        let max_uses = match req.max_uses {
+            Some(0) => 0,
+            Some(n) => n.clamp(1, 1000),
+            None => 1,
+        };
+        let expires_at = match req.expires_in_hours {
+            Some(0) => None,
+            Some(h) => Some(Utc::now() + Duration::hours(h.clamp(1, 24 * 365) as i64)),
+            None => Some(Utc::now() + Duration::hours(24)),
+        };
 
         let id = Uuid::new_v4();
         let token = RoomRepository::generate_invite_token();
         self.rooms
             .create_invite(id, room_id, &token, role, actor_id, expires_at, max_uses)
             .await?;
+
+        let room = self
+            .rooms
+            .find_by_id(room_id)
+            .await?
+            .ok_or(AppError::NotFound("room".into()))?;
+        let actor = self
+            .users
+            .find_by_id(actor_id)
+            .await?
+            .ok_or(AppError::Internal("user missing".into()))?;
 
         Ok(RoomInviteResponse {
             id,
@@ -315,6 +332,41 @@ impl RoomService {
             use_count: 0,
             is_active: true,
             created_at: Utc::now(),
+            room_name: room.name,
+            created_by_username: actor.username,
+            created_by_display_name: actor.display_name,
+        })
+    }
+
+    pub async fn get_invite_preview(&self, token: &str) -> Result<InvitePreviewResponse, AppError> {
+        let invite = self
+            .rooms
+            .find_invite_by_token(token)
+            .await?
+            .ok_or_else(|| AppError::NotFound("invite".into()))?;
+
+        let room_id = Uuid::parse_str(&invite.room_id).unwrap_or_default();
+        let room = self
+            .rooms
+            .find_by_id(room_id)
+            .await?
+            .ok_or(AppError::NotFound("room".into()))?;
+        let creator_id = Uuid::parse_str(&invite.created_by).unwrap_or_default();
+        let creator = self
+            .users
+            .find_by_id(creator_id)
+            .await?
+            .ok_or(AppError::Internal("user missing".into()))?;
+
+        Ok(InvitePreviewResponse {
+            room_name: room.name,
+            created_by_username: creator.username,
+            created_by_display_name: creator.display_name,
+            role: parse_role(&invite.role),
+            expires_at: invite.expires_at.as_deref().map(parse_dt),
+            max_uses: invite.max_uses,
+            use_count: invite.use_count,
+            is_active: invite.is_active != 0,
         })
     }
 
@@ -334,9 +386,11 @@ impl RoomService {
         }
 
         let rows = self.rooms.list_active_invites(room_id).await?;
-        Ok(RoomInvitesListResponse {
-            invites: rows.into_iter().map(invite_row_to_response).collect(),
-        })
+        let mut invites = Vec::with_capacity(rows.len());
+        for row in rows {
+            invites.push(self.build_invite_response(row).await?);
+        }
+        Ok(RoomInvitesListResponse { invites })
     }
 
     pub async fn deactivate_invite(
@@ -549,9 +603,34 @@ impl RoomService {
         }
         Ok(members)
     }
+    async fn build_invite_response(&self, row: RoomInviteRow) -> Result<RoomInviteResponse, AppError> {
+        let room_id = Uuid::parse_str(&row.room_id).unwrap_or_default();
+        let room = self
+            .rooms
+            .find_by_id(room_id)
+            .await?
+            .ok_or(AppError::NotFound("room".into()))?;
+        let creator_id = Uuid::parse_str(&row.created_by).unwrap_or_default();
+        let creator = self
+            .users
+            .find_by_id(creator_id)
+            .await?
+            .ok_or(AppError::Internal("user missing".into()))?;
+        Ok(invite_row_to_response(
+            row,
+            &room.name,
+            &creator.username,
+            &creator.display_name,
+        ))
+    }
 }
 
-fn invite_row_to_response(row: RoomInviteRow) -> RoomInviteResponse {
+fn invite_row_to_response(
+    row: RoomInviteRow,
+    room_name: &str,
+    created_by_username: &str,
+    created_by_display_name: &str,
+) -> RoomInviteResponse {
     RoomInviteResponse {
         id: Uuid::parse_str(&row.id).unwrap_or_default(),
         room_id: Uuid::parse_str(&row.room_id).unwrap_or_default(),
@@ -562,5 +641,8 @@ fn invite_row_to_response(row: RoomInviteRow) -> RoomInviteResponse {
         use_count: row.use_count,
         is_active: row.is_active != 0,
         created_at: parse_dt(&row.created_at),
+        room_name: room_name.to_string(),
+        created_by_username: created_by_username.to_string(),
+        created_by_display_name: created_by_display_name.to_string(),
     }
 }

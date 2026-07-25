@@ -45,6 +45,24 @@ export interface RoomInvite {
   use_count: number;
   is_active: boolean;
   created_at: string;
+  room_name?: string;
+  created_by_username?: string;
+  created_by_display_name?: string;
+}
+
+export interface InvitePreview {
+  room_name: string;
+  created_by_username: string;
+  created_by_display_name: string;
+  role: string;
+  expires_at: string | null;
+  max_uses: number;
+  use_count: number;
+  is_active: boolean;
+}
+
+export async function getInvitePreview(token: string): Promise<InvitePreview> {
+  return apiFetch(`/v1/invites/${encodeURIComponent(token)}/preview`, {}, null);
 }
 
 export async function createRoomInvite(

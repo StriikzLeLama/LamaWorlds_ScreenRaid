@@ -144,7 +144,7 @@ const OverlayItem = memo(function OverlayItem({ overlay }: { overlay: ActiveOver
 
 export function OverlayCanvas({ overlays }: Props) {
   return (
-    <div className="overlay-root fixed inset-0 overflow-hidden bg-transparent">
+    <div className="overlay-root fixed inset-0 overflow-visible bg-transparent">
       {overlays.map((o) => (
         <OverlayItem key={o.id} overlay={o} />
       ))}

@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { applyTheme, useThemeStore } from './stores/themeStore';
 import { AppReceiver } from './App.receiver';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { loadServerUrlFromSettings } from './services/serverConfig';
@@ -13,6 +14,8 @@ import { log } from './lib/log';
  * so the first API/WS attempt uses the user's configured host — not an empty default.
  */
 async function bootstrap() {
+  applyTheme(useThemeStore.getState().theme);
+
   log.info('main.tsx bootstrap', {
     isTauriRuntime: isTauriRuntime(),
     isWebApp: isWebApp(),

@@ -160,6 +160,9 @@ export type TranslationDict = {
     blue: string;
     amber: string;
     black: string;
+    pickGifs: string;
+    removeFromSelection: string;
+    size: string;
   };
   motion: {
     exact: string;
@@ -202,6 +205,74 @@ export type TranslationDict = {
   };
   media: {
     emptyLibrary: string;
+    delete: string;
+    deleteConfirm: string;
+    deleteFailed: string;
+  };
+  feed: {
+    title: string;
+    live: string;
+    queued: string;
+    noActivity: string;
+    noQueued: string;
+    cancel: string;
+    everyone: string;
+    whenOnline: string;
+    user: string;
+    pending: string;
+  };
+  theme: {
+    title: string;
+    hint: string;
+    dark: string;
+    light: string;
+  };
+  ws: {
+    live: string;
+    liveMs: string;
+    offline: string;
+  };
+  compress: {
+    saved: string;
+    limits: string;
+  };
+  invite: {
+    title: string;
+    button: string;
+    hint: string;
+    role: string;
+    roleGuest: string;
+    roleMember: string;
+    expiresHours: string;
+    maxUses: string;
+    createCopy: string;
+    creating: string;
+    uses: string;
+    unlimitedUses: string;
+    unlimitedUsesWithCount: string;
+    zeroUnlimited: string;
+    expires: string;
+    noExpiry: string;
+    by: string;
+    copy: string;
+    copied: string;
+    copyFailed: string;
+    revokeConfirm: string;
+    revokeFailed: string;
+    loadFailed: string;
+    createFailed: string;
+    joinTitle: string;
+    signInPrompt: string;
+    missingLink: string;
+    joining: string;
+    joined: string;
+    joinFailed: string;
+    invitedBy: string;
+    inactive: string;
+    usesLeft: string;
+    backToRooms: string;
+    copyLink: string;
+    openRoom: string;
   };
   animation: {
     preview: string;

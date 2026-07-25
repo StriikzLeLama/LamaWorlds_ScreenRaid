@@ -17,8 +17,17 @@ let wsAuthenticated = false;
 /** True when the server rejected the auth message (bad/expired token). */
 let authRejected = false;
 let refreshInFlight: Promise<boolean> | null = null;
+let lastRttMs: number | null = null;
+let pingSentAt: number | null = null;
 const handlers = new Set<MessageHandler>();
 const connectionListeners = new Set<(connected: boolean) => void>();
+const rttListeners = new Set<(rttMs: number | null) => void>();
+
+function setRttMs(rttMs: number | null): void {
+  if (lastRttMs === rttMs) return;
+  lastRttMs = rttMs;
+  rttListeners.forEach((listener) => listener(rttMs));
+}
 
 function setWsConnected(connected: boolean): void {
   if (wsConnected === connected) return;
@@ -36,6 +45,14 @@ export function onWebSocketConnectionChange(
   connectionListeners.add(listener);
   listener(wsConnected);
   return () => connectionListeners.delete(listener);
+}
+
+export function onWebSocketRttChange(
+  listener: (rttMs: number | null) => void,
+): () => void {
+  rttListeners.add(listener);
+  listener(lastRttMs);
+  return () => rttListeners.delete(listener);
 }
 
 function wsUrl(): string {
@@ -147,6 +164,12 @@ export function connectWebSocket(): void {
         wsAuthenticated = true;
         authRejected = false;
         setWsConnected(true);
+        pingSentAt = performance.now();
+        send({ type: 'ping', payload: {} });
+      }
+      if (msg.type === 'pong' && pingSentAt != null) {
+        setRttMs(Math.round(performance.now() - pingSentAt));
+        pingSentAt = null;
       }
       if (msg.type === 'auth_failed') {
         authRejected = true;
@@ -168,6 +191,8 @@ export function connectWebSocket(): void {
     wsAuthenticated = false;
     authRejected = false;
     setWsConnected(false);
+    setRttMs(null);
+    pingSentAt = null;
 
     if (!useAuthStore.getState().isAuthenticated) return;
 
@@ -225,6 +250,8 @@ export function disconnectWebSocket(clearBackoff = true): void {
   wsAuthenticated = false;
   authRejected = false;
   setWsConnected(false);
+  setRttMs(null);
+  pingSentAt = null;
   if (s) {
     s.onopen = null;
     s.onmessage = null;
@@ -275,6 +302,7 @@ export function send(data: object): void {
 
 export function startHeartbeat(): ReturnType<typeof setInterval> {
   return setInterval(() => {
+    pingSentAt = performance.now();
     send({ type: 'ping', payload: {} });
   }, 30000);
 }

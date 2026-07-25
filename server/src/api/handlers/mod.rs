@@ -31,7 +31,7 @@ pub use friends::{
 };
 pub use gifs::{import_gif, search_gifs};
 pub use health::{health, ready};
-pub use invites::{create_room_invite, deactivate_room_invite, list_room_invites};
+pub use invites::{create_room_invite, deactivate_room_invite, get_invite_preview, list_room_invites};
 pub use media::{delete_media, download_media, list_media, list_room_media, upload_media};
 pub use monitors::{get_my_monitors, get_user_monitors, update_my_monitors};
 pub use pranks::{ack_prank, list_pranks, send_prank};

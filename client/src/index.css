@@ -39,3 +39,26 @@ body {
 #root {
   min-height: 100vh;
 }
+
+[data-theme="light"] {
+  color-scheme: light;
+  --color-raid-bg: #eef2f7;
+  --color-raid-surface: #e4eaf2;
+  --color-raid-card: #f8fafc;
+  --color-raid-border: #c9d4e3;
+  --color-raid-accent: #0d9488;
+  --color-raid-accent-hover: #0f766e;
+  --color-raid-text: #0f172a;
+  --color-raid-text-secondary: #475569;
+  --color-raid-success: #059669;
+  --color-raid-danger: #dc2626;
+  --color-raid-warning: #d97706;
+  --color-raid-info: #0284c7;
+  --color-raid-disabled: #94a3b8;
+}
+
+[data-theme="light"] body {
+  background-image:
+    linear-gradient(rgba(13, 148, 136, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 148, 136, 0.04) 1px, transparent 1px);
+}

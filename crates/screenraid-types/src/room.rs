@@ -72,6 +72,21 @@ pub struct RoomInviteResponse {
     pub use_count: i32,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
+    pub room_name: String,
+    pub created_by_username: String,
+    pub created_by_display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InvitePreviewResponse {
+    pub room_name: String,
+    pub created_by_username: String,
+    pub created_by_display_name: String,
+    pub role: RoomRole,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub max_uses: i32,
+    pub use_count: i32,
+    pub is_active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

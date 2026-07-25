@@ -17,6 +17,11 @@ export function ImageOverlay({ overlay }: Props) {
   const textColor = overlay.text_color || '#f5f5f5';
   const bgColor = overlay.bg_color || 'rgba(10,10,12,0.82)';
 
+  const mediaStyle = {
+    transform: `scale3d(${overlay.scale}, ${overlay.scale}, 1)`,
+    opacity: overlay.opacity,
+  };
+
   if (!src || failed) {
     return (
       <div className={animClass}>
@@ -26,8 +31,7 @@ export function ImageOverlay({ overlay }: Props) {
             background: 'rgba(20,20,22,0.94)',
             border: '2px solid #ef4444',
             color: '#f5f5f5',
-            transform: `scale3d(${overlay.scale}, ${overlay.scale}, 1)`,
-            opacity: overlay.opacity,
+            ...mediaStyle,
           }}
         >
           <p style={{ color: '#ef4444', fontSize: 12, fontWeight: 600 }}>MEDIA FAILED</p>
@@ -41,14 +45,11 @@ export function ImageOverlay({ overlay }: Props) {
   }
 
   return (
-    <div
-      className={animClass}
-      style={{
-        transform: `scale3d(${overlay.scale}, ${overlay.scale}, 1)`,
-        opacity: overlay.opacity,
-      }}
-    >
-      <div className="overlay-media pointer-events-none flex flex-col items-center gap-2">
+    <div className={animClass}>
+      <div
+        className="overlay-media pointer-events-none flex flex-col items-center gap-2"
+        style={mediaStyle}
+      >
         <img
           src={src}
           alt=""

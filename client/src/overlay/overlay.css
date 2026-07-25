@@ -5,16 +5,18 @@ body,
      (AnimationPreview also imports these keyframes on RoomPage). */
 }
 
-/* Isolate overlay repaints without size containment (size can collapse to 0). */
+/* Isolate overlay repaints; avoid paint containment so scale > 1 is not clipped. */
 .overlay-root {
-  contain: layout style paint;
+  contain: layout style;
   pointer-events: none;
   width: 100vw;
   height: 100vh;
+  overflow: visible;
 }
 
 .overlay-item {
-  contain: layout style paint;
+  contain: layout style;
+  overflow: visible;
 }
 
 .overlay-media {

@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { LogOut, Send, Trash2, Clock } from 'lucide-react';
-import { Card, Button, Badge, Input } from '../components/ui';
+import { LogOut, Send, Trash2 } from 'lucide-react';
+import { Card, Button, Input } from '../components/ui';
 import { GifSelector } from '../components/GifSelector';
 import { AnimationPreview } from '../components/AnimationPreview';
 import { MediaPicker } from '../components/MediaPicker';
 import { MediaThumb } from '../components/MediaThumb';
 import { ApiError } from '../services/api';
-import { listMedia, type Media } from '../services/media';
+import { listMedia, deleteMedia, type Media } from '../services/media';
+import { revokeMediaPreview } from '../services/mediaPreview';
 import {
   ANIMATION_OPTIONS,
   defaultOverlayConfig,
-  listPrankHistory,
   sendPrank,
   type Animation,
   type OverlayConfig,
   type OverlayType,
-  type PrankHistoryItem,
 } from '../services/pranks';
 import {
   deleteRoom,
@@ -31,6 +30,9 @@ import { RoomSecurityPanel } from '../components/settings/RoomSecurityPanel';
 import { useT } from '../hooks/useT';
 import { getMotionOptions } from '../lib/cursorMotion';
 import { RoomMembersPanel } from '../components/room/RoomMembersPanel';
+import { RoomFeedPanel } from '../components/room/RoomFeedPanel';
+import { RoomInvitesPanel } from '../components/room/RoomInvitesPanel';
+import { WsLatencyBadge } from '../components/WsLatencyBadge';
 import {
   deleteRaidTemplate,
   loadRaidTemplates,
@@ -163,11 +165,10 @@ export function RoomPage() {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const accessToken = useAuthStore((s) => s.accessToken);
   const { globalConsent, isPaused } = useConsentStore();
-  const wsConnected = useWsConnection();
+  const { connected: wsConnected } = useWsConnection();
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [error, setError] = useState('');
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
-  const [history, setHistory] = useState<PrankHistoryItem[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledPrankItem[]>([]);
   const [templates, setTemplates] = useState<RaidTemplate[]>([]);
@@ -184,6 +185,7 @@ export function RoomPage() {
   const [volume, setVolume] = useState(0.8);
   const [sfx, setSfx] = useState<SfxOption>('none');
   const [opacity, setOpacity] = useState(1);
+  const [scale, setScale] = useState(1);
   const [raidBomb, setRaidBomb] = useState(false);
   const [multiMonitorBomb, setMultiMonitorBomb] = useState(false);
   const [motionPreset, setMotionPreset] = useState<MotionPreset>('exact');
@@ -207,9 +209,21 @@ export function RoomPage() {
       .catch(() => undefined);
   };
 
+  /** Permanently remove a library asset from the room composer (no need to open Media). */
+  const handleDeleteMedia = async (media: Media) => {
+    if (!confirm(t('media.deleteConfirm', { name: media.original_name }))) return;
+    try {
+      await deleteMedia(media.id);
+      revokeMediaPreview(media.id);
+      setMediaItems((prev) => prev.filter((m) => m.id !== media.id));
+      setMediaIds((prev) => prev.filter((id) => id !== media.id));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t('media.deleteFailed'));
+    }
+  };
+
   const loadExtras = useCallback(() => {
     if (!id) return;
-    listPrankHistory(id).then(setHistory).catch(() => undefined);
     listRoomActivity(id).then(setActivity).catch(() => undefined);
     listScheduled(id).then(setScheduled).catch(() => undefined);
     setTemplates(loadRaidTemplates(id));
@@ -305,6 +319,7 @@ export function RoomPage() {
     const config = defaultOverlayConfig();
     config.animation = animation;
     config.opacity = opacity;
+    config.scale = scale;
     config.volume = volume;
     config.sfx = sfx;
     if (overlayType === 'text' || textContent.trim()) {
@@ -489,6 +504,7 @@ export function RoomPage() {
     setVolume(tpl.volume);
     setSfx(tpl.sfx);
     setOpacity(tpl.opacity);
+    setScale(tpl.scale ?? 1);
     setRaidBomb(tpl.raidBomb);
     setMultiMonitorBomb(tpl.multiMonitorBomb);
     setTextColor(tpl.textColor);
@@ -510,6 +526,7 @@ export function RoomPage() {
       volume,
       sfx,
       opacity,
+      scale,
       raidBomb,
       multiMonitorBomb,
       textColor,
@@ -534,9 +551,7 @@ export function RoomPage() {
   const previewText =
     overlayType === 'text'
       ? textContent.trim() || t('room.preview')
-      : textContent.trim() ||
-        selectedMediaList[0]?.original_name ||
-        previewLabel(overlayType);
+      : textContent.trim();
 
   if (!room) {
     return (
@@ -564,6 +579,7 @@ export function RoomPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <WsLatencyBadge />
           <Button variant="secondary" onClick={handleLeave}>
             <LogOut size={16} /> Leave
           </Button>
@@ -596,6 +612,9 @@ export function RoomPage() {
             isOwner={isOwner}
             onChanged={loadRoom}
             onError={setError}
+            headerAction={
+              <RoomInvitesPanel roomId={id!} canModerate={canModerate} onError={setError} />
+            }
           />
         </Card>
 
@@ -765,13 +784,14 @@ export function RoomPage() {
                 <div className="space-y-3">
                   {showGifSelector && (
                     <Button variant="secondary" onClick={() => setGifSelectorOpen(true)}>
-                      Choisir un ou plusieurs GIFs
+                      {t('room.pickGifs')}
                     </Button>
                   )}
                   <MediaPicker
                     items={selectableMedia}
                     value={mediaIds[0] ?? ''}
                     onChange={(id) => setMediaIds(id ? [id] : [])}
+                    onDelete={(m) => void handleDeleteMedia(m)}
                     emptyHint={
                       showGifSelector
                         ? t('room.emptyLibrary')
@@ -779,13 +799,13 @@ export function RoomPage() {
                     }
                   />
                   {selectedMediaList.length > 0 && (
-                    <div className="flex flex-wrap gap-2 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
+                    <div className="flex flex-wrap gap-1.5 rounded-xl border border-raid-accent/40 bg-raid-bg/60 p-2">
                       {selectedMediaList.map((m) => (
                         <div key={m.id} className="group relative">
-                          <MediaThumb media={m} sizeClass="h-14 w-14" />
+                          <MediaThumb media={m} sizeClass="h-10 w-10" />
                           <button
                             type="button"
-                            title="Retirer"
+                            title={t('room.removeFromSelection')}
                             className="absolute -right-1 -top-1 rounded-full bg-raid-danger px-1 text-[10px] text-white opacity-0 transition group-hover:opacity-100"
                             onClick={() =>
                               setMediaIds((prev) => prev.filter((x) => x !== m.id))
@@ -848,10 +868,15 @@ export function RoomPage() {
                 <AnimationPreview
                   animation={animation}
                   label={previewText}
+                  overlayType={overlayType}
+                  media={selectedMediaList[0] ?? null}
+                  mediaList={selectedMediaList}
                   textColor={textColor}
                   bgColor={bgColor}
                   accentColor={accentColor}
                   fontFamily={fontFamily}
+                  opacity={opacity}
+                  scale={scale}
                 />
               )}
 
@@ -928,6 +953,23 @@ export function RoomPage() {
                     step={0.05}
                     value={volume}
                     onChange={(e) => setVolume(Number(e.target.value))}
+                    className="w-full accent-raid-accent"
+                  />
+                </div>
+              )}
+
+              {!isSoundOnly && (
+                <div>
+                  <label className="mb-1 block text-xs text-raid-text-secondary">
+                    {t('room.size')}: {Math.round(scale * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0.25}
+                    max={2.5}
+                    step={0.05}
+                    value={scale}
+                    onChange={(e) => setScale(Number(e.target.value))}
                     className="w-full accent-raid-accent"
                   />
                 </div>
@@ -1046,109 +1088,18 @@ export function RoomPage() {
           )}
         </Card>
 
-        <Card>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-raid-text">
-            Activity
-          </h2>
-          {activity.length === 0 ? (
-            <p className="text-sm text-raid-text-secondary">No activity yet.</p>
-          ) : (
-            <ul className="max-h-72 space-y-2 overflow-y-auto">
-              {activity.map((a) => (
-                <li key={a.id} className="border-b border-raid-border pb-2 text-sm last:border-0">
-                  <p className="text-raid-text">
-                    {a.actor_name ?? '?'} → {a.target_name ?? 'everyone'} · {a.overlay_type}{' '}
-                    {a.status && <Badge variant="neutral">{a.status}</Badge>}
-                  </p>
-                  <p className="text-xs text-raid-text-secondary">
-                    {new Date(a.at).toLocaleString()}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-raid-text">
-            <Clock size={18} /> Queued ({pendingScheduled.length})
-          </h2>
-          {pendingScheduled.length === 0 ? (
-            <p className="text-sm text-raid-text-secondary">No scheduled raids.</p>
-          ) : (
-            <ul className="space-y-2">
-              {pendingScheduled.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between gap-2 rounded-xl bg-raid-surface px-3 py-2 text-sm"
-                >
-                  <div>
-                    <p className="text-raid-text">
-                      {s.overlay_type} · {s.trigger_type}
-                    </p>
-                    <p className="text-xs text-raid-text-secondary">
-                      {s.trigger_type === 'at_time' && s.run_at
-                        ? new Date(s.run_at).toLocaleString()
-                        : s.online_user_id
-                          ? `when ${room.members.find((m) => m.user_id === s.online_user_id)?.display_name ?? 'user'} online`
-                          : 'pending'}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    className="!px-2 !py-1 text-xs"
-                    onClick={() => {
-                      if (!id) return;
-                      void cancelScheduled(id, s.id)
-                        .then(loadExtras)
-                        .catch((e) => setError(e instanceof Error ? e.message : 'Cancel failed'));
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <RoomFeedPanel
+          activity={activity}
+          pendingScheduled={pendingScheduled}
+          members={room.members}
+          onCancelScheduled={(schedId) => {
+            if (!id) return;
+            void cancelScheduled(id, schedId)
+              .then(loadExtras)
+              .catch((e) => setError(e instanceof Error ? e.message : 'Cancel failed'));
+          }}
+        />
       </div>
-
-      {history.length > 0 && (
-        <Card>
-          <h2 className="mb-3 text-lg font-semibold text-raid-text">Prank history</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="text-raid-text-secondary">
-                  <th className="pb-2 pr-4">Type</th>
-                  <th className="pb-2 pr-4">Status</th>
-                  <th className="pb-2 pr-4">Target</th>
-                  <th className="pb-2">Time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-raid-border">
-                {history.map((h) => (
-                  <tr key={h.id}>
-                    <td className="py-2 pr-4 capitalize text-raid-text">{h.overlay_type}</td>
-                    <td className="py-2 pr-4">
-                      <Badge>{h.status}</Badge>
-                    </td>
-                    <td className="py-2 pr-4 text-raid-text-secondary">
-                      {h.target_id
-                        ? room.members.find((m) => m.user_id === h.target_id)?.display_name ??
-                          h.target_id.slice(0, 8)
-                        : 'Everyone'}
-                    </td>
-                    <td className="py-2 text-raid-text-secondary">
-                      {new Date(h.created_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
 
       <GifSelector
         open={gifSelectorOpen}

@@ -2,21 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Trash2, Upload } from 'lucide-react';
 import { Card, Button, Badge } from '../components/ui';
 import { MediaThumb } from '../components/MediaThumb';
-import {
-  deleteMedia,
-  formatBytes,
-  listMedia,
-  uploadMedia,
-  type Media,
-} from '../services/media';
+import { formatBytes, listMedia, uploadMedia, deleteMedia, type Media } from '../services/media';
+import { formatCompressionNote, maybeCompressImage } from '../lib/compressImage';
+import { useT } from '../hooks/useT';
 import { revokeMediaPreview } from '../services/mediaPreview';
 
 export function MediaLibraryPage() {
+  const t = useT();
   const [items, setItems] = useState<Media[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -41,9 +39,17 @@ export function MediaLibraryPage() {
     setUploading(true);
     setProgress(0);
     setError(null);
+    setHint(null);
     try {
       for (const file of Array.from(files)) {
-        await uploadMedia(file, undefined, setProgress);
+        const compressed = await maybeCompressImage(file);
+        const note = formatCompressionNote(
+          compressed.originalBytes,
+          compressed.compressedBytes,
+          t,
+        );
+        if (note) setHint(note);
+        await uploadMedia(compressed.file, undefined, setProgress);
       }
       await load();
     } catch (e) {
@@ -72,6 +78,7 @@ export function MediaLibraryPage() {
           <p className="text-sm text-raid-text-secondary">
             Images, GIFs, videos, and sounds for pranks
           </p>
+          <p className="mt-1 text-xs text-raid-text-secondary">{t('compress.limits')}</p>
         </div>
         <Button disabled={uploading} onClick={() => fileRef.current?.click()}>
           <Upload size={18} />
@@ -89,6 +96,12 @@ export function MediaLibraryPage() {
           }}
         />
       </div>
+
+      {hint && (
+        <div className="rounded-lg border border-raid-accent/30 bg-raid-accent/10 px-4 py-2 text-sm text-raid-text">
+          {hint}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">

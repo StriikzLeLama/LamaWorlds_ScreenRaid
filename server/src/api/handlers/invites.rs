@@ -3,12 +3,21 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use screenraid_types::{CreateRoomInviteRequest, RoomInviteResponse, RoomInvitesListResponse};
+use screenraid_types::{
+    CreateRoomInviteRequest, InvitePreviewResponse, RoomInviteResponse, RoomInvitesListResponse,
+};
 use uuid::Uuid;
 
 use crate::api::middleware::auth::AuthUser;
 use crate::error::AppError;
 use crate::state::AppState;
+
+pub async fn get_invite_preview(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> Result<Json<InvitePreviewResponse>, AppError> {
+    Ok(Json(state.rooms.get_invite_preview(&token).await?))
+}
 
 pub async fn create_room_invite(
     auth: AuthUser,
