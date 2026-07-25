@@ -1,6 +1,6 @@
 import { useAuthStore } from '../stores/authStore';
 import { refreshToken } from './auth';
-import { getServerUrl } from './serverConfig';
+import { getServerUrl, hasServerUrl } from './serverConfig';
 import { reconnectWebSocket } from './websocket';
 import { appFetch } from './appFetch';
 
@@ -52,6 +52,12 @@ export async function apiFetch<T>(
   options: RequestInit = {},
   token?: string | null,
 ): Promise<T> {
+  // Desktop with no configured host would otherwise call a relative `/v1/...`
+  // URL and produce confusing network errors.
+  if (!hasServerUrl()) {
+    throw new ApiError('Server URL is not configured', 0, 'NO_SERVER_URL');
+  }
+
   const headers = new Headers(options.headers);
   if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
@@ -104,6 +110,7 @@ export async function apiFetch<T>(
 }
 
 export async function checkServerHealth(): Promise<boolean> {
+  if (!hasServerUrl()) return false;
   try {
     const res = await appFetch(`${getServerUrl()}/v1/health`);
     return res.ok;

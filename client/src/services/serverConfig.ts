@@ -1,5 +1,10 @@
 import { isTauriRuntime, isWebApp } from '../lib/platform';
 
+/**
+ * Resolve the compile-time / origin default API base.
+ * Desktop: VITE_SERVER_URL or empty (user must configure — no private host baked in).
+ * Web dashboard: always the page origin (same host as the API).
+ */
 function defaultServerUrl(): string {
   if (isWebApp() && typeof window !== 'undefined') {
     return window.location.origin;
@@ -70,6 +75,7 @@ export function normalizeServerUrl(
 ): string {
   const trimmed = url.trim().replace(/\/$/, '');
   if (!trimmed) {
+    // allowEmpty is used when clearing / hydrating; otherwise login must require a URL.
     if (options?.allowEmpty) return DEFAULT_SERVER;
     throw new Error('Server URL is required');
   }
@@ -104,7 +110,10 @@ export async function persistServerUrl(url: string): Promise<string> {
   return next;
 }
 
-/** Apply persisted Tauri settings before the first API call. */
+/**
+ * Apply persisted Tauri settings before the first API call.
+ * Skipped outside Tauri so browser preview never hangs on `invoke`.
+ */
 export async function loadServerUrlFromSettings(): Promise<void> {
   if (!isTauriRuntime()) return;
   try {

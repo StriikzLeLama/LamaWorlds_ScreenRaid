@@ -128,7 +128,7 @@ export function LoginPage() {
       await finishLogin(auth);
     } catch (err) {
       if (turnstileSiteKey) setShowTurnstile(true);
-      setError(authErrorMessage(err, 'Login failed'));
+      setError(authErrorMessage(err, t('login.loginFailed')));
       setServerOk(await checkServerHealth());
     } finally {
       setLoading(false);
@@ -152,11 +152,9 @@ export function LoginPage() {
             className="mx-auto mb-4 h-16 w-16 rounded-2xl object-cover shadow-lg shadow-black/40"
             draggable={false}
           />
-          <h1 className="text-2xl font-bold text-raid-text">Welcome to ScreenRaid</h1>
+          <h1 className="text-2xl font-bold text-raid-text">{t('login.title')}</h1>
           <p className="mt-1 text-sm text-raid-text-secondary">
-            {isReceiverApp()
-              ? 'Sign in to manage rooms, send raids, and receive overlays on this PC'
-              : 'Sign in to your prank dashboard'}
+            {isReceiverApp() ? t('login.subtitleDesktop') : t('login.subtitleWeb')}
           </p>
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-raid-border bg-raid-surface px-2.5 py-1 text-[11px]">
             {serverOk === null ? (
@@ -168,20 +166,30 @@ export function LoginPage() {
             )}
             <span className="text-raid-text-secondary">
               {serverOk === null
-                ? 'Checking server…'
+                ? t('login.checkingServer')
                 : serverOk
-                  ? 'Server online'
-                  : 'Server unreachable'}
+                  ? t('login.serverOnline')
+                  : t('login.serverUnreachable')}
             </span>
           </div>
         </div>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-          {isReceiverApp() && <ServerUrlField onChange={setServerUrl} />}
+          {isReceiverApp() && (
+            <ServerUrlField
+              onChange={(url) => {
+                setServerUrl(url);
+                // Clear sticky "unreachable" so Sign in is not stuck disabled
+                // after the user edits the URL (health is re-checked on Test / submit).
+                setServerOk(null);
+              }}
+              onHealthChange={setServerOk}
+            />
+          )}
           {!requires2fa ? (
             <>
               <Input
-                label="Username"
+                label={t('auth.username')}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="prankster42"
@@ -191,7 +199,7 @@ export function LoginPage() {
               />
               <div className="relative">
                 <Input
-                  label="Password"
+                  label={t('auth.password')}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -204,7 +212,7 @@ export function LoginPage() {
                   type="button"
                   className="absolute right-3 top-[30px] text-raid-text-secondary hover:text-raid-text"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -237,16 +245,16 @@ export function LoginPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={loading || serverOk === false}
+            disabled={loading}
           >
             {loading ? (
               <>
-                <Loader2 size={16} className="animate-spin" /> Signing in…
+                <Loader2 size={16} className="animate-spin" /> {t('login.signingIn')}
               </>
             ) : requires2fa ? (
-              'Verify 2FA'
+              t('login.verify2fa')
             ) : (
-              'Sign in'
+              t('login.signIn')
             )}
           </Button>
           {requires2fa && (
@@ -260,14 +268,14 @@ export function LoginPage() {
                 setTotpCode('');
               }}
             >
-              Back to password
+              {t('login.backToPassword')}
             </Button>
           )}
         </form>
         <p className="mt-4 text-center text-sm text-raid-text-secondary">
-          No account?{' '}
+          {t('login.noAccount')}{' '}
           <Link to="/register" className="text-raid-accent hover:text-raid-accent-hover">
-            Register
+            {t('login.register')}
           </Link>
         </p>
       </Card>

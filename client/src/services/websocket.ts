@@ -89,6 +89,7 @@ export function connectWebSocket(): void {
     return;
   }
   if (!hasServerUrl()) {
+    // Avoid throwing during effect — empty URL is a normal first-run / post-migration state.
     log.warn('connectWebSocket: no server URL configured, abort');
     return;
   }

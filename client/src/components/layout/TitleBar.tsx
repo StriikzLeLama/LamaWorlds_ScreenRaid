@@ -12,6 +12,8 @@ function windowAction(action: () => Promise<void>): void {
 }
 
 function tryGetWindow(): Window | null {
+  // Import is fine in all builds; *calling* getCurrentWindow() outside Tauri throws
+  // and used to unmount the entire React tree (blank navy grid screen).
   if (!isTauriRuntime()) return null;
   try {
     return getCurrentWindow();

@@ -31,6 +31,12 @@ const fr: TranslationDict = {
     twoFaCode: 'Code 2FA',
     passwordHint:
       'Au moins 10 caractères, une lettre et un chiffre. Évite les mots de passe trop courants.',
+    username: 'Identifiant',
+    password: 'Mot de passe',
+    displayName: 'Pseudo',
+    email: 'Email',
+    hidePassword: 'Masquer le mot de passe',
+    showPassword: 'Afficher le mot de passe',
   },
   settings: {
     title: 'Réglages',
@@ -186,7 +192,43 @@ const fr: TranslationDict = {
   admin: {
     newPasswordPrompt: 'Nouveau mdp pour @{user}\n(laisser vide = générer: {generated})',
   },
-  login: {},
+  login: {
+    title: 'Bienvenue sur ScreenRaid',
+    subtitleDesktop: 'Connecte-toi pour gérer les rooms, envoyer des raids et recevoir des overlays sur ce PC',
+    subtitleWeb: 'Connecte-toi à ton tableau de bord',
+    checkingServer: 'Vérification du serveur…',
+    serverOnline: 'Serveur en ligne',
+    serverUnreachable: 'Serveur injoignable',
+    signIn: 'Se connecter',
+    signingIn: 'Connexion…',
+    verify2fa: 'Vérifier le 2FA',
+    backToPassword: 'Retour au mot de passe',
+    noAccount: 'Pas de compte ?',
+    register: 'S’inscrire',
+    loginFailed: 'Échec de la connexion',
+  },
+  register: {
+    title: 'Créer un compte',
+    subtitle: 'Rejoins la plateforme de pranks basée sur le consentement',
+    createAccount: 'Créer le compte',
+    creating: 'Création…',
+    alreadyHaveAccount: 'Déjà un compte ?',
+    signIn: 'Se connecter',
+    passwordPlaceholder: 'Min. 10 car. · lettre + chiffre',
+    registrationFailed: 'Échec de l’inscription',
+  },
+  serverUrl: {
+    label: 'URL du serveur',
+    current: 'Actuel :',
+    test: 'Tester',
+    checking: 'Vérification…',
+    reachable: 'Serveur joignable',
+    savedButDown:
+      'URL enregistrée, mais le serveur ne répond pas — vérifie l’IP et que Docker tourne.',
+    invalid: 'URL serveur invalide',
+    unreachable:
+      'Impossible de joindre le serveur ({url}). Utilise Tester sur le champ URL (Docker tourne ?).',
+  },
 };
 
 export default fr;

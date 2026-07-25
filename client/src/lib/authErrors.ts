@@ -14,6 +14,9 @@ export function authErrorMessage(err: unknown, fallback = 'Request failed'): str
     if (err.status === 401 || err.code === 'UNAUTHORIZED') {
       return translate(locale, 'auth.invalidCredentials');
     }
+    if (err.code === 'NO_SERVER_URL') {
+      return translate(locale, 'auth.cannotReachServer', { url: getServerUrl() || '—' });
+    }
     if (err.status === 429 || err.code === 'RATE_LIMITED') {
       return translate(locale, 'auth.rateLimited');
     }

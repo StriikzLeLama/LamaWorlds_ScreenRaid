@@ -2,15 +2,22 @@ import { useEffect, useState } from 'react';
 import { Button, Input } from '../ui';
 import { checkServerHealth } from '../../services/api';
 import { getServerUrl, persistServerUrl } from '../../services/serverConfig';
+import { useT } from '../../hooks/useT';
+import { translate } from '../../i18n';
+import { useLocaleStore } from '../../stores/localeStore';
 
 interface Props {
-  /** Called after URL is saved (e.g. before login submit). */
+  /** Called when the URL text changes (before Test / persist). */
   onChange?: (url: string) => void;
+  /** Called after Test with the health result (so login can re-enable Sign in). */
+  onHealthChange?: (ok: boolean) => void;
 }
 
-export function ServerUrlField({ onChange }: Props) {
+export function ServerUrlField({ onChange, onHealthChange }: Props) {
+  const t = useT();
   const [url, setUrl] = useState(getServerUrl());
   const [hint, setHint] = useState('');
+  const [hintOk, setHintOk] = useState(false);
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
@@ -20,19 +27,23 @@ export function ServerUrlField({ onChange }: Props) {
   const apply = async (): Promise<boolean> => {
     setChecking(true);
     setHint('');
+    setHintOk(false);
     try {
       const next = await persistServerUrl(url);
       setUrl(next);
       onChange?.(next);
       const ok = await checkServerHealth();
+      onHealthChange?.(ok);
       if (ok) {
-        setHint('Server reachable');
+        setHint(t('serverUrl.reachable'));
+        setHintOk(true);
         return true;
       }
-      setHint('URL saved, but server is not responding — check IP and that Docker is running.');
+      setHint(t('serverUrl.savedButDown'));
       return false;
     } catch (e) {
-      setHint(e instanceof Error ? e.message : 'Invalid server URL');
+      onHealthChange?.(false);
+      setHint(e instanceof Error ? e.message : t('serverUrl.invalid'));
       return false;
     } finally {
       setChecking(false);
@@ -42,29 +53,30 @@ export function ServerUrlField({ onChange }: Props) {
   return (
     <div className="space-y-2 rounded-xl border border-raid-border bg-raid-surface/50 p-3">
       <Input
-        label="Server URL"
+        label={t('serverUrl.label')}
         value={url}
         placeholder="http://192.168.1.109:8080"
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           const value = e.target.value;
           setUrl(value);
+          // Parent should clear "server unreachable" so Sign in is not stuck disabled.
           onChange?.(value);
+          onHealthChange?.(false);
+          setHint('');
+          setHintOk(false);
         }}
       />
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-raid-text-secondary">
-          Current: <span className="text-raid-accent">{getServerUrl()}</span>
+          {t('serverUrl.current')}{' '}
+          <span className="text-raid-accent">{getServerUrl() || '—'}</span>
         </p>
         <Button type="button" variant="secondary" disabled={checking} onClick={() => void apply()}>
-          {checking ? 'Checking…' : 'Test'}
+          {checking ? t('serverUrl.checking') : t('serverUrl.test')}
         </Button>
       </div>
       {hint && (
-        <p
-          className={`text-xs ${hint.includes('reachable') ? 'text-raid-success' : 'text-raid-danger'}`}
-        >
-          {hint}
-        </p>
+        <p className={`text-xs ${hintOk ? 'text-raid-success' : 'text-raid-danger'}`}>{hint}</p>
       )}
     </div>
   );
@@ -75,8 +87,9 @@ export async function ensureServerUrl(url: string): Promise<void> {
   await persistServerUrl(url);
   const ok = await checkServerHealth();
   if (!ok) {
+    const locale = useLocaleStore.getState().locale;
     throw new Error(
-      `Cannot reach server at ${getServerUrl()}. Use Test on the Server URL field (is Docker running on the CT?).`,
+      translate(locale, 'serverUrl.unreachable', { url: getServerUrl() || '—' }),
     );
   }
 }

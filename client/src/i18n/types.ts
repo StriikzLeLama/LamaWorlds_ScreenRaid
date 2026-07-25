@@ -29,6 +29,47 @@ export type TranslationDict = {
     twoFaRequired: string;
     twoFaCode: string;
     passwordHint: string;
+    username: string;
+    password: string;
+    displayName: string;
+    email: string;
+    hidePassword: string;
+    showPassword: string;
+  };
+  login: {
+    title: string;
+    subtitleDesktop: string;
+    subtitleWeb: string;
+    checkingServer: string;
+    serverOnline: string;
+    serverUnreachable: string;
+    signIn: string;
+    signingIn: string;
+    verify2fa: string;
+    backToPassword: string;
+    noAccount: string;
+    register: string;
+    loginFailed: string;
+  };
+  register: {
+    title: string;
+    subtitle: string;
+    createAccount: string;
+    creating: string;
+    alreadyHaveAccount: string;
+    signIn: string;
+    passwordPlaceholder: string;
+    registrationFailed: string;
+  };
+  serverUrl: {
+    label: string;
+    current: string;
+    test: string;
+    checking: string;
+    reachable: string;
+    savedButDown: string;
+    invalid: string;
+    unreachable: string;
   };
   settings: {
     title: string;
@@ -174,8 +215,5 @@ export type TranslationDict = {
   };
   admin: {
     newPasswordPrompt: string;
-  };
-  login: {
-    // kept for future expansion
   };
 };

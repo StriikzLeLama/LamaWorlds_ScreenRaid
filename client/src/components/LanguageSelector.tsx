@@ -1,13 +1,13 @@
-import { LOCALES, type Locale } from '../i18n';
-import { useLocaleStore } from '../stores/localeStore';
+import { LOCALES } from '../i18n';
+import { normalizeLocale, useLocaleStore } from '../stores/localeStore';
 import { useT } from '../hooks/useT';
 
 interface Props {
-  /** Compact inline control (e.g. sidebar). */
+  /** Compact inline control (e.g. sidebar / login). */
   compact?: boolean;
 }
 
-/** English / French language switcher. */
+/** English / French language switcher (persists via localeStore). */
 export function LanguageSelector({ compact = false }: Props) {
   const t = useT();
   const locale = useLocaleStore((s) => s.locale);
@@ -44,7 +44,7 @@ export function LanguageSelector({ compact = false }: Props) {
         id="locale-select"
         className="w-full rounded-lg border border-raid-border bg-raid-surface px-3 py-2 text-sm text-raid-text"
         value={locale}
-        onChange={(e) => setLocale(e.target.value as Locale)}
+        onChange={(e) => setLocale(normalizeLocale(e.target.value))}
       >
         {LOCALES.map((opt) => (
           <option key={opt.id} value={opt.id}>

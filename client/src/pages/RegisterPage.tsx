@@ -72,7 +72,7 @@ export function RegisterPage() {
       const next = searchParams.get('next');
       navigate(next?.startsWith('/') ? next : '/', { replace: true });
     } catch (err) {
-      setError(authErrorMessage(err, 'Registration failed'));
+      setError(authErrorMessage(err, t('register.registrationFailed')));
     } finally {
       setLoading(false);
     }
@@ -91,18 +91,21 @@ export function RegisterPage() {
             className="mx-auto mb-4 h-16 w-16 rounded-2xl object-cover shadow-lg shadow-black/40"
             draggable={false}
           />
-          <h1 className="text-2xl font-bold text-raid-text">Create account</h1>
-          <p className="mt-1 text-sm text-raid-text-secondary">
-            Join the consent-based prank platform
-          </p>
+          <h1 className="text-2xl font-bold text-raid-text">{t('register.title')}</h1>
+          <p className="mt-1 text-sm text-raid-text-secondary">{t('register.subtitle')}</p>
           <p className="mt-1 text-[11px] uppercase tracking-wide text-raid-text-secondary/80">
             LamaWorlds
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {isReceiverApp() && <ServerUrlField onChange={setServerUrl} />}
+          {isReceiverApp() && (
+            <ServerUrlField
+              onChange={setServerUrl}
+              onHealthChange={() => undefined}
+            />
+          )}
           <Input
-            label="Username"
+            label={t('auth.username')}
             value={form.username}
             onChange={(e) => setForm({ ...form, username: e.target.value })}
             placeholder="prankster42"
@@ -110,13 +113,13 @@ export function RegisterPage() {
             autoComplete="username"
           />
           <Input
-            label="Display name"
+            label={t('auth.displayName')}
             value={form.display_name}
             onChange={(e) => setForm({ ...form, display_name: e.target.value })}
             placeholder="Prankster"
           />
           <Input
-            label="Email"
+            label={t('auth.email')}
             type="email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -124,11 +127,11 @@ export function RegisterPage() {
             autoComplete="email"
           />
           <Input
-            label="Password"
+            label={t('auth.password')}
             type="password"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="Min. 10 characters · letter + digit"
+            placeholder={t('register.passwordPlaceholder')}
             required
             minLength={10}
             maxLength={128}
@@ -144,13 +147,13 @@ export function RegisterPage() {
             </p>
           )}
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Creating account…' : 'Create account'}
+            {loading ? t('register.creating') : t('register.createAccount')}
           </Button>
         </form>
         <p className="mt-4 text-center text-sm text-raid-text-secondary">
-          Already have an account?{' '}
+          {t('register.alreadyHaveAccount')}{' '}
           <Link to="/login" className="text-raid-accent hover:text-raid-accent-hover">
-            Sign in
+            {t('register.signIn')}
           </Link>
         </p>
       </Card>

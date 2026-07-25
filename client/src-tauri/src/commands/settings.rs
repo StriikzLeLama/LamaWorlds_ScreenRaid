@@ -85,6 +85,7 @@ impl SettingsStore {
             .unwrap_or_default();
 
         // Clear former private-stack default so public builds don't auto-connect there.
+        // Only this exact legacy URL is wiped; user-entered hosts are left alone.
         if settings.server_url == "https://screenraid.lama-worlds.com" {
             settings.server_url = String::new();
             let _ = fs::write(
