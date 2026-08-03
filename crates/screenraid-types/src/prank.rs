@@ -166,4 +166,7 @@ pub struct PrankIncomingPayload {
     pub duration_ms: i32,
     pub config: OverlayConfig,
     pub expires_at: DateTime<Utc>,
+    /// When true, receivers should show the overlay even without consent / room.
+    #[serde(default)]
+    pub self_test: bool,
 }

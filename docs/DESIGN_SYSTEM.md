@@ -1,11 +1,11 @@
 # ScreenRaid Design System
 
-> **HomeBoard design language** — Dashboard Anthracite Orange  
-> Flat, modern admin-panel UI. No glassmorphism. No neon effects.
+> **Lama Worlds design language** — deep navy + teal accent  
+> Flat admin-panel UI with a subtle grid background. No glassmorphism. No neon glow.
 
-All client UI (main window, modals, settings, auth screens) **must** use these tokens and patterns. The overlay window is media-only and has no chrome.
+Source of truth: [`client/src/index.css`](../client/src/index.css) (`@theme` tokens + `[data-theme="light"]`).
 
-Visual references: Discord, Steam, modern self-hosted dashboards (Home Assistant, Portainer, etc.).
+All client UI (dashboard, modals, settings, auth) **must** use these tokens. The overlay window is media-only and has no chrome.
 
 ---
 
@@ -31,54 +31,41 @@ Visual references: Discord, Steam, modern self-hosted dashboards (Home Assistant
 
 | Principle | Rule |
 |-----------|------|
-| **Flat surfaces** | Solid background colors only. No `backdrop-filter`, no frosted glass, no translucent panels. |
-| **Anthracite base** | Dark grey layers (`#1a1a1a` → `#2f2f2f`) create depth through color steps, not blur. |
-| **Orange accent** | `#f97316` is the single brand accent. Used sparingly for CTAs, active nav, focus rings, badges. |
-| **Readable hierarchy** | Primary text `#ececec`, secondary `#b4b4b4`. Never pure white on dark grey. |
-| **Rounded cards** | 16px radius on cards, modals, inputs. Consistent across the app. |
-| **Dashboard density** | Clean admin layout: sidebar + content area, generous padding, clear section headers. |
-| **No glow** | No `box-shadow` with colored glow, no `text-shadow`, no neon outlines. |
+| **Flat surfaces** | Solid background colors. Subtle teal grid on `body` — no frosted glass. |
+| **Navy base** | Layered blues (`#0b111d` → `#151e2e`) for depth, not blur. |
+| **Teal accent** | `#2dd4bf` (dark) / `#0d9488` (light) — CTAs, active nav, focus, links. |
+| **Readable hierarchy** | Primary `#f1f5f9`, secondary `#94a3b8` (dark theme). |
+| **Rounded cards** | 16px radius (`--radius-card`). |
+| **No glow** | No colored shadows or neon outlines. |
 
 ---
 
 ## 2. Color Palette
 
-### Core Tokens
+### Core Tokens (dark theme — default)
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| `bg` | `#1a1a1a` | App background, page base |
-| `surface` | `#232323` | Sidebar, title bar, secondary panels |
-| `card` | `#2f2f2f` | Cards, modals, dropdowns, inputs |
-| `border` | `#3a3a3a` | Dividers, input borders, card outlines |
-| `accent` | `#f97316` | Primary buttons, active nav, links, focus |
-| `accent-hover` | `#ea580c` | Hover state for accent elements |
-| `text` | `#ececec` | Headings, body, labels |
-| `text-secondary` | `#b4b4b4` | Captions, placeholders, meta info |
+| `raid-bg` | `#0b111d` | App background |
+| `raid-surface` | `#101826` | Sidebar, secondary panels |
+| `raid-card` | `#151e2e` | Cards, modals, inputs |
+| `raid-border` | `#243044` | Dividers, outlines |
+| `raid-accent` | `#2dd4bf` | Primary buttons, active nav, focus |
+| `raid-accent-hover` | `#14b8a6` | Hover on accent |
+| `raid-text` | `#f1f5f9` | Headings, body |
+| `raid-text-secondary` | `#94a3b8` | Captions, meta |
 
 ### Semantic Colors
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| `success` | `#22c55e` | Online status, consent granted, success toasts |
-| `danger` | `#ef4444` | Panic button, errors, destructive actions |
-| `warning` | `#eab308` | Warnings, pending states |
-| `info` | `#94a3b8` | Neutral informational badges (not accent orange) |
+| `raid-success` | `#34d399` | Online, consent granted |
+| `raid-danger` | `#f87171` | Panic, errors, destructive |
+| `raid-warning` | `#f59e0b` | Warnings, storage bar near full |
+| `raid-info` | `#7dd3fc` | Informational badges |
+| `raid-disabled` | `#475569` | Disabled controls |
 
-### Layer Stack (top → bottom)
-
-```
-card       #2f2f2f   ← elevated content (cards, modals)
-surface    #232323   ← sidebar, nested panels
-bg         #1a1a1a   ← page background
-```
-
-### Contrast Rules
-
-- Body text on `bg`: `#ececec` (passes WCAG AA)
-- Secondary text on `card`: `#b4b4b4` minimum
-- Accent text on `card`: use `#f97316` only for links/labels, not long paragraphs
-- Disabled elements: `#6b6b6b` text on `#2a2a2a` background
+Light theme overrides live in `[data-theme="light"]` in `index.css`.
 
 ---
 

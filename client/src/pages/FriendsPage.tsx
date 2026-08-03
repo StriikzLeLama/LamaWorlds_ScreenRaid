@@ -23,9 +23,9 @@ export function FriendsPage() {
     setLoading(true);
     try {
       const [f, r] = await Promise.all([listFriends(), listFriendRequests()]);
-      setFriends(f.friends);
-      setIncoming(r.incoming);
-      setOutgoing(r.outgoing);
+      setFriends(f.friends ?? []);
+      setIncoming(r.incoming ?? []);
+      setOutgoing(r.outgoing ?? []);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to load');
     } finally {

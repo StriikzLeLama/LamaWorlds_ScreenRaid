@@ -1,8 +1,9 @@
 # ScreenRaid Database Schema
 
-SQLite for development and single-node deployment. Schema is compatible with PostgreSQL with minor type adjustments for production scale-out.
+**Production (D1):** migrations in [`cloud/migrations/`](../cloud/migrations/).  
+**Production API:** `https://screenraid.app.lama-worlds.com/v1/...`
 
-Migrations live in `server/migrations/` and are applied via SQLx at startup.
+**Self-hosted:** SQLite — migrations in `server/migrations/` applied via SQLx at startup.
 
 ---
 

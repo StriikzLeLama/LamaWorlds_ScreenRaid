@@ -96,3 +96,13 @@ pub async fn ack_prank(
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// Overlay self-test without a room. Always allowed for the authenticated user.
+pub async fn self_test_prank(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<SendPrankRequest>,
+) -> Result<(StatusCode, Json<PrankResponse>), AppError> {
+    let response = state.pranks.send_self_test(auth.user_id, req).await?;
+    Ok((StatusCode::CREATED, Json(response)))
+}

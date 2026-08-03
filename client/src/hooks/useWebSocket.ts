@@ -4,6 +4,7 @@ import {
   onWsMessage,
   reconnectWebSocket,
   startHeartbeat,
+  stopHeartbeat,
 } from '../services/websocket';
 import { useAuthStore } from '../stores/authStore';
 import { useConsentStore } from '../stores/consentStore';
@@ -27,7 +28,7 @@ export function useWebSocket() {
     if (!isAuthenticated) return;
 
     loadConsent().catch(() => undefined);
-    const heartbeat = startHeartbeat();
+    startHeartbeat();
 
     const unsub = onWsMessage((type, payload) => {
       if (type === 'connected') {
@@ -55,7 +56,7 @@ export function useWebSocket() {
 
     return () => {
       unsub();
-      clearInterval(heartbeat);
+      stopHeartbeat();
     };
   }, [isAuthenticated, loadConsent, applyServerState]);
 }

@@ -13,6 +13,9 @@ node_modules/
 !.env.example
 !client/.env.receiver
 !client/.env.web
+.dev.vars
+cloud/.dev.vars
+cloud/.wrangler/
 server/data/
 *.db
 *.db-*

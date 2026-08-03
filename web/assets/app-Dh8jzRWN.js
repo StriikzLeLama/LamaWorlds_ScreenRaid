@@ -1,0 +1,1 @@
+import{t as s}from"./main-C-pyp3pR.js";var p;(function(i){i.Nsis="nsis",i.Msi="msi",i.Deb="deb",i.Rpm="rpm",i.AppImage="appimage",i.App="app"})(p||(p={}));async function a(){return s("plugin:app|version")}export{a as getVersion};

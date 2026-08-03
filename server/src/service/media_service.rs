@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use screenraid_types::{Media, MediaListResponse};
+use screenraid_types::{Media, MediaListResponse, MediaStorageUsage};
 use screenraid_validation::{validate_upload, ValidationError, MAX_UPLOADS_PER_HOUR};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -231,6 +231,22 @@ impl MediaService {
             let _ = tokio::fs::remove_file(path).await;
         }
         Ok(())
+    }
+
+    /// Soft display quota (self-host is typically disk-limited). Matches CF default 200 MB.
+    pub async fn storage_usage(&self, user_id: Uuid) -> Result<MediaStorageUsage, AppError> {
+        let used = self.repo.sum_bytes_for_user(user_id).await?;
+        let quota = std::env::var("USER_MEDIA_QUOTA_BYTES")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or(200 * 1024 * 1024);
+        Ok(MediaStorageUsage {
+            used_bytes: used,
+            quota_bytes: quota,
+            remaining_bytes: (quota - used).max(0),
+            enforced: false,
+        })
     }
 
     pub async fn admin_delete(&self, media_id: Uuid) -> Result<(), AppError> {

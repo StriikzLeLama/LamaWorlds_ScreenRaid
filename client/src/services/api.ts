@@ -106,6 +106,18 @@ export async function apiFetch<T>(
     return undefined as T;
   }
 
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    const preview = (await response.text()).slice(0, 80);
+    throw new ApiError(
+      preview.startsWith('<!') || preview.startsWith('<html')
+        ? `Server returned HTML instead of JSON for ${path} (missing API route?)`
+        : `Unexpected response for ${path}`,
+      response.status,
+      'INVALID_JSON',
+    );
+  }
+
   return response.json() as Promise<T>;
 }
 

@@ -233,6 +233,7 @@ impl PrankService {
             duration_ms: duration,
             config: config.clone(),
             expires_at,
+            self_test: false,
         };
 
         for target_id in &deliverable {
@@ -352,6 +353,82 @@ impl PrankService {
             .await?;
 
         Ok(())
+    }
+
+    /// Deliver an overlay to the sender only — no room membership required.
+    pub async fn send_self_test(
+        &self,
+        user_id: Uuid,
+        req: SendPrankRequest,
+    ) -> Result<PrankResponse, AppError> {
+        self.validate_request(&req)?;
+        let mut config = req.config.clone();
+        let duration = req.duration_ms.clamp(500, 60_000);
+        config.volume = config.volume.clamp(0.0, 1.0);
+
+        let media_ref = if let Some(media_id) = req.media_id {
+            let row = self
+                .media
+                .find_by_id(media_id)
+                .await?
+                .ok_or_else(|| AppError::NotFound("media".into()))?;
+            if row.uploader_id != user_id.to_string() {
+                return Err(AppError::Forbidden);
+            }
+            let m = row_to_media(row, "");
+            Some(MediaRef {
+                id: m.id,
+                url: m.url,
+                mime_type: m.mime_type,
+                hash_sha256: m.hash_sha256,
+            })
+        } else {
+            None
+        };
+
+        let prank_id = Uuid::new_v4();
+        let now = Utc::now();
+        let expires_at = now + Duration::milliseconds(duration as i64 + 30_000);
+        let room_id = Uuid::nil();
+        let sender = self.user_summary(user_id).await?;
+        let text = req
+            .text_content
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                if matches!(req.overlay_type, OverlayType::Text) {
+                    Some("ScreenRaid self-test".into())
+                } else {
+                    None
+                }
+            });
+
+        let incoming = PrankIncomingPayload {
+            prank_id,
+            room_id,
+            sender,
+            overlay_type: req.overlay_type,
+            media: media_ref,
+            text_content: text,
+            duration_ms: duration,
+            config,
+            expires_at,
+            self_test: true,
+        };
+
+        self.hub.send_to_user(
+            user_id,
+            "prank:incoming",
+            serde_json::to_value(&incoming).unwrap_or_default(),
+        );
+
+        Ok(PrankResponse {
+            id: prank_id,
+            room_id,
+            status: PrankStatus::Delivered,
+            expires_at,
+            created_at: now,
+        })
     }
 
     pub async fn schedule(
@@ -630,11 +707,17 @@ impl PrankService {
         target_id: Option<Uuid>,
     ) -> Result<Vec<Uuid>, AppError> {
         let solo_room = members.len() == 1;
+        // Explicit self-target is always allowed (solo testing). Broadcast-to-self
+        // still requires ALLOW_SELF_PRANK or a solo room.
         let allow_self = self.allow_self_prank || solo_room;
 
         if let Some(tid) = target_id {
-            if tid == sender_id && !allow_self {
-                return Err(AppError::Validation("cannot prank yourself".into()));
+            if tid == sender_id {
+                let is_member = members.iter().any(|m| m.user_id == tid.to_string());
+                if !is_member {
+                    return Err(AppError::NotFound("target not in room".into()));
+                }
+                return Ok(vec![tid]);
             }
             let is_member = members.iter().any(|m| m.user_id == tid.to_string());
             if !is_member {

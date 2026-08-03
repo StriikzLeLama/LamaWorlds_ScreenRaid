@@ -32,9 +32,11 @@ pub use friends::{
 pub use gifs::{import_gif, search_gifs};
 pub use health::{health, ready};
 pub use invites::{create_room_invite, deactivate_room_invite, get_invite_preview, list_room_invites};
-pub use media::{delete_media, download_media, list_media, list_room_media, upload_media};
+pub use media::{
+    delete_media, download_media, list_media, list_room_media, media_storage, upload_media,
+};
 pub use monitors::{get_my_monitors, get_user_monitors, update_my_monitors};
-pub use pranks::{ack_prank, list_pranks, send_prank};
+pub use pranks::{ack_prank, list_pranks, self_test_prank, send_prank};
 pub use rooms::{
     change_member_role, create_room, delete_room, get_room, get_room_activity, join_room,
     kick_member, leave_room, list_rooms,

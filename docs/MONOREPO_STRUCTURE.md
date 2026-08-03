@@ -9,17 +9,12 @@
 ```
 LamaWorlds_ScreenRaid/
 ├── Cargo.toml                 # Rust workspace root
-├── .env.example               # Server environment template
-├── .gitignore
-├── docker-compose.yml         # Local dev stack (server + volumes)
-├── README.md
-│
+├── cloud/                     # Cloudflare Worker + D1 + R2 + DO (production API)
+├── client/                    # Tauri 2 + React (web + receiver builds)
+├── server/                    # Axum API + WebSocket (self-host)
 ├── crates/                    # Shared Rust libraries
-├── server/                    # Axum API + WebSocket backend
-├── client/                    # Tauri 2 + React frontend
-├── docker/                    # Production Dockerfiles (planned)
-├── scripts/                   # Dev/ops helper scripts (planned)
 ├── docs/                      # Architecture & product documentation
+├── README.md
 └── .github/workflows/         # CI pipelines (planned)
 ```
 
@@ -35,6 +30,18 @@ LamaWorlds_ScreenRaid/
 | `screenraid-validation` | MIME allowlists, file size limits, input validation helpers |
 
 Both crates are workspace members and published only within the monorepo (no crates.io).
+
+### `cloud/` — Cloudflare backend (production)
+
+| Path | Responsibility |
+|------|----------------|
+| `src/index.ts` | Worker entry, route dispatch, CORS |
+| `src/do/WsHub.ts` | Durable Object WebSocket hub |
+| `src/routes/` | REST handlers (auth, rooms, pranks, media, …) |
+| `src/lib/` | Auth, DB helpers, mime validation, raid limits |
+| `migrations/` | D1 schema |
+| `public/` | Built web SPA assets |
+| `wrangler.jsonc` | Deploy config |
 
 ### `server/` — Backend (`screenraid-server`)
 

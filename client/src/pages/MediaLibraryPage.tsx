@@ -2,14 +2,70 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Trash2, Upload } from 'lucide-react';
 import { Card, Button, Badge } from '../components/ui';
 import { MediaThumb } from '../components/MediaThumb';
-import { formatBytes, listMedia, uploadMedia, deleteMedia, type Media } from '../services/media';
+import {
+  formatBytes,
+  listMedia,
+  uploadMedia,
+  deleteMedia,
+  getMediaStorage,
+  type Media,
+  type MediaStorageUsage,
+} from '../services/media';
 import { formatCompressionNote, maybeCompressImage } from '../lib/compressImage';
 import { useT } from '../hooks/useT';
 import { revokeMediaPreview } from '../services/mediaPreview';
 
+function StorageBar({ usage }: { usage: MediaStorageUsage }) {
+  const pct =
+    usage.quota_bytes > 0
+      ? Math.min(100, Math.round((usage.used_bytes / usage.quota_bytes) * 1000) / 10)
+      : 0;
+  const warn = pct >= 85;
+  const full = pct >= 100;
+  const barColor = full
+    ? 'bg-raid-danger'
+    : warn
+      ? 'bg-raid-warning'
+      : 'bg-raid-accent';
+
+  return (
+    <Card>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-raid-text">Storage</p>
+          <p className="mt-0.5 text-xs text-raid-text-secondary">
+            {formatBytes(usage.used_bytes)} used · {formatBytes(usage.remaining_bytes)} remaining
+            {usage.enforced ? '' : ' (soft limit)'}
+          </p>
+        </div>
+        <p className="shrink-0 text-sm font-semibold tabular-nums text-raid-text">
+          {pct}%
+          <span className="ml-1 font-normal text-raid-text-secondary">
+            / {formatBytes(usage.quota_bytes)}
+          </span>
+        </p>
+      </div>
+      <div
+        className="mt-3 h-2.5 overflow-hidden rounded-full bg-raid-surface"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Storage used"
+      >
+        <div
+          className={`h-full rounded-full transition-[width] duration-500 ease-out ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </Card>
+  );
+}
+
 export function MediaLibraryPage() {
   const t = useT();
   const [items, setItems] = useState<Media[]>([]);
+  const [storage, setStorage] = useState<MediaStorageUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -21,8 +77,12 @@ export function MediaLibraryPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await listMedia({ page: 1, limit: 50 });
-      setItems(res.items);
+      const [res, usage] = await Promise.all([
+        listMedia({ page: 1, limit: 50 }),
+        getMediaStorage().catch(() => null),
+      ]);
+      setItems(res.items ?? []);
+      setStorage(usage);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load media');
     } finally {
@@ -65,6 +125,8 @@ export function MediaLibraryPage() {
       await deleteMedia(id);
       revokeMediaPreview(id);
       setItems((prev) => prev.filter((m) => m.id !== id));
+      const usage = await getMediaStorage().catch(() => null);
+      setStorage(usage);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
     }
@@ -96,6 +158,8 @@ export function MediaLibraryPage() {
           }}
         />
       </div>
+
+      {storage && <StorageBar usage={storage} />}
 
       {hint && (
         <div className="rounded-lg border border-raid-accent/30 bg-raid-accent/10 px-4 py-2 text-sm text-raid-text">

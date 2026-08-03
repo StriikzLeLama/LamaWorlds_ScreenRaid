@@ -4,6 +4,11 @@ export type CursorPos = { monitor_index: number; x: number; y: number };
 
 export type MotionPreset =
   | 'exact'
+  | 'center'
+  | 'top_left'
+  | 'top_right'
+  | 'bottom_left'
+  | 'bottom_right'
   | 'follow_mouse'
   | 'orbit'
   | 'trail'
@@ -24,27 +29,6 @@ export function getMotionOptions(t: TFn): { value: MotionPreset; label: string; 
     { value: 'takeover', label: t('motion.takeover'), hint: t('motion.takeoverHint') },
   ];
 }
-
-/** @deprecated Prefer getMotionOptions(t) for localized labels. */
-export const MOTION_OPTIONS = getMotionOptions((k) => {
-  const fallback: Record<string, string> = {
-    'motion.exact': 'Fixed',
-    'motion.exactHint': 'Chosen position / center',
-    'motion.followMouse': 'Follow mouse',
-    'motion.followMouseHint': 'Sticks to cursor ~3s',
-    'motion.orbit': 'Orbit',
-    'motion.orbitHint': 'Circles around the mouse',
-    'motion.trail': 'Trail',
-    'motion.trailHint': '3 mini-GIFs that follow',
-    'motion.dodge': 'Dodge',
-    'motion.dodgeHint': 'Flees when you approach',
-    'motion.clickbait': 'Click bait',
-    'motion.clickbaitHint': 'Fake Close button → 2nd raid',
-    'motion.takeover': 'Takeover',
-    'motion.takeoverHint': 'Full-screen banner then GIF',
-  };
-  return fallback[k] ?? k;
-});
 
 export function isCursorMotion(preset: string | undefined): boolean {
   return (

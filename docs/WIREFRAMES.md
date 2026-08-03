@@ -1,5 +1,7 @@
 # ScreenRaid — Desktop UI Wireframes
 
+> **Historical:** MVP wireframes (June 2026). Live UI follows [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) and the Cloudflare-hosted dashboard.
+
 > **Design system:** HomeBoard Anthracite Orange  
 > Flat admin-panel UI. No glassmorphism. No neon.  
 > Canonical tokens: [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)

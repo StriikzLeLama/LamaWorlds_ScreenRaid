@@ -1,31 +1,35 @@
-# ScreenRaid — Security Guide / Guide de sécurité
+# ScreenRaid — Security Guide
 
-> Security architecture for the consent-based ScreenRaid platform: authentication, authorization, anti-abuse, and media safety.  
-> Modèle de sécurité : authentification, consentement, anti-spam et protection des médias.
+> Security architecture for the consent-based ScreenRaid platform: authentication, authorization, anti-abuse, and media safety.
 
-See also: [ARCHITECTURE.md](./ARCHITECTURE.md) · [API.md](./API.md) · [WEBSOCKET.md](./WEBSOCKET.md) · [DEPLOYMENT.md](./DEPLOYMENT.md)
+**Production base URL:** `https://screenraid.app.lama-worlds.com`  
+API prefix: `/v1/*` · WebSocket: `wss://screenraid.app.lama-worlds.com/v1/ws`
+
+**Production backend:** hosted on **Cloudflare Workers + D1 + R2 + Durable Objects** (`cloud/`). Self-hosted Rust/Axum (`server/`) remains supported for dev/on-prem. Security behavior is aligned between both where possible.
+
+See also: [ARCHITECTURE.md](./ARCHITECTURE.md) · [API.md](./API.md) · [WEBSOCKET.md](./WEBSOCKET.md) · [DEPLOYMENT.md](./DEPLOYMENT.md) · [cloud/README.md](../cloud/README.md)
 
 ---
 
 ## Table of Contents
 
-1. [Security Principles / Principes](#1-security-principles--principes)
+1. [Security Principles](#1-security-principles)
 2. [Authentication — JWT & Tokens](#2-authentication--jwt--tokens)
-3. [Refresh Token Rotation / Rotation des jetons](#3-refresh-token-rotation--rotation-des-jetons)
-4. [Authorization & Consent / Autorisation](#4-authorization--consent--autorisation)
-5. [Anti-Spam & Rate Limiting / Anti-spam](#5-anti-spam--rate-limiting--anti-spam)
-6. [Audit Logging / Journal d'audit](#6-audit-logging--journal-daudit)
-7. [Upload Protection / Protection des uploads](#7-upload-protection--protection-des-uploads)
-8. [WebSocket Security / Sécurité WebSocket](#8-websocket-security--sécurité-websocket)
-9. [Per-User Limits / Limites par utilisateur](#9-per-user-limits--limites-par-utilisateur)
-10. [Bans & Blocks / Bannissements](#10-bans--blocks--bannissements)
+3. [Refresh Token Rotation](#3-refresh-token-rotation)
+4. [Authorization & Consent](#4-authorization--consent)
+5. [Anti-Spam & Rate Limiting](#5-anti-spam--rate-limiting)
+6. [Audit Logging](#6-audit-logging)
+7. [Upload Protection](#7-upload-protection)
+8. [WebSocket Security](#8-websocket-security)
+9. [Per-User Limits](#9-per-user-limits)
+10. [Bans & Blocks](#10-bans--blocks)
 11. [Client-Side Defenses](#11-client-side-defenses)
-12. [Incident Response / Réponse aux incidents](#12-incident-response--réponse-aux-incidents)
-13. [Security Checklist / Checklist sécurité](#13-security-checklist--checklist-sécurité)
+12. [Incident Response](#12-incident-response)
+13. [Security Checklist](#13-security-checklist)
 
 ---
 
-## 1. Security Principles / Principes
+## 1. Security Principles
 
 ScreenRaid is a **consent-first** social prank platform. Security goals:
 
@@ -102,7 +106,7 @@ Client uses access_token for API + WS
 
 ---
 
-## 3. Refresh Token Rotation / Rotation des jetons
+## 3. Refresh Token Rotation
 
 **Status: implemented** in `AuthService::refresh`.
 
@@ -143,7 +147,7 @@ This implements **refresh token rotation**: a stolen refresh token works only on
 
 ---
 
-## 4. Authorization & Consent / Autorisation
+## 4. Authorization & Consent
 
 ### 4.1 Role Matrix
 
@@ -173,22 +177,18 @@ All room-scoped operations verify membership via `RoomRepository::is_member(room
 
 ---
 
-## 5. Anti-Spam & Rate Limiting / Anti-spam
+## 5. Anti-Spam & Rate Limiting
 
 Architecture defines layered limits to prevent abuse while allowing playful use within a friend group.
 
-### 5.1 HTTP Rate Limits (planned middleware)
+### 5.1 HTTP Rate Limits
 
-From [ARCHITECTURE.md](./ARCHITECTURE.md) Section 9:
+| Backend | Login | Register | Media upload | Send prank |
+|---------|-------|----------|--------------|------------|
+| **Rust** (`server/`) | 60/min per IP | 3/hour per IP | Quota + per-file caps | Preset defaults: **12/min** (friends), **5/min** (strict) + target cooldown |
+| **Cloud** (`cloud/`) | Auth routes | Same | 40/day + 200 MB/user when quotas on; **per-file size always enforced** | `cloud/src/lib/raidLimits.ts` — same preset defaults + target cooldown |
 
-| Endpoint / action | Limit | Key |
-|-------------------|-------|-----|
-| Login | **5 / min** | Client IP |
-| Register | **3 / hour** | Client IP |
-| Media upload | **20 / hour** | User ID |
-| Send prank | **30 / min** | User ID + room ID |
-
-Implementation target: Tower middleware with in-memory sliding window (single-node) or Redis (multi-node). Return `429 Too Many Requests` with `Retry-After` header.
+Return `429` with `{ code: "rate_limited" }` on Cloud; Rust uses `AppError::RateLimited`.
 
 ### 5.2 Shared Constants (`screenraid-validation`)
 
@@ -231,7 +231,7 @@ When queue is full, client ACKs `rendered=false`, reason `QUEUE_FULL`.
 
 ---
 
-## 6. Audit Logging / Journal d'audit
+## 6. Audit Logging
 
 ### 6.1 Schema
 
@@ -286,9 +286,9 @@ LIMIT 100;
 
 ---
 
-## 7. Upload Protection / Protection des uploads
+## 7. Upload Protection
 
-Implementation: `crates/screenraid-validation` (shared by server and client).
+Implementation: `crates/screenraid-validation` (Rust) and `cloud/src/lib/mimeValidation.ts` (Worker).
 
 ### 7.1 Validation Pipeline
 
@@ -335,7 +335,8 @@ Client and server reject extensions that do not match allowed types. Never trust
 | Measure | Detail |
 |---------|--------|
 | Path layout | `{STORAGE_PATH}/{room_id}/{media_id}.{ext}` — no user-controlled paths |
-| Content-Disposition | `attachment` for downloads |
+| Content-Disposition | `inline` for overlay fetch; downloads require auth + ACL |
+| Media download ACL | Owner, room member (if `room_id` set), or member of a room that used the media in a prank (`canAccessMedia` in `cloud/src/lib/db.ts`) |
 | Dedup | `hash_sha256` index prevents duplicate storage |
 | Moderation hook | `media.is_approved` flag for future queue |
 
@@ -349,23 +350,20 @@ Client and server reject extensions that do not match allowed types. Never trust
 
 ---
 
-## 8. WebSocket Security / Sécurité WebSocket
+## 8. WebSocket Security
 
 Specification: [WEBSOCKET.md](./WEBSOCKET.md). Handler: `server/src/websocket/handler.rs`.
 
 ### 8.1 Connection Authentication
 
-| Property | Value |
-|----------|-------|
-| Endpoint | `GET /v1/ws?token=<access_token>` |
-| Validation | JWT verified **before** upgrade (`verify_access_token`) |
-| Failure | HTTP `401` — no WebSocket upgrade |
+| Property | Cloud (prod) | Rust (self-host) |
+|----------|--------------|------------------|
+| Endpoint | `GET /v1/ws` (upgrade) | `GET /v1/ws?token=` (legacy) or post-connect `auth` |
+| Preferred flow | Connect → server sends `auth_required` → client sends `{ type: "auth", payload: { token } }` | Same message flow supported |
+| Pre-auth flood | Max 20 messages / 10 s per socket (`WsHub`) | Handler rate limits |
+| Failure | `auth_failed` + close `1008` | HTTP `401` if query token invalid |
 
-**Why query param?** Browser WebSocket API cannot set custom headers on handshake in all environments; access token in query is standard for WS auth. Mitigations:
-
-- **HTTPS/WSS only** in production (token not exposed on wire)
-- Short-lived access token (15 min)
-- Do not log query strings in access logs (configure proxy: `log { format { uri query { - token } } } }` in Caddy)
+**Why post-connect auth?** Avoids putting JWTs in proxy access logs. Short-lived access token (15 min). **WSS only** in production.
 
 ### 8.2 Session Registry
 
@@ -381,15 +379,16 @@ On disconnect: unregister session; if last session for user, broadcast `offline`
 
 Client sends `subscribe_room` with `room_id`.
 
-**Required checks (target behavior):**
+**Required checks (implemented on Cloud + Rust):**
 
 | Check | Purpose |
 |-------|---------|
-| Valid JWT | Already enforced at handshake |
-| `is_member(room_id, user_id)` | Prevent subscribing to foreign rooms |
-| Room `is_active = 1` | No events from deleted rooms |
+| Authenticated socket | JWT via post-connect `auth` (Cloud) or handshake (Rust legacy) |
+| `is_member(room_id, user_id)` | `WsHub` / `RoomRepository` before subscription |
+| Room active | No events from deleted rooms (`is_active = 0`) |
+| Reject | `error` event `{ message: "not_a_member" }` |
 
-> **Implementation note:** Membership verification on `subscribe_room` is specified in architecture; ensure `WsHub::subscribe_room` calls `RoomRepository::is_member` before adding the subscription. Reject with `error` event if not a member.
+> Ping throttle (Cloud): minimum **5 s** between accepted pings per socket; client heartbeat **45 s**.
 
 ### 8.4 Event Emission Rules
 
@@ -403,7 +402,9 @@ Client sends `subscribe_room` with `room_id`.
 
 | Parameter | Value |
 |-----------|-------|
-| Client ping interval | 30 s |
+| Client ping interval | 45 s |
+| Hub min ping spacing | 5 s (excess pings dropped) |
+| Pre-auth message limit | 20 / 10 s (then close) |
 | Server pong deadline | 5 s |
 | Proxy read timeout | ≥ 3600 s (see [DEPLOYMENT.md](./DEPLOYMENT.md)) |
 
@@ -417,7 +418,7 @@ Stale sessions are dropped; pranks replay within 60 s if `prank:ack` missing (pe
 
 ---
 
-## 9. Per-User Limits / Limites par utilisateur
+## 9. Per-User Limits
 
 ### 9.1 Upload Quotas (`upload_quotas` table)
 
@@ -433,11 +434,14 @@ New day → new row (implicit reset). Server increments before accepting upload;
 
 ### 9.2 Prank Rate Limits
 
-| Constant | Value | Scope |
-|----------|-------|-------|
-| `MAX_PRANKS_PER_MINUTE` | 30 | Per user per room |
+Resolved from `user_security_prefs.preset` (`friends` / `strict`) with optional overrides:
 
-Exceeded → `429` with retry guidance; optional audit log entry `prank_rate_limited`.
+| Preset | max/min | target cooldown | max duration |
+|--------|---------|-----------------|--------------|
+| friends | 12 | 3000 ms | 15 s |
+| strict | 5 | 8000 ms | 8 s |
+
+Exceeded → `429` / `prank:blocked`; client may ACK `rendered=false` when local prefs block (sound/video/fullscreen/cooldown).
 
 ### 9.3 Room Limits
 
@@ -450,9 +454,22 @@ Exceeded → `429` with retry guidance; optional audit log entry `prank_rate_lim
 
 No hard global cap in MVP; disk quota enforced at infrastructure level. Client cache default: **500 MB** LRU ([DATABASE.md](./DATABASE.md) client settings).
 
+### 9.5 Cloudflare Worker (hosted backend)
+
+| Setting | Where | Notes |
+|---------|-------|-------|
+| `JWT_SECRET` | `wrangler secret` | Required; same value as Rust if migrating SQLite users + 2FA |
+| `ADMIN_USERNAMES` | `wrangler.jsonc` vars or secret | Comma-separated usernames (case-insensitive) |
+| `KLIPY_API_KEY` | `wrangler secret` | Optional; GIF search/import disabled if empty |
+| `CORS_ORIGINS` | `wrangler.jsonc` | Comma-separated allowlist; credentials only for listed origins (`cloud/src/lib/http.ts`) |
+| `ENFORCE_STORAGE_QUOTAS` | var (`1` prod) | Per-file + 200 MB/user + 40 uploads/day |
+| HTTP headers | Worker | `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` on API/SPA |
+
+Never commit secrets to git — use `wrangler secret put` and host `.env` only on the server.
+
 ---
 
-## 10. Bans & Blocks / Bannissements
+## 10. Bans & Blocks
 
 ### 10.1 Account Ban (`users.is_active`)
 
@@ -491,7 +508,8 @@ Admins/owners can `DELETE /v1/rooms/{id}/members/{user_id}`. Kicked user:
 
 | Feature | Location | Purpose |
 |---------|----------|---------|
-| Consent gate | UI blocking screen | No WS prank render until opt-in |
+| Consent gate | UI + `useConsentStore` | No WS prank render until opt-in |
+| Security prefs | `usePrankReceiver` + `/v1/users/me/security` | Enforces `allow_sound`, `allow_video`, `allow_fullscreen`, `local_cooldown_ms` on receive |
 | Panic button | Global hotkey (`Ctrl+Shift+Escape`) | Hide all overlays; `is_paused = true` |
 | Local consent cache | Tauri SQLite | Fast reject before render |
 | Overlay queue caps | Rust `OverlayQueue` | Anti-spam visual layer |
@@ -501,7 +519,7 @@ See [OVERLAY_ENGINE.md](./OVERLAY_ENGINE.md) Section 11 (Overlay Security).
 
 ---
 
-## 11.1 Monitor Metadata Privacy / Métadonnées écran
+## 11.1 Monitor Metadata Privacy
 
 ScreenRaid's **Virtual Monitor Placement** shares monitor **geometry only** — never screen contents.
 
@@ -541,7 +559,7 @@ ScreenRaid's **Virtual Monitor Placement** shares monitor **geometry only** — 
 
 ---
 
-## 12. Incident Response / Réponse aux incidents
+## 12. Incident Response
 
 | Incident | Immediate action |
 |----------|------------------|
@@ -554,23 +572,23 @@ Preserve `audit_log` and backups before destructive actions.
 
 ---
 
-## 13. Security Checklist / Checklist sécurité
+## 13. Security Checklist
 
 ### Deployment
 
 - [ ] HTTPS/WSS only
 - [ ] Strong `JWT_SECRET`
-- [ ] CORS restricted
-- [ ] Proxy does not log `token` query param
+- [x] CORS restricted (Cloud: `CORS_ORIGINS` allowlist)
+- [ ] Proxy does not log `token` query param (Rust legacy WS only)
 - [ ] Firewall configured
 
 ### Application
 
 - [ ] Refresh token rotation enabled
 - [ ] `is_active` checked on login/refresh
-- [ ] Upload validation pipeline active
-- [ ] Rate limiting middleware deployed
-- [ ] WS room membership verified on subscribe
+- [x] Upload validation pipeline active (magic-byte + MIME on Cloud and Rust)
+- [x] Prank rate limits (Cloud `raidLimits.ts`, Rust `PrankService`)
+- [x] WS room membership verified on subscribe
 - [ ] Audit logging wired for sensitive actions
 
 ### Operations

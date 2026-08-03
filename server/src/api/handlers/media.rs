@@ -5,7 +5,7 @@ use axum::{
     response::Response,
     Json,
 };
-use screenraid_types::MediaListResponse;
+use screenraid_types::{MediaListResponse, MediaStorageUsage};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -96,6 +96,13 @@ pub async fn list_media(
             .list(auth.user_id, query.room_id, query.page, query.limit)
             .await?,
     ))
+}
+
+pub async fn media_storage(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<MediaStorageUsage>, AppError> {
+    Ok(Json(state.media.storage_usage(auth.user_id).await?))
 }
 
 pub async fn list_room_media(

@@ -77,12 +77,12 @@ export function SecuritySettingsPanels({ accessToken, onMessage, onError }: Prop
 
   const reloadSessions = useCallback(async () => {
     const res = await listSessions(accessToken);
-    setSessions(res.sessions);
+    setSessions(res.sessions ?? []);
   }, [accessToken]);
 
   const reloadAudit = useCallback(async () => {
     const res = await listMyAudit(accessToken, 1, 15);
-    setAudit(res.items);
+    setAudit(res.items ?? []);
   }, [accessToken]);
 
   const reloadPrefs = useCallback(async () => {

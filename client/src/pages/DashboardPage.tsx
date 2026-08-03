@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Activity, DoorOpen, Users, Wifi, WifiOff, Zap } from 'lucide-react';
-import { Card, Badge } from '../components/ui';
+import { Card, Badge, Button } from '../components/ui';
 import { checkServerHealth } from '../services/api';
 import { listFriends } from '../services/friends';
 import { listRooms } from '../services/rooms';
+import { defaultOverlayConfig, selfTestPrank } from '../services/pranks';
 import { useConsentStore } from '../stores/consentStore';
 import { WsLatencyBadge } from '../components/WsLatencyBadge';
 import { useWsConnection } from '../hooks/useWsConnection';
+import { isTauriRuntime } from '../lib/platform';
 
 export function DashboardPage() {
   const [serverOk, setServerOk] = useState(false);
   const [roomCount, setRoomCount] = useState(0);
   const [friendsOnline, setFriendsOnline] = useState(0);
+  const [selfTestMsg, setSelfTestMsg] = useState('');
+  const [selfTesting, setSelfTesting] = useState(false);
   const { globalConsent, isPaused } = useConsentStore();
   const { connected: wsConnected, rttMs } = useWsConnection();
 
@@ -23,12 +27,43 @@ export function DashboardPage() {
       .catch(() => undefined);
   }, []);
 
+  const runSelfTest = async () => {
+    setSelfTesting(true);
+    setSelfTestMsg('');
+    try {
+      await selfTestPrank({
+        media_id: null,
+        overlay_type: 'text',
+        text_content: 'Self-test OK — no room needed',
+        duration_ms: 4000,
+        config: {
+          ...defaultOverlayConfig(),
+          animation: 'pop',
+          sfx: 'pop',
+        },
+      });
+      setSelfTestMsg(
+        isTauriRuntime()
+          ? 'Sent — check your screen overlay (receiver must be running).'
+          : 'Sent via WebSocket. Open the desktop receiver to see the overlay.',
+      );
+    } catch (e) {
+      setSelfTestMsg(e instanceof Error ? e.message : 'Self-test failed');
+    } finally {
+      setSelfTesting(false);
+    }
+  };
+
   const displayStats = [
     { label: 'Active Rooms', value: String(roomCount), icon: DoorOpen },
     { label: 'Friends Online', value: String(friendsOnline), icon: Users },
     { label: 'Pranks Today', value: '0', icon: Zap },
     { label: 'Server Status', value: serverOk ? 'Online' : 'Offline', icon: Activity },
-    { label: 'Live Connection', value: wsConnected ? (rttMs != null ? `${rttMs}ms` : 'Connected') : 'Disconnected', icon: wsConnected ? Wifi : WifiOff },
+    {
+      label: 'Live Connection',
+      value: wsConnected ? (rttMs != null ? `${rttMs}ms` : 'Connected') : 'Disconnected',
+      icon: wsConnected ? Wifi : WifiOff,
+    },
   ];
 
   return (
@@ -50,6 +85,26 @@ export function DashboardPage() {
         </div>
       </div>
 
+      <Card accentHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-raid-text">Test on yourself</h2>
+            <p className="text-sm text-raid-text-secondary">
+              Send a quick overlay to your own receiver — no room required.
+            </p>
+          </div>
+          <Button onClick={() => void runSelfTest()} disabled={selfTesting || !wsConnected}>
+            {selfTesting ? 'Sending…' : 'Self-test overlay'}
+          </Button>
+        </div>
+        {!wsConnected && (
+          <p className="mt-2 text-xs text-raid-warning">
+            Connect WebSocket first (sign in again if needed).
+          </p>
+        )}
+        {selfTestMsg && <p className="mt-2 text-sm text-raid-text-secondary">{selfTestMsg}</p>}
+      </Card>
+
       {(!wsConnected || !globalConsent || isPaused) && (
         <Card className="border-raid-warning/40 bg-raid-warning/10">
           <p className="text-sm text-raid-text">
@@ -62,12 +117,14 @@ export function DashboardPage() {
             {!wsConnected && (!globalConsent || isPaused) && ' '}
             {!globalConsent && (
               <>
-                <strong>Consent not granted</strong> — go to Settings and enable receiving overlays.
+                <strong>Consent not granted</strong> — go to Settings and enable receiving overlays
+                (self-test still works without consent).
               </>
             )}
             {globalConsent && isPaused && (
               <>
-                <strong>Receiving paused</strong> — resume in Settings to see pranks.
+                <strong>Receiving paused</strong> — resume in Settings to see pranks from others
+                (self-test still works).
               </>
             )}
           </p>
@@ -82,30 +139,10 @@ export function DashboardPage() {
                 <p className="text-sm text-raid-text-secondary">{label}</p>
                 <p className="mt-1 text-2xl font-bold text-raid-text">{value}</p>
               </div>
-              <div className="rounded-xl bg-raid-surface p-2.5">
-                <Icon size={20} className="text-raid-accent" />
-              </div>
+              <Icon className="text-raid-accent" size={22} />
             </div>
           </Card>
         ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Recent Pranks</h2>
-          <p className="text-sm text-raid-text-secondary">
-            No pranks yet. Join a room and send your first overlay.
-          </p>
-        </Card>
-        <Card accentHeader>
-          <h2 className="mb-4 text-lg font-semibold text-raid-text">Quick Actions</h2>
-          <ul className="space-y-2 text-sm text-raid-text-secondary">
-            <li>• Create or join a private room</li>
-            <li>• Grant consent (web or desktop receiver)</li>
-            <li>• Upload media to your library</li>
-            <li>• Run the ScreenRaid Receiver app on your PC to display overlays</li>
-          </ul>
-        </Card>
       </div>
     </div>
   );

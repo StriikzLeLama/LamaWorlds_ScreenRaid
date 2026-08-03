@@ -95,6 +95,7 @@ pub fn create_router(state: AppState) -> Router {
 
     let media_routes = Router::new()
         .route("/upload", post(handlers::upload_media))
+        .route("/storage", get(handlers::media_storage))
         .route("/", get(handlers::list_media))
         .route("/{id}/file", get(handlers::download_media))
         .route("/{id}", delete(handlers::delete_media));
@@ -128,6 +129,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/health/ready", get(handlers::ready))
         .route("/v1/invites/{token}/preview", get(handlers::get_invite_preview))
         .route("/v1/ws", get(ws_handler))
+        .route("/v1/pranks/self-test", post(handlers::self_test_prank))
         .nest("/v1/auth", auth_routes)
         .nest("/v1/rooms", room_routes)
         .nest("/v1/friends", friend_routes)

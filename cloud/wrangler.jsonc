@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "screenraid",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "ACCESS_TOKEN_TTL_SEC": "900",
+    "REFRESH_TOKEN_TTL_SEC": "2592000",
+    "ADMIN_USERNAMES": "StriikzLeLama",
+    "TURNSTILE_SITE_KEY": "",
+    "ENFORCE_STORAGE_QUOTAS": "1",
+    "USER_MEDIA_QUOTA_BYTES": "209715200",
+    "MAX_UPLOADS_PER_DAY": "40",
+    "CORS_ORIGINS": "https://screenraid.app.lama-worlds.com,http://localhost:1420,http://localhost:5173,tauri://localhost,https://tauri.localhost"
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/v1/*", "/health", "/health/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "screenraid",
+      "database_id": "c7770ebd-1fe1-4e10-be55-bcd096b3639d",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "screenraid-media"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WS_HUB",
+        "class_name": "WsHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WsHub"]
+    }
+  ]
+}

@@ -1,28 +1,29 @@
 # ScreenRaid Receiver — releases & auto-update
 
-## Mises à jour sans réinstaller
+**Production server URL:** `https://screenraid.app.lama-worlds.com` (Receiver Settings → Server URL).
 
-L’app embarque le plugin **Tauri Updater**. Au démarrage elle consulte
-`https://github.com/StriikzLeLama/LamaWorlds_ScreenRaid/releases/latest/download/latest.json`.
-Si une version plus récente est signée et publiée, elle **télécharge, installe et relance** toute seule.
+## Updates without reinstalling
 
-Les utilisateurs qui ont déjà installé un build signé (NSIS) **n’ont pas besoin de réinstaller** :
-il suffit de republier une release `client-v*` (ex. `client-v0.1.2`).
+The app embeds the **Tauri Updater** plugin. On startup it checks  
+`https://github.com/StriikzLeLama/LamaWorlds_ScreenRaid/releases/latest/download/latest.json`.  
+If a newer signed build is published, it **downloads, installs, and restarts** automatically.
 
-Prérequis côté éditeur :
+Users on a signed NSIS install **do not need to reinstall manually** — publish a `client-v*` tag (e.g. `client-v0.1.9`).
 
-1. Secret GitHub `TAURI_SIGNING_PRIVATE_KEY` (clé privée updater)
+Publisher requirements:
+
+1. GitHub secret `TAURI_SIGNING_PRIVATE_KEY` (updater private key)
 2. Tag + push → workflow `release-receiver.yml`
-3. Publier la release draft sur GitHub
+3. Publish the draft release on GitHub
 
-Les installs « portable » / copies manuelles de `.exe` hors NSIS peuvent ne pas recevoir l’updater.
+Portable / manual `.exe` copies may not receive auto-updates.
 
-## Tray (barre des tâches)
+## System tray
 
-Fermer la fenêtre (X ou Alt+F4) **minimise dans la zone de notification** au lieu de quitter l’app.  
-Clic gauche sur l’icône ou menu **Ouvrir ScreenRaid** pour réafficher. **Quitter** ferme vraiment l’app.
+Closing the window (X or Alt+F4) **minimizes to the notification area** instead of quitting.  
+Left-click the tray icon or **Open ScreenRaid** in the menu to restore. **Quit** exits the app.
 
-## Build `.exe` local (test)
+## Local `.exe` build (testing)
 
 ```powershell
 cd client
@@ -30,41 +31,32 @@ npm ci
 npm run tauri:build
 ```
 
-Installateur Windows :
+Windows installer:
 
 - `client/src-tauri/target/release/bundle/nsis/ScreenRaid Receiver_*_x64-setup.exe`
 
-## Mises à jour GitHub
+## GitHub releases
 
-1. **Clé de signature** (une fois) — déjà générée localement :
-   - Privée : `client/screenraid-updater.key` (**ne jamais commit**)
-   - Publique : embarquée dans `client/src-tauri/tauri.conf.json`
+1. **Signing key** (one-time):
+   - Private: `client/screenraid-updater.key` (**never commit**)
+   - Public: embedded in `client/src-tauri/tauri.conf.json`
 
-2. **Secret GitHub** `TAURI_SIGNING_PRIVATE_KEY`  
-   Contenu du fichier `screenraid-updater.key` (Settings → Secrets → Actions).
+2. **GitHub secret** `TAURI_SIGNING_PRIVATE_KEY` — contents of `screenraid-updater.key`.
 
-3. **Publier une release** :
+3. **Publish a release**:
 
    ```bash
-   git add .github/workflows/release-receiver.yml client/src-tauri/tauri.release.conf.json
-   git commit -m "fix(ci): release workflow config path on Windows"
-   git push origin HEAD
-
-   # Retag si le tag pointe déjà sur un commit cassé :
-   git tag -d client-v0.1.2
-   git push origin :refs/tags/client-v0.1.2
-   git tag client-v0.1.2
-   git push origin client-v0.1.2
+   git tag client-v0.1.9
+   git push origin client-v0.1.9
    ```
 
-   Le workflow `.github/workflows/release-receiver.yml` build l’installateur, signe les artefacts et crée une release draft sur GitHub.
+   Workflow `.github/workflows/release-receiver.yml` builds the installer, signs artifacts, and creates a draft GitHub release.
 
-   **Note Windows CI :** ne pas passer de JSON inline à `--config` (ça casse l’échappement). On merge `src-tauri/tauri.release.conf.json` à la place.
+   **Windows CI note:** do not pass inline JSON to `--config`; merge `src-tauri/tauri.release.conf.json` instead.
 
-4. **Au démarrage**, l’app vérifie  
-   `https://github.com/StriikzLeLama/LamaWorlds_ScreenRaid/releases/latest/download/latest.json`  
-   et installe la mise à jour si une version plus récente est disponible.
+4. On startup the app checks the latest `latest.json` from GitHub releases.
 
-## Serveur par défaut
+## Default server URL
 
-Aucune URL distante n’est préremplie. L’utilisateur saisit son serveur (ex. `http://localhost:8080` en local) dans Receiver Settings → Server URL.
+No remote URL is baked in. Users enter their server in Receiver Settings → Server URL.  
+For production use: **`https://screenraid.app.lama-worlds.com`**.

@@ -1,30 +1,50 @@
-# ScreenRaid — Deployment Guide / Guide de déploiement
+# ScreenRaid — Deployment Guide
 
-> Production deployment for the ScreenRaid consent-based prank platform (Rust/Axum server, SQLite, Docker).  
-> Déploiement du serveur ScreenRaid en environnement de production.
+> Production deployment for ScreenRaid: **Cloudflare Workers** (live) or **Rust/Axum + Docker** (self-host).
 
-See also: [ARCHITECTURE.md](./ARCHITECTURE.md) · [DATABASE.md](./DATABASE.md) · [SECURITY.md](./SECURITY.md)
+**Production base URL:** `https://screenraid.app.lama-worlds.com`  
+Dashboard: `/` · REST: `/v1/*` · WebSocket: `wss://screenraid.app.lama-worlds.com/v1/ws`  
+Tauri receiver **Server URL** → `https://screenraid.app.lama-worlds.com`
+
+**Self-hosted (optional):** `https://screenraid.lama-worlds.com` — separate SQLite DB unless migrated.
+
+See also: [ARCHITECTURE.md](./ARCHITECTURE.md) · [DATABASE.md](./DATABASE.md) · [SECURITY.md](./SECURITY.md) · [cloud/README.md](../cloud/README.md)
+
+---
+
+## 1.1 Cloudflare (production)
+
+| Component | Binding | Notes |
+|-----------|---------|-------|
+| Worker + SPA | `cloud/src/index.ts`, `cloud/public/` | `wrangler deploy` |
+| D1 | `DB` | Migrations: `cloud/migrations/` |
+| R2 | `MEDIA` | User uploads |
+| Durable Object | `WS_HUB` | WebSocket hub |
+| Secrets | `JWT_SECRET`, `TURNSTILE_SECRET_KEY`, … | `wrangler secret put` |
+| Vars | `CORS_ORIGINS`, `ADMIN_USERNAMES`, quotas | `cloud/wrangler.jsonc` |
+
+Full steps: [cloud/README.md](../cloud/README.md).
 
 ---
 
 ## Table of Contents
 
-1. [Overview / Vue d'ensemble](#1-overview--vue-densemble)
-2. [Prerequisites / Prérequis](#2-prerequisites--prérequis)
+1. [Overview](#1-overview)
+2. [Prerequisites](#2-prerequisites)
 3. [Docker Compose](#3-docker-compose)
-4. [Reverse Proxy / Proxy inverse](#4-reverse-proxy--proxy-inverse)
-5. [HTTPS & Certificates / Certificats](#5-https--certificates--certificats)
-6. [Environment Variables / Variables d'environnement](#6-environment-variables--variables-denvironnement)
+4. [Reverse Proxy](#4-reverse-proxy)
+5. [HTTPS & Certificates](#5-https--certificates)
+6. [Environment Variables](#6-environment-variables)
 7. [Production vs Development](#7-production-vs-development)
-8. [Backups & Restore / Sauvegardes](#8-backups--restore--sauvegardes)
-9. [Database Migrations / Migrations](#9-database-migrations--migrations)
-10. [Automatic Updates / Mises à jour automatiques](#10-automatic-updates--mises-à-jour-automatiques)
+8. [Backups & Restore](#8-backups--restore)
+9. [Database Migrations](#9-database-migrations)
+10. [Automatic Updates](#10-automatic-updates)
 11. [Health Checks & Monitoring](#11-health-checks--monitoring)
-12. [Production Checklist / Checklist production](#12-production-checklist--checklist-production)
+12. [Production Checklist](#12-production-checklist)
 
 ---
 
-## 1. Overview / Vue d'ensemble
+## 1. Overview
 
 ScreenRaid ships a single **stateful** server container that includes the **web dashboard** (built React SPA at `/`):
 
@@ -58,7 +78,7 @@ Internet
 
 ---
 
-## 2. Prerequisites / Prérequis
+## 2. Prerequisites
 
 | Requirement | Notes |
 |-------------|-------|
@@ -194,7 +214,7 @@ Create `deploy/Caddyfile` as described in [Section 4](#4-reverse-proxy--proxy-in
 
 ---
 
-## 4. Reverse Proxy / Proxy inverse
+## 4. Reverse Proxy
 
 The ScreenRaid server serves both REST (`/v1/*`) and WebSocket (`/v1/ws`) on the same port. The reverse proxy **must** support HTTP/1.1 WebSocket upgrade and forward `Authorization` (REST) and `X-Forwarded-For` / `X-Forwarded-Proto` (audit + rate limits).
 
@@ -206,7 +226,7 @@ Caddy handles TLS automatically via Let's Encrypt when a public domain is config
 
 ```caddyfile
 # deploy/Caddyfile
-screenraid.example.com {
+screenraid.lama-worlds.com {
     encode gzip
 
     # REST API
@@ -232,7 +252,7 @@ screenraid.example.com {
 **WebSocket notes:**
 
 - Caddy 2 performs WebSocket upgrade transparently when the upstream responds with `101 Switching Protocols`.
-- Client connects to `wss://screenraid.example.com/v1/ws` and sends an `auth` message with the access JWT (see [WEBSOCKET.md](./WEBSOCKET.md)).
+- Client connects to `wss://screenraid.lama-worlds.com/v1/ws` and sends an `auth` message with the access JWT (see [WEBSOCKET.md](./WEBSOCKET.md)).
 - Ensure idle timeouts on the proxy are ≥ 60 s (client pings every 30 s per [WEBSOCKET.md](./WEBSOCKET.md)).
 
 ### 4.2 nginx
@@ -251,10 +271,10 @@ map $http_upgrade $connection_upgrade {
 
 server {
     listen 443 ssl http2;
-    server_name screenraid.example.com;
+    server_name screenraid.lama-worlds.com;
 
-    ssl_certificate     /etc/letsencrypt/live/screenraid.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/screenraid.example.com/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/screenraid.lama-worlds.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/screenraid.lama-worlds.com/privkey.pem;
 
     # TLS hardening (adjust to your policy)
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -289,7 +309,7 @@ server {
 
 server {
     listen 80;
-    server_name screenraid.example.com;
+    server_name screenraid.lama-worlds.com;
     return 301 https://$host$request_uri;
 }
 ```
@@ -307,24 +327,24 @@ Reload: `nginx -t && systemctl reload nginx`
 Configure the Tauri client `server_url` / `VITE_SERVER_URL` to the public HTTPS origin:
 
 ```
-VITE_SERVER_URL=https://screenraid.example.com
+VITE_SERVER_URL=https://screenraid.app.lama-worlds.com
 ```
 
 Update `CORS_ORIGINS` if the client is served from a web origin (Tauri uses `tauri://localhost` by default).
 
 ---
 
-## 5. HTTPS & Certificates / Certificats
+## 5. HTTPS & Certificates
 
 ### 5.0 Cloudflare Tunnel (recommended for homelab / potes)
 
 When the server runs behind **Cloudflare Tunnel**, Cloudflare terminates TLS (`https://` / `wss://`) at the edge. The origin can stay plain HTTP on `localhost:8080` — no Let's Encrypt on the origin required.
 
-1. Point a public hostname (e.g. `screenraid.example.com`) to your tunnel.
+1. Point a public hostname (e.g. `screenraid.lama-worlds.com`) to your tunnel.
 2. Route traffic to `http://127.0.0.1:8080` (or the Docker service).
 3. Set `CORS_ORIGINS` to your public HTTPS origin if needed (Tauri still uses `tauri://localhost`).
 4. Set a strong `JWT_SECRET` in the server `.env`.
-5. Configure the Tauri receiver `server_url` / `VITE_SERVER_URL` to `https://screenraid.example.com` (client auto-uses `wss://` for WebSocket).
+5. Configure the Tauri receiver `server_url` / `VITE_SERVER_URL` to `https://screenraid.app.lama-worlds.com` (client auto-uses `wss://` for WebSocket).
 
 Optional: enable **Cloudflare Turnstile** with `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` (see [Section 6](#6-environment-variables--variables-denvironnement)).
 
@@ -333,7 +353,7 @@ Optional: enable **Cloudflare Turnstile** with `TURNSTILE_SITE_KEY` + `TURNSTILE
 Caddy obtains and renews certificates when:
 
 1. Port `80` and `443` are reachable from the internet.
-2. DNS for `screenraid.example.com` resolves to the host.
+2. DNS for `screenraid.lama-worlds.com` resolves to the host.
 3. The site block uses a real domain (not `localhost`).
 
 Certificate storage (default):
@@ -348,15 +368,15 @@ No manual renewal cron is required.
 ### 5.2 certbot + nginx (manual)
 
 ```bash
-sudo certbot certonly --nginx -d screenraid.example.com
+sudo certbot certonly --nginx -d screenraid.lama-worlds.com
 ```
 
 Standard Let's Encrypt paths:
 
 | File | Path |
 |------|------|
-| Full chain | `/etc/letsencrypt/live/screenraid.example.com/fullchain.pem` |
-| Private key | `/etc/letsencrypt/live/screenraid.example.com/privkey.pem` |
+| Full chain | `/etc/letsencrypt/live/screenraid.lama-worlds.com/fullchain.pem` |
+| Private key | `/etc/letsencrypt/live/screenraid.lama-worlds.com/privkey.pem` |
 
 Renewal: certbot installs a systemd timer. Verify with `sudo certbot renew --dry-run`.
 
@@ -366,7 +386,7 @@ Acceptable for LAN or staging **only**. Production must use a trusted CA. Docume
 
 ---
 
-## 6. Environment Variables / Variables d'environnement
+## 6. Environment Variables
 
 Canonical reference: [`.env.example`](../.env.example) and `server/src/config.rs`.
 
@@ -434,7 +454,7 @@ Documented in [ARCHITECTURE.md](./ARCHITECTURE.md) for future phases:
 | **Database** | `./data/screenraid.db` on host | Named volume `screenraid-data` |
 | **Backups** | Optional | Scheduled, tested restore |
 | **Rate limiting** | May be relaxed | Enforced per [SECURITY.md](./SECURITY.md) |
-| **Client API URL** | `http://localhost:8080` | `https://screenraid.example.com` |
+| **Client API URL** | `http://localhost:8080` | `https://screenraid.app.lama-worlds.com` |
 
 ### 7.1 Local Development Without Docker
 
@@ -457,7 +477,7 @@ npm run tauri:dev   # Vite on :1420, talks to VITE_SERVER_URL
 
 ---
 
-## 8. Backups & Restore / Sauvegardes
+## 8. Backups & Restore
 
 ScreenRaid persistence is entirely in the Docker volume (or host `data/` directory). Back up **both** the database and media tree together for a consistent snapshot.
 
@@ -516,7 +536,7 @@ Cron example (`crontab -e`):
      sh -c "cp /restore/screenraid.db /data/ && tar -xzf /restore/media.tar.gz -C /data"
    ```
 3. **Start** server: `docker compose up -d`
-4. **Verify**: `curl https://screenraid.example.com/v1/health/ready`
+4. **Verify**: `curl https://screenraid.app.lama-worlds.com/v1/health`
 5. **Check migrations**: server logs should show `Applied` or `No migrations to apply`
 
 > **Important:** Restoring an older DB while keeping newer media files (or vice versa) can orphan records. Always restore matching pairs from the same backup timestamp.
@@ -564,7 +584,7 @@ docker compose exec server sqlite3 /data/screenraid.db ".tables"
 
 ---
 
-## 10. Automatic Updates / Mises à jour automatiques
+## 10. Automatic Updates
 
 ### 10.1 Watchtower (container image updates)
 
@@ -661,7 +681,7 @@ Add `curl` to the runtime image or use a TCP check if minimizing image size.
 
 ---
 
-## 12. Production Checklist / Checklist production
+## 12. Production Checklist
 
 ### Security
 
@@ -688,7 +708,7 @@ Add `curl` to the runtime image or use a TCP check if minimizing image size.
 
 ### Client
 
-- [ ] `VITE_SERVER_URL` points to production HTTPS URL
+- [ ] `VITE_SERVER_URL` points to `https://screenraid.app.lama-worlds.com` (or your self-host URL)
 - [ ] Installers signed (Windows code signing when available)
 
 ---

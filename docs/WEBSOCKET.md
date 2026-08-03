@@ -1,6 +1,12 @@
 # ScreenRaid WebSocket Protocol
 
-**Endpoint:** `GET /v1/ws?token=<access_token>`
+**Production endpoint:** `wss://screenraid.app.lama-worlds.com/v1/ws`
+
+**Endpoint:** `GET /v1/ws` (WebSocket upgrade)
+
+**Authentication (preferred):** connect without token → receive `auth_required` → send `{ type: "auth", payload: { token: "<access_jwt>" } }` → receive `connected`.
+
+Legacy self-hosted Rust may still accept `?token=` on the query string; do not use in production logs.
 
 Upgrade: standard WebSocket (RFC 6455). Messages are JSON text frames.
 
@@ -9,21 +15,18 @@ Upgrade: standard WebSocket (RFC 6455). Messages are JSON text frames.
 ## Connection Lifecycle
 
 ```
-Client                          Server
+Client                          Server (WsHub DO)
   │                                │
   │──── WebSocket connect ────────►│
-  │     ?token=JWT                 │ validate JWT
-  │                                │
+  │                                │ auth_required
+  │──── auth { token } ───────────►│ verify JWT
   │◄──── connected ────────────────│
   │                                │
-  │──── subscribe_room ───────────►│
+  │──── subscribe_room ───────────►│ (membership check)
+  │◄──── subscribed ───────────────│
   │                                │
-  │◄──── room events / pranks ─────│
-  │                                │
-  │──── ping (every 30s) ─────────►│
+  │──── ping (every 45s) ─────────►│ (min 5s between accepted pings)
   │◄──── pong ─────────────────────│
-  │                                │
-  │──── disconnect ────────────────►│ cleanup subscriptions
 ```
 
 ---
@@ -47,7 +50,7 @@ interface WsMessage<T = unknown> {
 
 ### `ping`
 
-Keep-alive. Server must respond with `pong` within 5 seconds.
+Keep-alive. Server responds with `pong`. Client interval: **45 seconds** (single global timer). Ping/pong are not logged to the browser console at info level.
 
 ```json
 {
@@ -56,6 +59,8 @@ Keep-alive. Server must respond with `pong` within 5 seconds.
   "timestamp": "2026-06-24T12:00:00Z"
 }
 ```
+
+**Close code `1006`:** abnormal closure (network blip, tab sleep, proxy idle). Client reconnects with exponential backoff; usually harmless if pranks still arrive after reconnect.
 
 ### `subscribe_room`
 
@@ -433,7 +438,7 @@ Server → room members when a user's monitor layout is updated (via REST or WS 
 | Initial backoff | 1 second |
 | Max backoff | 30 seconds |
 | Backoff multiplier | 2× |
-| Heartbeat interval | 30 seconds |
+| Heartbeat interval | **45 seconds** (client); hub min ping spacing **5 seconds** |
 | Missed pongs before disconnect | 3 |
 | Prank replay window | 60 seconds |
 
@@ -455,7 +460,8 @@ type WsEventType =
   | 'friend:request' | 'friend:accepted'
   | 'consent:sync' | 'consent:updated'
   | 'monitor:update' | 'monitor:changed'
-  | 'presence:update' | 'presence:changed';
+  | 'presence:update' | 'presence:changed'
+  | 'signal:offer' | 'signal:answer' | 'signal:ice' | 'signal:hangup';
 
 interface PrankIncomingPayload {
   prank_id: string;
@@ -469,6 +475,17 @@ interface PrankIncomingPayload {
   expires_at: string;
 }
 ```
+
+### WebRTC signaling (Cloudflare `WsHub`)
+
+Optional P2P handshake relay. The hub only forwards SDP/ICE; it does not terminate media. Pranks still use `prank:incoming` (server-relayed).
+
+| type | payload |
+|------|---------|
+| `signal:offer` | `{ to_user_id, room_id, sdp }` — hub adds `from_user_id` |
+| `signal:answer` | `{ to_user_id, room_id, sdp }` |
+| `signal:ice` | `{ to_user_id, room_id, candidate }` |
+| `signal:hangup` | `{ to_user_id, room_id }` |
 
 ---
 

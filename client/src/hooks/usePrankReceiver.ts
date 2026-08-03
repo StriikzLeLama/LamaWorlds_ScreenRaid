@@ -6,12 +6,26 @@ import { ackPrank, type PrankIncomingPayload } from '../services/pranks';
 import { onWsMessage } from '../services/websocket';
 import { unlockAudio } from '../lib/sfx';
 import { log } from '../lib/log';
+import { getMySecurityPrefs } from '../services/security';
 import {
   isCursorMotion,
   runCursorMotion,
   sampleCursor,
   type MotionPreset,
 } from '../lib/cursorMotion';
+
+/** Minimum gap between accepted overlays on this device (from account security prefs). */
+let lastLocalPrankAt = 0;
+
+function isVideoOverlay(prank: PrankIncomingPayload): boolean {
+  if (prank.overlay_type === 'video') return true;
+  const mime = prank.media?.mime_type ?? '';
+  return mime.startsWith('video/');
+}
+
+function isFullscreenMotion(preset: MotionPreset): boolean {
+  return preset === 'takeover' || preset === 'clickbait';
+}
 
 async function playSoundPrank(
   mediaUrl: string,
@@ -68,13 +82,15 @@ export function usePrankReceiver() {
     const unsub = onWsMessage(async (type, payload) => {
       if (type !== 'prank:incoming') return;
 
-      const prank = payload as PrankIncomingPayload;
+      const prank = payload as PrankIncomingPayload & { self_test?: boolean };
       log.info('prank:incoming', prank.prank_id, prank.overlay_type, 'from', prank.sender?.display_name);
+      // Receive pipeline: consent → quiet hours → security prefs → media → placement → show_overlay.
       const { globalConsent, isPaused } = useConsentStore.getState();
 
-      if (!globalConsent || isPaused) {
+      // Intentional self-test always shows (no room / consent gate).
+      if (!prank.self_test && (!globalConsent || isPaused)) {
         log.warn('prank blocked by consent (globalConsent=', globalConsent, 'isPaused=', isPaused, ')');
-        await ackPrank(prank.prank_id, false, prank.room_id);
+        await ackPrank(prank.prank_id, false, prank.room_id === 'self-test' ? undefined : prank.room_id);
         return;
       }
 
@@ -97,9 +113,9 @@ export function usePrankReceiver() {
           const s = parse(start);
           const e = parse(end);
           const inQuiet = s <= e ? mins >= s && mins < e : mins >= s || mins < e;
-          if (inQuiet) {
+          if (inQuiet && !(prank as { self_test?: boolean }).self_test) {
             log.warn('prank blocked by quiet hours', start, end);
-            await ackPrank(prank.prank_id, false, prank.room_id);
+            await ackPrank(prank.prank_id, false, prank.room_id === 'self-test' ? undefined : prank.room_id);
             return;
           }
         }
@@ -112,6 +128,38 @@ export function usePrankReceiver() {
         log.warn('prank dropped — no access token');
         await ackPrank(prank.prank_id, false, prank.room_id);
         return;
+      }
+
+      // Account security prefs (cloud `/v1/users/me/security`) — enforced locally on receive.
+      if (!prank.self_test) {
+        try {
+          const prefs = await getMySecurityPrefs(token);
+          const preset = (prank.config?.position?.preset || 'exact') as MotionPreset;
+          const now = Date.now();
+
+          if (prefs.local_cooldown_ms > 0 && now - lastLocalPrankAt < prefs.local_cooldown_ms) {
+            log.warn('prank blocked by local cooldown', prefs.local_cooldown_ms);
+            await ackPrank(prank.prank_id, false, prank.room_id);
+            return;
+          }
+          if (!prefs.allow_sound && prank.overlay_type === 'sound') {
+            log.warn('prank blocked — sound disabled in security prefs');
+            await ackPrank(prank.prank_id, false, prank.room_id);
+            return;
+          }
+          if (!prefs.allow_video && isVideoOverlay(prank)) {
+            log.warn('prank blocked — video disabled in security prefs');
+            await ackPrank(prank.prank_id, false, prank.room_id);
+            return;
+          }
+          if (!prefs.allow_fullscreen && isFullscreenMotion(preset)) {
+            log.warn('prank blocked — fullscreen motion disabled in security prefs');
+            await ackPrank(prank.prank_id, false, prank.room_id);
+            return;
+          }
+        } catch (e) {
+          log.warn('security prefs load failed — continuing with defaults', e);
+        }
       }
 
       try {
@@ -158,6 +206,7 @@ export function usePrankReceiver() {
           }
           await playSoundPrank(mediaUrl, safeNumber(prank.config?.volume, 0.8), prank.duration_ms);
           await ackPrank(prank.prank_id, true, prank.room_id);
+          lastLocalPrankAt = Date.now();
           return;
         }
 
@@ -190,16 +239,39 @@ export function usePrankReceiver() {
         const preset = (pos?.preset || 'exact') as MotionPreset;
         let positionX = safeNumber(pos?.x, 0.5);
         let positionY = safeNumber(pos?.y, 0.5);
+        // Sender monitor_index is 0-based; clamp to local layout unless force-preferred is on.
         let monitorIndex = safeNumber(pos?.monitor_index, preferredMonitor ?? 0);
         const cursorDriven = isCursorMotion(preset);
 
+        // Placement presets that ignore freeform x/y (legacy + explicit).
+        if (preset === 'center') {
+          positionX = 0.5;
+          positionY = 0.5;
+        } else if (preset === 'top_left') {
+          positionX = 0.12;
+          positionY = 0.12;
+        } else if (preset === 'top_right') {
+          positionX = 0.88;
+          positionY = 0.12;
+        } else if (preset === 'bottom_left') {
+          positionX = 0.12;
+          positionY = 0.88;
+        } else if (preset === 'bottom_right') {
+          positionX = 0.88;
+          positionY = 0.88;
+        }
+
         if (forcePreferred && preferredMonitor != null) {
           monitorIndex = preferredMonitor;
-        } else if (preferredMonitor != null && !cursorDriven) {
+        } else if (!cursorDriven) {
           try {
             const monitors = await invoke<Array<{ id: number }>>('collect_monitors');
-            if (!monitors.some((m) => m.id === monitorIndex)) {
-              monitorIndex = preferredMonitor;
+            if (monitors.length > 0 && !monitors.some((m) => m.id === monitorIndex)) {
+              // Sender asked for a screen this machine does not have — clamp, don't force primary.
+              monitorIndex = Math.min(
+                Math.max(0, monitorIndex),
+                Math.max(0, monitors.length - 1),
+              );
             }
           } catch {
             // keep sender index
@@ -227,6 +299,13 @@ export function usePrankReceiver() {
           positionX = 0.5;
           positionY = 0.5;
         }
+
+        log.info(
+          'prank placement',
+          `monitor=${monitorIndex}`,
+          `xy=${positionX.toFixed(2)},${positionY.toFixed(2)}`,
+          `preset=${preset}`,
+        );
 
         const scale = safeNumber(prank.config?.scale, 1);
         const animation = prank.config?.animation || 'fade';
@@ -353,6 +432,7 @@ export function usePrankReceiver() {
         }
 
         await ackPrank(prank.prank_id, true, prank.room_id);
+        lastLocalPrankAt = Date.now();
       } catch (e) {
         log.error('prank render failed', e);
         await ackPrank(prank.prank_id, false, prank.room_id);

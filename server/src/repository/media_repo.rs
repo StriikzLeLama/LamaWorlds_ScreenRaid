@@ -327,6 +327,16 @@ impl MediaRepository {
         Ok(row.unwrap_or((0, 0)))
     }
 
+    pub async fn sum_bytes_for_user(&self, user_id: Uuid) -> Result<i64, AppError> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COALESCE(SUM(size_bytes), 0) FROM media WHERE uploader_id = ?",
+        )
+        .bind(user_id.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
     pub async fn increment_quota(&self, user_id: Uuid, bytes: i64) -> Result<(), AppError> {
         let today = Utc::now().format("%Y-%m-%d").to_string();
         sqlx::query(

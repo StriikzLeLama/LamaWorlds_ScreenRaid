@@ -44,3 +44,11 @@ pub struct MediaListResponse {
     pub page: u32,
     pub limit: u32,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaStorageUsage {
+    pub used_bytes: i64,
+    pub quota_bytes: i64,
+    pub remaining_bytes: i64,
+    pub enforced: bool,
+}

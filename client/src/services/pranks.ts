@@ -85,6 +85,8 @@ export interface PrankIncomingPayload {
   duration_ms: number;
   config: OverlayConfig;
   expires_at: string;
+  /** Intentional self overlay — bypasses consent / quiet hours. */
+  self_test?: boolean;
 }
 
 export interface PrankHistoryItem {
@@ -106,6 +108,23 @@ export async function sendPrank(
   });
 }
 
+/** Overlay test on yourself — works without a room. */
+export async function selfTestPrank(
+  request: Omit<SendPrankRequest, 'target_id'> & { target_id?: string | null },
+): Promise<PrankResponse> {
+  return apiFetch<PrankResponse>('/v1/pranks/self-test', {
+    method: 'POST',
+    body: JSON.stringify({
+      target_id: null,
+      media_id: request.media_id,
+      overlay_type: request.overlay_type,
+      text_content: request.text_content,
+      duration_ms: request.duration_ms,
+      config: request.config,
+    }),
+  });
+}
+
 export async function listPrankHistory(roomId: string): Promise<PrankHistoryItem[]> {
   const res = await apiFetch<{ items: PrankHistoryItem[] }>(
     `/v1/rooms/${roomId}/pranks?limit=20`,
@@ -122,7 +141,9 @@ export async function ackPrank(
     ackPrankWs(prankId, rendered);
     return;
   }
-  if (!roomId) return;
+  if (!roomId || roomId === 'self-test' || roomId === '00000000-0000-0000-0000-000000000000') {
+    return;
+  }
   await apiFetch(`/v1/rooms/${roomId}/pranks/${prankId}/ack`, {
     method: 'POST',
     body: JSON.stringify({ prank_id: prankId, rendered }),
@@ -131,7 +152,7 @@ export async function ackPrank(
 
 export const defaultOverlayConfig = (): OverlayConfig => ({
   animation: 'fade',
-  position: { monitor_index: 0, x: 0.5, y: 0.5, preset: 'center' },
+  position: { monitor_index: 0, x: 0.5, y: 0.5, preset: 'exact' },
   scale: 1.0,
   opacity: 1.0,
   volume: 0.8,

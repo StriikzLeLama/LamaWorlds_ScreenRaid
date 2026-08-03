@@ -26,6 +26,13 @@ export interface MediaListResponse {
   limit: number;
 }
 
+export interface MediaStorageUsage {
+  used_bytes: number;
+  quota_bytes: number;
+  remaining_bytes: number;
+  enforced: boolean;
+}
+
 export async function uploadMedia(
   file: File,
   roomId?: string,
@@ -77,6 +84,10 @@ export async function listMedia(params?: {
   if (params?.limit) qs.set('limit', String(params.limit));
   const query = qs.toString();
   return apiFetch<MediaListResponse>(`/v1/media${query ? `?${query}` : ''}`);
+}
+
+export async function getMediaStorage(): Promise<MediaStorageUsage> {
+  return apiFetch<MediaStorageUsage>('/v1/media/storage');
 }
 
 export async function deleteMedia(id: string): Promise<void> {

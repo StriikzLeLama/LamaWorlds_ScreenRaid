@@ -13,6 +13,7 @@ import {
   ANIMATION_OPTIONS,
   defaultOverlayConfig,
   sendPrank,
+  selfTestPrank,
   type Animation,
   type OverlayConfig,
   type OverlayType,
@@ -22,7 +23,7 @@ import {
   getRoom,
   leaveRoom,
 } from '../services/rooms';
-import { getUserMonitors, type MonitorDescriptor } from '../services/monitors';
+import { getMyMonitors, getUserMonitors, type MonitorDescriptor } from '../services/monitors';
 import { subscribeRoom, unsubscribeRoom } from '../services/websocket';
 import { MonitorCanvas, type PlacementPosition } from '../components/placement/MonitorCanvas';
 import { RAID_PACKS, type RaidPack } from '../lib/raidPacks';
@@ -264,23 +265,65 @@ export function RoomPage() {
   }, [id, loadExtras, loadRoom]);
 
   useEffect(() => {
+    let cancelled = false;
+    // Reset placement when the target changes — not on every monitor refresh.
+    setPlacement({ monitor_index: 0, x: 0.5, y: 0.5 });
+
     if (!targetId) {
-      setTargetMonitors([]);
-      return;
+      // "Everyone": use own layout as a placement template (index maps per receiver).
+      getMyMonitors()
+        .then(async (layout) => {
+          if (cancelled) return;
+          let list = layout?.monitors ?? [];
+          if (list.length === 0 && isTauriRuntime()) {
+            try {
+              const { invoke } = await import('@tauri-apps/api/core');
+              list = await invoke<MonitorDescriptor[]>('collect_monitors');
+            } catch {
+              // keep empty → MonitorCanvas fallback
+            }
+          }
+          if (!cancelled) setTargetMonitors(list);
+        })
+        .catch(() => {
+          if (!cancelled) setTargetMonitors([]);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
-    const refresh = () => {
+
+    const refresh = (initPlacement: boolean) => {
       getUserMonitors(targetId)
-        .then((layout) => {
-          const list = layout?.monitors ?? [];
+        .then(async (layout) => {
+          if (cancelled) return;
+          let list = layout?.monitors ?? [];
+          if (list.length === 0 && targetId === currentUserId && isTauriRuntime()) {
+            try {
+              const { invoke } = await import('@tauri-apps/api/core');
+              list = await invoke<MonitorDescriptor[]>('collect_monitors');
+              if (list.length > 0) {
+                const { updateMyMonitors } = await import('../services/monitors');
+                await updateMyMonitors(list).catch(() => undefined);
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (cancelled) return;
           setTargetMonitors(list);
-          if (targetId === currentUserId && list.length > 0) {
+          if (initPlacement && list.length > 0) {
             const primary = list.find((m) => m.is_primary) ?? list[0];
             setPlacement((p) => ({ ...p, monitor_index: primary.id }));
           }
         })
-        .catch(() => setTargetMonitors([]));
+        .catch(() => {
+          if (!cancelled) setTargetMonitors([]);
+        });
     };
-    refresh();
+
+    refresh(true);
+
     if (targetId === currentUserId && isTauriRuntime()) {
       void (async () => {
         try {
@@ -289,18 +332,24 @@ export function RoomPage() {
           const idx = await invoke<number>('resolve_preferred_monitor', {
             selected: settings.selected_monitor ?? 'primary',
           });
-          setPlacement((p) => ({ ...p, monitor_index: idx }));
+          if (!cancelled) {
+            setPlacement((p) => ({ ...p, monitor_index: idx }));
+          }
         } catch {
           // ignore
         }
       })();
     }
+
     const onMonitorsChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ user_id?: string }>).detail;
-      if (detail?.user_id === targetId) refresh();
+      if (detail?.user_id === targetId) refresh(false);
     };
     window.addEventListener('screenraid:monitors', onMonitorsChanged);
-    return () => window.removeEventListener('screenraid:monitors', onMonitorsChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('screenraid:monitors', onMonitorsChanged);
+    };
   }, [targetId, currentUserId]);
 
   const handleLeave = async () => {
@@ -380,7 +429,11 @@ export function RoomPage() {
     requests: ReturnType<typeof buildRequest>[],
   ) => {
     if (!id) return;
-    const shots = requests.map((req) => sendPrank(id, req));
+    const shots = requests.map((req) =>
+      req.target_id && currentUserId && req.target_id === currentUserId
+        ? selfTestPrank(req)
+        : sendPrank(id, req),
+    );
     const results = await Promise.allSettled(shots);
     const failed = results.filter((r) => r.status === 'rejected');
     const ok = results.length - failed.length;
@@ -473,7 +526,12 @@ export function RoomPage() {
       } else if (mediaIds.length > 1 && needsMedia) {
         await fireRequests(mediaIds.map((mid) => buildRequest(mid)));
       } else {
-        await sendPrank(id, buildRequest());
+        const req = buildRequest();
+        if (req.target_id && currentUserId && req.target_id === currentUserId) {
+          await selfTestPrank(req);
+        } else {
+          await sendPrank(id, req);
+        }
         setTextContent('');
       }
       loadExtras();
@@ -544,8 +602,7 @@ export function RoomPage() {
   const selectableMedia = mediaForOverlay(overlayType, mediaItems);
   const needsMedia = overlayType !== 'text';
   const isSoundOnly = overlayType === 'sound';
-  const showPlacement =
-    Boolean(targetId) && !isSoundOnly && motionPreset === 'exact';
+  const showPlacement = !isSoundOnly && motionPreset === 'exact';
   const showGifSelector = overlayType === 'gif' || overlayType === 'image';
   const showCaption = showGifSelector || overlayType === 'video';
   const previewText =
@@ -658,6 +715,11 @@ export function RoomPage() {
                       </option>
                     ))}
                   </select>
+                  {targetId === currentUserId && (
+                    <p className="mt-1 text-xs text-raid-text-secondary">
+                      Self-test works even with others in the room (no ALLOW_SELF_PRANK needed).
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-raid-text-secondary">When</label>

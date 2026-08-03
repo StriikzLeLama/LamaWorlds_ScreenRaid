@@ -1,5 +1,7 @@
 # ScreenRaid — MVP Implementation Tasks
 
+> **Historical:** MVP task backlog from June 2026. For current status see [ROADMAP.md](./ROADMAP.md) and [cloud/README.md](../cloud/README.md).
+
 > Actionable task breakdown for the entire MVP. Status: ✅ done · 🔄 in progress · 🔲 pending.
 
 **Architecture note:** The **web dashboard** is served by the server (`npm run build:web` → Docker `STATIC_PATH`). The **Tauri receiver** (`npm run build` / `tauri build`) only displays overlays.

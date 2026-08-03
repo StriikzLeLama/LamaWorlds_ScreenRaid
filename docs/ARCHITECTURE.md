@@ -2,6 +2,8 @@
 
 > Consent-based social prank platform where friends in a private room can send temporary visual and audio overlays to each other.
 
+**Production base URL:** `https://screenraid.app.lama-worlds.com`
+
 ---
 
 ## Table of Contents
@@ -25,13 +27,28 @@
 
 ## 1. High-Level Overview
 
-ScreenRaid uses a **split client model**:
+ScreenRaid uses a **split client model** with two backend options:
 
-| Surface | Role | Connects via |
-|---------|------|--------------|
-| **Web dashboard** | Rooms, friends, media, admin, send pranks | Browser → `http://<server>:8080/` (same origin REST + WS) |
-| **Desktop receiver** | Display overlays, panic, monitor sync, cache | Tauri app → `ws://<server>:8080/v1/ws` |
-| **Server** | API, WebSocket hub, SQLite, media storage, **embedded web UI** | Docker / `cargo run` |
+| Surface | Role | Production path |
+|---------|------|-----------------|
+| **Web dashboard** | Rooms, friends, media, send pranks | Browser → Cloudflare Worker (`https://screenraid.app.lama-worlds.com`) |
+| **Desktop receiver** | Overlays, panic, monitor sync | Tauri → same Worker `/v1/ws` + REST |
+| **Cloud backend** | API, WS hub (Durable Object), D1, R2 | `cloud/` — **live prod** |
+| **Rust backend** | Self-host Axum + SQLite + disk media | `server/` — dev / on-prem |
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    ScreenRaid (Cloudflare production)                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Browser / Tauri ──► Worker (REST /v1/*, SPA assets)                    │
+│                         ├── D1 (SQLite)                                 │
+│                         ├── R2 (media blobs)                            │
+│                         └── Durable Object WsHub (presence, pranks, WS) │
+│  Tauri receiver ──► transparent overlay windows (multi-monitor)         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Self-hosted alternative** (development): Axum on `:8080`, SQLite volume, embedded SPA — see diagram below.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -446,7 +463,7 @@ Request
 
 - Connections indexed by `user_id` (a user may have multiple devices).
 - Room subscriptions: when user joins room WS channel, they receive room-scoped events.
-- Heartbeat: `ping` / `pong` every 30s; disconnect after 3 missed pongs.
+- Heartbeat: `ping` / `pong` every **45s**; hub ignores pings closer than **5s** apart.
 - On prank dispatch: fan-out to all consented, non-paused members in target room except optional sender echo.
 
 ### Role Hierarchy

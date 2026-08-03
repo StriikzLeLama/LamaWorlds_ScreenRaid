@@ -19,6 +19,14 @@ let authRejected = false;
 let refreshInFlight: Promise<boolean> | null = null;
 let lastRttMs: number | null = null;
 let pingSentAt: number | null = null;
+/** Single global heartbeat — avoids duplicate intervals if hooks remount. */
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Keep-alive interval (ms). Must stay below typical proxy/DO idle timeouts. */
+const HEARTBEAT_MS = 45_000;
+
+/** WS message types omitted from console info logs (high frequency). */
+const SILENT_WS_TYPES = new Set(['ping', 'pong']);
 const handlers = new Set<MessageHandler>();
 const connectionListeners = new Set<(connected: boolean) => void>();
 const rttListeners = new Set<(rttMs: number | null) => void>();
@@ -152,7 +160,9 @@ export function connectWebSocket(): void {
   socket.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data as string) as { type: string; payload: unknown };
-      log.info('WS msg', msg.type);
+      if (!SILENT_WS_TYPES.has(msg.type)) {
+        log.info('WS msg', msg.type);
+      }
       if (msg.type === 'auth_required') {
         const latest = useAuthStore.getState().accessToken;
         if (latest && !wsAuthenticated) {
@@ -164,8 +174,7 @@ export function connectWebSocket(): void {
         wsAuthenticated = true;
         authRejected = false;
         setWsConnected(true);
-        pingSentAt = performance.now();
-        send({ type: 'ping', payload: {} });
+        // RTT is measured by the periodic heartbeat — no immediate ping here.
       }
       if (msg.type === 'pong' && pingSentAt != null) {
         setRttMs(Math.round(performance.now() - pingSentAt));
@@ -238,6 +247,7 @@ export function reconnectWebSocket(): void {
 }
 
 export function disconnectWebSocket(clearBackoff = true): void {
+  stopHeartbeat();
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -300,11 +310,26 @@ export function send(data: object): void {
   }
 }
 
+function sendPing(): void {
+  if (socket?.readyState !== WebSocket.OPEN || !wsAuthenticated) return;
+  pingSentAt = performance.now();
+  send({ type: 'ping', payload: {} });
+}
+
+/** Start keep-alive pings. Idempotent — only one interval runs globally. */
 export function startHeartbeat(): ReturnType<typeof setInterval> {
-  return setInterval(() => {
-    pingSentAt = performance.now();
-    send({ type: 'ping', payload: {} });
-  }, 30000);
+  stopHeartbeat();
+  // First ping after one interval (connected handler no longer pings immediately).
+  heartbeatTimer = setInterval(sendPing, HEARTBEAT_MS);
+  return heartbeatTimer;
+}
+
+export function stopHeartbeat(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+  pingSentAt = null;
 }
 
 onServerUrlChange(() => reconnectWebSocket());
