@@ -8,6 +8,8 @@ import { playEntranceSfx } from '../lib/sfx';
 import type { ActiveOverlay, OverlayShowPayload } from './types';
 
 const MAX_STACK = 8;
+/** Soft cap: drop oldest non-exiting overlays when a burst arrives. */
+const DROP_WHEN_OVER = 8;
 
 function exitDurationMs(): number {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 50 : 350;
@@ -71,7 +73,13 @@ export function OverlayApp() {
       setOverlays((prev) => {
         const next = prev.filter((o) => o.id !== payload.id);
         const item: ActiveOverlay = { ...payload, visible: true, exiting: false };
-        return [...next, item].slice(-MAX_STACK);
+        // Cap stacked overlays: keep newest MAX_STACK; prefer dropping already-exiting first.
+        const merged = [...next, item];
+        if (merged.length <= DROP_WHEN_OVER) return merged;
+        const exiting = merged.filter((o) => o.exiting);
+        const active = merged.filter((o) => !o.exiting);
+        const keptActive = active.slice(-(MAX_STACK - Math.min(2, exiting.length)));
+        return [...exiting.slice(-2), ...keptActive].slice(-MAX_STACK);
       });
     };
 

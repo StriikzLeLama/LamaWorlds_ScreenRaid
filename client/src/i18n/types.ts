@@ -70,6 +70,7 @@ export type TranslationDict = {
     savedButDown: string;
     invalid: string;
     unreachable: string;
+    prodHint: string;
   };
   settings: {
     title: string;
@@ -208,6 +209,36 @@ export type TranslationDict = {
     delete: string;
     deleteConfirm: string;
     deleteFailed: string;
+    title: string;
+    subtitle: string;
+    upload: string;
+    uploading: string;
+    emptyTitle: string;
+    emptyHint: string;
+    emptyCta: string;
+    loadFailed: string;
+    uploadFailed: string;
+    storage: string;
+    storageUsed: string;
+    softLimit: string;
+  };
+  friends: {
+    title: string;
+    subtitle: string;
+    addTitle: string;
+    addPlaceholder: string;
+    send: string;
+    incoming: string;
+    listTitle: string;
+    emptyTitle: string;
+    emptyHint: string;
+    emptyCta: string;
+    pendingSent: string;
+    pending: string;
+    loadFailed: string;
+    requestFailed: string;
+    online: string;
+    offline: string;
   };
   feed: {
     title: string;

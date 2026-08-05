@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  client-tsc:
+    name: Client TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - working-directory: client
+        run: npm ci
+      - working-directory: client
+        run: npx tsc -b --pretty false
+
+  cloud-tsc:
+    name: Cloud TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+      - working-directory: cloud
+        run: npm ci
+      - working-directory: cloud
+        run: npx tsc --noEmit --pretty false
+
+  rust-check:
+    name: Rust check + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check workspace
+        run: cargo check --workspace
+      - name: crate unit tests (validation)
+        run: cargo test -p screenraid-validation -- --nocapture
+      - name: server integration tests
+        run: cargo test -p screenraid-server --tests -- --nocapture
+        env:
+          RUST_LOG: warn
+        continue-on-error: false

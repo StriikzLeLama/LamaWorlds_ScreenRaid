@@ -56,15 +56,6 @@ export class WsHub extends DurableObject<Env> {
       return new Response('ok');
     }
 
-    if (url.pathname === '/internal/signal' && request.method === 'POST') {
-      const body = (await request.json()) as {
-        to_user_id: string;
-        message: HubMessage;
-      };
-      this.broadcastToUsers([body.to_user_id], body.message);
-      return new Response('ok');
-    }
-
     if (url.pathname === '/internal/online-count') {
       const count = this.onlineUserIds().size;
       return Response.json({ count });
@@ -214,30 +205,6 @@ export class WsHub extends DurableObject<Env> {
       }
       case 'prank:ack': {
         // Persist ack via Worker-side REST is preferred; echo for hub completeness.
-        break;
-      }
-      // WebRTC signaling (P2P overlay path)
-      case 'signal:offer':
-      case 'signal:answer':
-      case 'signal:ice':
-      case 'signal:hangup': {
-        const payload = parsed.payload as {
-          to_user_id?: string;
-          room_id?: string;
-          [k: string]: unknown;
-        };
-        if (!payload?.to_user_id || !att.userId) break;
-        this.broadcastToUsers(
-          [payload.to_user_id],
-          {
-            type: parsed.type,
-            payload: {
-              ...payload,
-              from_user_id: att.userId,
-            },
-            timestamp: new Date().toISOString(),
-          },
-        );
         break;
       }
       default:

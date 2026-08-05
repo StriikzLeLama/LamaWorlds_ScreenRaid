@@ -16,6 +16,7 @@ import { useT } from '../hooks/useT';
 import { revokeMediaPreview } from '../services/mediaPreview';
 
 function StorageBar({ usage }: { usage: MediaStorageUsage }) {
+  const t = useT();
   const pct =
     usage.quota_bytes > 0
       ? Math.min(100, Math.round((usage.used_bytes / usage.quota_bytes) * 1000) / 10)
@@ -32,10 +33,13 @@ function StorageBar({ usage }: { usage: MediaStorageUsage }) {
     <Card>
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-raid-text">Storage</p>
+          <p className="text-sm font-medium text-raid-text">{t('media.storage')}</p>
           <p className="mt-0.5 text-xs text-raid-text-secondary">
-            {formatBytes(usage.used_bytes)} used · {formatBytes(usage.remaining_bytes)} remaining
-            {usage.enforced ? '' : ' (soft limit)'}
+            {t('media.storageUsed', {
+              used: formatBytes(usage.used_bytes),
+              remaining: formatBytes(usage.remaining_bytes),
+            })}
+            {usage.enforced ? '' : ` ${t('media.softLimit')}`}
           </p>
         </div>
         <p className="shrink-0 text-sm font-semibold tabular-nums text-raid-text">
@@ -51,7 +55,7 @@ function StorageBar({ usage }: { usage: MediaStorageUsage }) {
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label="Storage used"
+        aria-label={t('media.storage')}
       >
         <div
           className={`h-full rounded-full transition-[width] duration-500 ease-out ${barColor}`}
@@ -84,11 +88,11 @@ export function MediaLibraryPage() {
       setItems(res.items ?? []);
       setStorage(usage);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load media');
+      setError(e instanceof Error ? e.message : t('media.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -113,7 +117,7 @@ export function MediaLibraryPage() {
       }
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed');
+      setError(e instanceof Error ? e.message : t('media.uploadFailed'));
     } finally {
       setUploading(false);
       setProgress(0);
@@ -128,7 +132,7 @@ export function MediaLibraryPage() {
       const usage = await getMediaStorage().catch(() => null);
       setStorage(usage);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(e instanceof Error ? e.message : t('media.deleteFailed'));
     }
   };
 
@@ -136,15 +140,13 @@ export function MediaLibraryPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-raid-text">Media Library</h1>
-          <p className="text-sm text-raid-text-secondary">
-            Images, GIFs, videos, and sounds for pranks
-          </p>
+          <h1 className="text-2xl font-bold text-raid-text">{t('media.title')}</h1>
+          <p className="text-sm text-raid-text-secondary">{t('media.subtitle')}</p>
           <p className="mt-1 text-xs text-raid-text-secondary">{t('compress.limits')}</p>
         </div>
         <Button disabled={uploading} onClick={() => fileRef.current?.click()}>
           <Upload size={18} />
-          {uploading ? `${progress}%` : 'Upload'}
+          {uploading ? t('media.uploading', { pct: String(progress) }) : t('media.upload')}
         </Button>
         <input
           ref={fileRef}
@@ -175,7 +177,7 @@ export function MediaLibraryPage() {
 
       {loading ? (
         <Card>
-          <p className="text-sm text-raid-text-secondary">Loading media…</p>
+          <p className="text-sm text-raid-text-secondary">{t('common.loading')}</p>
         </Card>
       ) : items.length === 0 ? (
         <Card>
@@ -188,12 +190,13 @@ export function MediaLibraryPage() {
             }}
           >
             <Upload size={32} className="text-raid-text-secondary" />
-            <p className="mt-3 text-sm text-raid-text-secondary">
-              Drag & drop or click Upload to add media
+            <p className="mt-3 text-sm font-medium text-raid-text">{t('media.emptyTitle')}</p>
+            <p className="mt-1 max-w-sm text-center text-sm text-raid-text-secondary">
+              {t('media.emptyHint')}
             </p>
-            <p className="mt-1 text-xs text-raid-text-secondary">
-              PNG, JPEG, WebP, GIF, MP4, WebM, MP3, WAV, OGG — size limits apply
-            </p>
+            <Button className="mt-4" onClick={() => fileRef.current?.click()}>
+              <Upload size={16} /> {t('media.emptyCta')}
+            </Button>
           </div>
         </Card>
       ) : (
@@ -217,7 +220,7 @@ export function MediaLibraryPage() {
                   type="button"
                   onClick={() => void handleDelete(item.id)}
                   className="rounded p-1 text-raid-text-secondary hover:bg-raid-surface hover:text-red-400"
-                  aria-label="Delete"
+                  aria-label={t('media.delete')}
                 >
                   <Trash2 size={16} />
                 </button>

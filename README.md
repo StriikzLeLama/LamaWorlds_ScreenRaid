@@ -35,8 +35,9 @@ No overlay without **consent**. Receivers can pause, set quiet hours, or panic-h
 |-------|--------|
 | Dashboard + receiver UI | React 19, TypeScript, Tailwind, Vite |
 | Desktop shell | Tauri 2 (Rust) |
-| API | Rust, Axum, SQLx, SQLite |
-| Deploy | Docker Compose |
+| **Production API** | Cloudflare Workers + D1 + R2 + Durable Objects |
+| Self-host API | Rust, Axum, SQLx, SQLite (optional) |
+| Deploy | Wrangler (Cloud) / Docker Compose (self-host) |
 
 ## Quick start
 

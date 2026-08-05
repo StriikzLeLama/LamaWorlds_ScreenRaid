@@ -10,6 +10,7 @@
     "db:local": "wrangler d1 migrations apply screenraid --local",
     "db:remote": "wrangler d1 migrations apply screenraid --remote",
     "migrate:sqlite": "node scripts/migrate-from-sqlite.mjs",
+    "smoke:ws": "node scripts/ws-smoke.mjs",
     "tail": "wrangler tail"
   },
   "dependencies": {

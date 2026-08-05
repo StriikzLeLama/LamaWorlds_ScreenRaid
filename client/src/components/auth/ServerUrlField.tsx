@@ -55,7 +55,7 @@ export function ServerUrlField({ onChange, onHealthChange }: Props) {
       <Input
         label={t('serverUrl.label')}
         value={url}
-        placeholder="http://192.168.1.109:8080"
+        placeholder="https://screenraid.app.lama-worlds.com"
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           const value = e.target.value;
           setUrl(value);
@@ -78,6 +78,7 @@ export function ServerUrlField({ onChange, onHealthChange }: Props) {
       {hint && (
         <p className={`text-xs ${hintOk ? 'text-raid-success' : 'text-raid-danger'}`}>{hint}</p>
       )}
+      <p className="text-[11px] text-raid-text-secondary">{t('serverUrl.prodHint')}</p>
     </div>
   );
 }

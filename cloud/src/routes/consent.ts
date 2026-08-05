@@ -1,5 +1,6 @@
 import { ApiError, json, nowIso, readJson, type Env } from '../lib/http';
 import { requireUser } from '../lib/auth';
+import { hubBroadcast } from '../lib/db';
 
 interface ConsentRow {
   user_id: string;
@@ -93,6 +94,27 @@ export async function handleConsent(
     )
       .bind(ts, claims.sub)
       .run();
+    // Remote kill-switch: hide overlays on all of this user's connected sessions.
+    await hubBroadcast(env, [claims.sub], {
+      type: 'panic:force_hide',
+      payload: { reason: 'consent_pause', at: ts },
+    });
+    return json(toState(await getOrCreate(env, claims.sub)), 200, request);
+  }
+
+  // Explicit panic endpoint (same effect as pause + force hide, clearer for clients).
+  if (path === '/v1/consent/panic' && request.method === 'POST') {
+    const ts = nowIso();
+    await getOrCreate(env, claims.sub);
+    await env.DB.prepare(
+      `UPDATE user_consent SET is_paused = 1, updated_at = ? WHERE user_id = ?`,
+    )
+      .bind(ts, claims.sub)
+      .run();
+    await hubBroadcast(env, [claims.sub], {
+      type: 'panic:force_hide',
+      payload: { reason: 'panic', at: ts },
+    });
     return json(toState(await getOrCreate(env, claims.sub)), 200, request);
   }
 

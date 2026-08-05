@@ -16,6 +16,10 @@ import {
 
 /** Minimum gap between accepted overlays on this device (from account security prefs). */
 let lastLocalPrankAt = 0;
+/** Sliding window for inbound burst protection (raid bomb / flood). */
+const inboundWindow: number[] = [];
+const INBOUND_WINDOW_MS = 10_000;
+const INBOUND_MAX = 12;
 
 function isVideoOverlay(prank: PrankIncomingPayload): boolean {
   if (prank.overlay_type === 'video') return true;
@@ -85,6 +89,18 @@ export function usePrankReceiver() {
       const prank = payload as PrankIncomingPayload & { self_test?: boolean };
       log.info('prank:incoming', prank.prank_id, prank.overlay_type, 'from', prank.sender?.display_name);
       // Receive pipeline: consent → quiet hours → security prefs → media → placement → show_overlay.
+      // Drop excess when a flood of pranks arrives (raid bomb / multi-sender).
+      const nowBurst = Date.now();
+      while (inboundWindow.length && nowBurst - inboundWindow[0]! > INBOUND_WINDOW_MS) {
+        inboundWindow.shift();
+      }
+      if (inboundWindow.length >= INBOUND_MAX && !prank.self_test) {
+        log.warn('prank dropped — inbound burst cap', inboundWindow.length);
+        await ackPrank(prank.prank_id, false, prank.room_id === 'self-test' ? undefined : prank.room_id);
+        return;
+      }
+      inboundWindow.push(nowBurst);
+
       const { globalConsent, isPaused } = useConsentStore.getState();
 
       // Intentional self-test always shows (no room / consent gate).

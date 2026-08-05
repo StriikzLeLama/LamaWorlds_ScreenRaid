@@ -1,0 +1,55 @@
+name: Deploy Cloudflare Worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'cloud/**'
+      - 'client/src/**'
+      - 'client/package.json'
+      - '.github/workflows/deploy-cloud.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            cloud/package-lock.json
+
+      - name: Build web dashboard
+        working-directory: client
+        run: |
+          npm ci
+          npm run build:web
+
+      - name: Sync SPA into cloud/public
+        run: |
+          # Keep logos / favicons already in cloud/public; replace hashed assets + index
+          rm -rf cloud/public/assets
+          mkdir -p cloud/public/assets
+          cp -r web/assets/* cloud/public/assets/
+          cp web/index.html cloud/public/index.html
+          # Optional brand SVGs from web build
+          if [ -f web/lama-mark.svg ]; then cp web/lama-mark.svg cloud/public/; fi
+          if [ -f web/logo-full.svg ]; then cp web/logo-full.svg cloud/public/; fi
+
+      - name: Install cloud deps
+        working-directory: cloud
+        run: npm ci
+
+      - name: Deploy Worker
+        working-directory: cloud
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy

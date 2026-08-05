@@ -24,9 +24,9 @@ Minimum viable product: consent-based pranks with images and text in private roo
 | **Prank Pipeline** | L | ✅ Done | Send/receive, consent gate, delivery ack |
 | **Image Overlays** | L | ✅ Done | Transparent window, image render, fade/zoom/bounce |
 | **Text Overlays** | M | ✅ Done | Styled text card, normalized position |
-| **Integration & QA** | M | 🔄 In progress | CI workflow, server integration tests; manual E2E pending |
+| **Integration & QA** | M | ✅ Done | CI on PR (`tsc` + Rust tests); Cloud deploy workflow; WS smoke script |
 
-**MVP exit criteria:** Two users in a room can send a consent-checked image or text overlay that appears at a **visually placed position** on the receiver's virtual monitor layout — without screen sharing.
+**MVP exit criteria:** Two users in a room can send a consent-checked image or text overlay that appears at a **visually placed position** on the receiver's virtual monitor layout — without screen sharing. **Met** (Cloud production).
 
 ### Virtual Monitor Placement — MVP Priority: HIGH
 
@@ -45,15 +45,15 @@ Minimum viable product: consent-based pranks with images and text in private roo
 
 ## Beta
 
-Richer media and polish before public beta.
+Richer media and polish — **shipped** on production Cloud.
 
-| Module | Complexity | Depends on |
-|--------|------------|------------|
-| **GIF support** | M | Image Overlays, Media Upload |
-| **Video support** | L | Overlay Engine, Media Upload |
-| **Audio support** | M | Prank Pipeline, client audio player |
-| **Overlay animations** | M | Overlay Engine |
-| **Multi-monitor support** | L | Overlay Engine |
+| Module | Complexity | Status |
+|--------|------------|--------|
+| **GIF support** | M | ✅ |
+| **Video support** | L | ✅ |
+| **Audio support** | M | ✅ |
+| **Overlay animations** | M | ✅ |
+| **Multi-monitor support** | L | ✅ |
 
 ---
 
@@ -61,13 +61,14 @@ Richer media and polish before public beta.
 
 Production-hardening and moderation.
 
-| Module | Complexity | Depends on |
-|--------|------------|------------|
-| **Panic system** | S | Overlay Engine (client hotkey ✅, server kill-switch 🔲) |
-| **Cache system** | M | Media Upload, client SQLite cache |
-| **Overlay history** | M | Prank Pipeline, DATABASE |
-| **Room moderation** | M | Rooms, roles, audit log |
-| **Settings** | S | Client settings store (partial ✅) |
+| Module | Complexity | Status |
+|--------|------------|--------|
+| **Panic system** | S | ✅ Client hotkey + server kill-switch (`POST /v1/consent/panic` → `panic:force_hide`) |
+| **Cache system** | M | ✅ Client SQLite cache |
+| **Overlay queue caps** | S | ✅ Max 8 stacked + inbound burst cap |
+| **Overlay history** | M | 🔲 Room activity feed exists; richer history UI pending |
+| **Room moderation** | M | 🔄 Roles + invite revoke; full moderation UX pending |
+| **Settings** | S | ✅ Account + device + security prefs |
 
 ---
 

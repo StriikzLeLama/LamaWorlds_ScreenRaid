@@ -503,6 +503,47 @@ export async function handleAuth(
     );
   }
 
+  if (path === '/v1/auth/change-username' && request.method === 'POST') {
+    const claims = await requireUser(env, request);
+    const body = await readJson<{ current_password: string; new_username: string }>(request);
+    const newUsername = validateUsername(body.new_username);
+    const user = await getUserById(env, claims.sub);
+    if (!user || !user.is_active) throw new ApiError('Not found', 404);
+    if (!(await verifyPassword(body.current_password, user.password_hash))) {
+      throw new ApiError('Invalid password', 401);
+    }
+    if (user.username.toLowerCase() !== newUsername.toLowerCase()) {
+      const taken = await getUserByUsername(env, newUsername);
+      if (taken && taken.id !== claims.sub) {
+        throw new ApiError('username already taken', 409, 'conflict');
+      }
+    }
+    await env.DB.prepare(`UPDATE users SET username = ?, updated_at = ? WHERE id = ?`)
+      .bind(newUsername, nowIso(), claims.sub)
+      .run();
+    const updated = await getUserById(env, claims.sub);
+    if (!updated) throw new ApiError('Not found', 404);
+    return json(userProfile(updated, isAdminUsername(env, updated.username)), 200, request);
+  }
+
+  if (path === '/v1/auth/change-display-name' && request.method === 'POST') {
+    const claims = await requireUser(env, request);
+    const body = await readJson<{ current_password: string; new_display_name: string }>(request);
+    const displayName = (body.new_display_name || '').trim().slice(0, 64);
+    if (displayName.length < 1) throw new ApiError('Display name required', 400);
+    const user = await getUserById(env, claims.sub);
+    if (!user || !user.is_active) throw new ApiError('Not found', 404);
+    if (!(await verifyPassword(body.current_password, user.password_hash))) {
+      throw new ApiError('Invalid password', 401);
+    }
+    await env.DB.prepare(`UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?`)
+      .bind(displayName, nowIso(), claims.sub)
+      .run();
+    const updated = await getUserById(env, claims.sub);
+    if (!updated) throw new ApiError('Not found', 404);
+    return json(userProfile(updated, isAdminUsername(env, updated.username)), 200, request);
+  }
+
   if (path === '/v1/auth/sessions' && request.method === 'GET') {
     const claims = await requireUser(env, request);
     const now = nowIso();

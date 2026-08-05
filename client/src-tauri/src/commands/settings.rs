@@ -55,7 +55,8 @@ impl Default for AppSettings {
             default_animation: "fade".into(),
             cache_limit_mb: 500,
             panic_hotkey: "Ctrl+Shift+Escape".into(),
-            server_url: String::new(),
+            // Production Cloudflare backend (override in Device settings if self-hosting).
+            server_url: "https://screenraid.app.lama-worlds.com".into(),
             selected_monitor: "primary".into(),
             force_preferred_monitor: false,
             soft_mode: false,
@@ -84,10 +85,12 @@ impl SettingsStore {
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default();
 
-        // Clear former private-stack default so public builds don't auto-connect there.
-        // Only this exact legacy URL is wiped; user-entered hosts are left alone.
-        if settings.server_url == "https://screenraid.lama-worlds.com" {
-            settings.server_url = String::new();
+        // Migrate empty / former Docker-only default to production Cloud URL.
+        // Self-host users who set another URL are left alone.
+        if settings.server_url.trim().is_empty()
+            || settings.server_url == "https://screenraid.lama-worlds.com"
+        {
+            settings.server_url = "https://screenraid.app.lama-worlds.com".into();
             let _ = fs::write(
                 &path,
                 serde_json::to_string_pretty(&settings).unwrap_or_default(),

@@ -358,5 +358,72 @@ export async function handleRooms(
     return json({ invites: results ?? [] }, 200, request);
   }
 
+  // DELETE /v1/rooms/:id/invites/:inviteId — deactivate invite
+  const inviteDelete = rest.match(/^\/invites\/([^/]+)$/);
+  if (inviteDelete && request.method === 'DELETE') {
+    const claims = await requireUser(env, request);
+    await assertRoomMember(env, roomId, claims.sub);
+    const inviteId = decodeURIComponent(inviteDelete[1]!);
+    // Owner or admin can deactivate
+    const member = await env.DB.prepare(
+      `SELECT role FROM room_members WHERE room_id = ? AND user_id = ?`,
+    )
+      .bind(roomId, claims.sub)
+      .first<{ role: string }>();
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw new ApiError('Forbidden', 403, 'forbidden');
+    }
+    await env.DB.prepare(
+      `UPDATE room_invites SET is_active = 0 WHERE id = ? AND room_id = ?`,
+    )
+      .bind(inviteId, roomId)
+      .run();
+    return empty(204, request);
+  }
+
+  // GET /v1/rooms/:id/activity — feed enriched from prank history
+  if (rest === '/activity' && request.method === 'GET') {
+    const claims = await requireUser(env, request);
+    await assertRoomMember(env, roomId, claims.sub);
+    const url = new URL(request.url);
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+
+    const { results } = await env.DB.prepare(
+      `SELECT p.id, p.sender_id, p.target_id, p.overlay_type, p.status, p.text_content, p.created_at,
+              su.display_name AS sender_name, tu.display_name AS target_name
+       FROM pranks p
+       LEFT JOIN users su ON su.id = p.sender_id
+       LEFT JOIN users tu ON tu.id = p.target_id
+       WHERE p.room_id = ?
+       ORDER BY p.created_at DESC
+       LIMIT ?`,
+    )
+      .bind(roomId, limit)
+      .all<{
+        id: string;
+        sender_id: string;
+        target_id: string | null;
+        overlay_type: string;
+        status: string;
+        text_content: string | null;
+        created_at: string;
+        sender_name: string | null;
+        target_name: string | null;
+      }>();
+
+    const items = (results ?? []).map((row) => ({
+      id: row.id,
+      kind: 'prank' as const,
+      at: row.created_at,
+      actor_name: row.sender_name,
+      target_name: row.target_name,
+      overlay_type: row.overlay_type,
+      status: row.status,
+      text: row.text_content,
+    }));
+
+    return json({ items }, 200, request);
+  }
+
   return null;
 }

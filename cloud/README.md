@@ -17,10 +17,29 @@ Point the Tauri receiver **Server URL** at one of these HTTPS URLs.
 - Auth (register/login/refresh) + **TOTP 2FA** + optional **Turnstile**
 - Rooms, friends, consent, monitors, media (R2)
 - Pranks over WebSocket + **scheduled raids** (cron + on_online)
+- Room **activity feed**, profile rename, invite deactivate
+- Remote **panic kill-switch** (`POST /v1/consent/panic` → `panic:force_hide` on all sessions)
 - **Admin** (`ADMIN_USERNAMES`)
 - **KLIPY** GIF search/import (`KLIPY_API_KEY`)
-- WebRTC **signaling** (`signal:offer/answer/ice`)
 - Dashboard SPA served from Worker assets
+
+## Cloud = source of truth (parity vs Rust)
+
+| Area | Cloud (`cloud/`) | Rust (`server/`) | Notes |
+|------|------------------|------------------|-------|
+| Auth + 2FA + sessions | ✅ | ✅ | Same JWT claims |
+| Change username / display name | ✅ | ✅ | Password confirmation |
+| Rooms / members / invites | ✅ | ✅ | Incl. `DELETE …/invites/{id}` |
+| Room activity feed | ✅ | ✅ | `GET /v1/rooms/{id}/activity` |
+| Friends / consent | ✅ | ✅ | Panic broadcasts on pause |
+| Media R2 + ACL + MIME sniff | ✅ | ✅ (disk) | Quotas on Cloud |
+| Pranks + rate limits | ✅ | ✅ | Preset friends/strict |
+| Scheduled raids | ✅ | ✅ | Cron + on_online |
+| WebSocket hub | ✅ DO `WsHub` | ✅ in-process | Post-connect `auth` |
+| WebRTC signaling | ❌ removed | ❌ | Not productized |
+| Embed SPA | ✅ `cloud/public` | ✅ Docker `STATIC_PATH` | |
+
+**Production path:** Cloudflare. Rust Docker is for self-host / local only (separate DB unless migrated).
 
 ## API highlights
 
@@ -29,6 +48,11 @@ Point the Tauri receiver **Server URL** at one of these HTTPS URLs.
 | `GET /v1/media/storage` | Used / remaining quota (200 MB default) |
 | `GET /v1/auth/sessions` | Active refresh-token sessions |
 | `DELETE /v1/auth/sessions/{id}` | Revoke one session |
+| `POST /v1/auth/change-username` | Rename login (password required) |
+| `POST /v1/auth/change-display-name` | Rename display (password required) |
+| `GET /v1/rooms/{id}/activity` | Room feed |
+| `DELETE /v1/rooms/{id}/invites/{id}` | Deactivate invite |
+| `POST /v1/consent/panic` | Pause + force-hide overlays on all sessions |
 | `GET /v1/audit/me` | User audit log |
 | `GET/PATCH /v1/users/me/security` | Raid safety prefs |
 | `GET /v1/gifs/search` | KLIPY proxy (needs `KLIPY_API_KEY` secret) |
@@ -77,34 +101,30 @@ Local `wrangler dev` sets `ENFORCE_STORAGE_QUOTAS=0` in `.dev.vars` (relaxed).
 
 ## Deploy
 
+**CI:** push to `main` (paths under `cloud/` or `client/`) runs `.github/workflows/deploy-cloud.yml`  
+(build web → sync `cloud/public` → `wrangler deploy`). Requires secrets  
+`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`.
+
+Manual:
+
 ```bash
-cd cloud
-# refresh dashboard assets from ../web (or rebuild client first)
-#   cd ../client && npm run build:web
-Remove-Item -Recurse -Force public -ErrorAction SilentlyContinue
-Copy-Item -Recurse ../web public
+cd client && npm ci && npm run build:web && cd ../cloud
+# sync SPA
+rm -rf public/assets && mkdir -p public/assets
+cp -r ../web/assets/* public/assets/
+cp ../web/index.html public/index.html
 
 npx wrangler d1 migrations apply screenraid --remote
 npx wrangler secret put JWT_SECRET
-# optional:
-# npx wrangler secret put TURNSTILE_SECRET_KEY
-# npx wrangler secret put KLIPY_API_KEY
-# npx wrangler secret put ADMIN_USERNAMES   # or set vars.ADMIN_USERNAMES
-
 npm run deploy
 ```
 
-Turnstile site key (public) can be set as a var:
+## Smoke test (WS)
 
 ```bash
-npx wrangler versions secret ...   # or edit wrangler.jsonc vars.TURNSTILE_SITE_KEY
-```
-
-Prefer:
-
-```bash
-npx wrangler secret put TURNSTILE_SECRET_KEY
-# and set TURNSTILE_SITE_KEY in wrangler.jsonc vars / dashboard
+cd cloud
+USER=your_user PASS=your_pass npm run smoke:ws
+# optional: BASE=https://screenraid.app.lama-worlds.com
 ```
 
 ## Local

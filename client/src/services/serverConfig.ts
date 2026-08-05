@@ -1,15 +1,19 @@
 import { isTauriRuntime, isWebApp } from '../lib/platform';
 
+/** Production Cloudflare backend — default for desktop receiver builds. */
+export const PROD_SERVER_URL = 'https://screenraid.app.lama-worlds.com';
+
 /**
  * Resolve the compile-time / origin default API base.
- * Desktop: VITE_SERVER_URL or empty (user must configure — no private host baked in).
+ * Desktop: VITE_SERVER_URL, else production Cloud URL.
  * Web dashboard: always the page origin (same host as the API).
  */
 function defaultServerUrl(): string {
   if (isWebApp() && typeof window !== 'undefined') {
     return window.location.origin;
   }
-  return import.meta.env.VITE_SERVER_URL?.replace(/\/$/, '') ?? '';
+  const fromEnv = import.meta.env.VITE_SERVER_URL?.replace(/\/$/, '');
+  return fromEnv || PROD_SERVER_URL;
 }
 
 const DEFAULT_SERVER = defaultServerUrl();
