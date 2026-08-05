@@ -44,12 +44,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo check workspace
-        run: cargo check --workspace
+      # Skip client/src-tauri on Linux — Tauri pulls GTK/WebKit (glib-2.0) which
+      # the Ubuntu runner does not have. Receiver builds are covered by the
+      # Windows release workflow (Release ScreenRaid Receiver).
+      - name: cargo check (types, validation, server)
+        run: |
+          cargo check -p screenraid-types -p screenraid-validation -p screenraid-server
       - name: crate unit tests (validation)
         run: cargo test -p screenraid-validation -- --nocapture
       - name: server integration tests
         run: cargo test -p screenraid-server --tests -- --nocapture
         env:
           RUST_LOG: warn
-        continue-on-error: false
